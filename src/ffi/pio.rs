@@ -25,3 +25,10 @@ pub struct udi_pio_trans_t
 	pub operand: u16,
 }
 
+pub const UDI_PIO_DIRECT : u8 = 0x00;
+pub const UDI_PIO_SCRATCH: u8 = 0x08;
+pub const UDI_PIO_BUF    : u8 = 0x10;
+pub const UDI_PIO_MEM    : u8 = 0x18;
+// Values for `tran_size`
+pub const UDI_PIO_1BYTE: u8 = 0;
+pub const UDI_PIO_2BYTE: u8 = 1;

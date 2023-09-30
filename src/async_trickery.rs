@@ -16,21 +16,39 @@ pub(crate) enum WaitRes {
 pub(crate) trait AsyncState {
 	fn get_future(self: Pin<&mut Self>) -> Pin<&mut dyn Future<Output=()>>;
 }
-
-pub(crate) unsafe fn init_task<T: 'static+AsyncState>(gcb: &mut udi_cb_t, inner: T)
+impl<F> AsyncState for F
+where
+	F: Future<Output=()>
 {
-	::core::ptr::write(gcb.scratch as *mut _, Task::new(inner));
+	fn get_future(self: Pin<&mut Self>) -> Pin<&mut dyn Future<Output=()>> {
+		self
+	}
 }
+
+/// Initialise a task
+/// 
+/// SAFETY: Caller must ensure that `cb`'s `scratch` is valid for this task
+pub(crate) unsafe fn init_task<Cb: GetCb, T: 'static+AsyncState>(cb: &Cb, inner: T)
+{
+	::core::ptr::write(cb.get_gcb().scratch as *mut _, Task::new::<Cb>(inner));
+	run(cb);
+}
+/// Get the size of the task state (for scratch) for a given async state structure
 pub(crate) const fn task_size<T: 'static+AsyncState>() -> usize {
 	::core::mem::size_of::<Task<T>>()
 }
 
-pub(crate) unsafe fn run<Cb: GetCb>(cb: &mut Cb) {
+/// Run async state stored in `cb`
+/// 
+/// SAFETY: Caller must ensure that the cb is async
+unsafe fn run<Cb: GetCb>(cb: &Cb) {
 	let gcb = cb.get_gcb();
+	// TODO: Scratch isn't the right place for this, needs to be in context
+	// - Scratch is limited in size, and not all operations fill it?
 	let scratch = Pin::new(&mut *( (*gcb).scratch as *mut Task<()>));
 	let f = scratch.get_future();
 	
-	let waker = cb.to_waker();
+	let waker = make_waker(gcb);
 	let mut ctxt = ::core::task::Context::from_waker(&waker);
 	match f.poll(&mut ctxt)
 	{
@@ -38,6 +56,10 @@ pub(crate) unsafe fn run<Cb: GetCb>(cb: &mut Cb) {
 	Poll::Pending => {},
 	}
 }
+/// Call an async UDI function
+/// 
+/// `start` should call the function, passing a closure that runs [signal_waiter]
+/// `map_result` converts the wait result into the output type
 pub(crate) fn wait_task<Cb,F1,F2,U>(start: F1, map_result: F2) -> impl Future<Output=U>
 where
 	Cb: GetCb + Unpin,
@@ -52,10 +74,40 @@ where
 	}
 }
 
+/// Obtain a value by introspecting the cb
+pub(crate) fn with_cb<Cb,F,U>(f: F) -> impl Future<Output=U>
+where
+	Cb: GetCb,
+	F: FnOnce(&Cb) -> U + Unpin,
+{
+	return W::<Cb,F,U,> {
+		f: Some(f),
+		_pd: Default::default()
+		};
+	struct W<Cb,F,U> {
+		f: Option<F>,
+		_pd: PhantomData<(fn(&Cb)->U,)>,
+	}
+	impl<Cb,F,U> Future for W<Cb,F,U>
+	where
+		Cb: GetCb,
+		F: FnOnce(&Cb)->U + Unpin,
+	{
+		type Output = U;
+		fn poll(mut self: Pin<&mut Self>, cx: &mut ::core::task::Context<'_>) -> Poll<Self::Output> {
+			// get cb out of `cx`
+			let cb = cb_from_waker(cx.waker());
+			let fcn = self.f.take().expect("Completed future polled again");
+			Poll::Ready(fcn(cb))
+		}
+	}
+}
+
 // An async task state
 #[repr(C)]
 struct Task<T> {
-	// TODO: Add typeid of the initial CB used
+	// NOTE: I would love to be able to remove all of this state if the contained task is empty
+	cb_typeid: ::core::any::TypeId,
 	waiting: ::core::cell::Cell<bool>,
 	res: ::core::cell::Cell< Option<WaitRes> >,
 	get_async: unsafe fn(&mut ())->&mut dyn AsyncState,
@@ -64,8 +116,9 @@ struct Task<T> {
 
 impl<T: 'static + AsyncState> Task<T>
 {
-	fn new(inner: T) -> Self {
+	fn new<Cb: GetCb>(inner: T) -> Self {
 		Task {
+			cb_typeid: ::core::any::TypeId::of::<Cb>(),
 			waiting: Default::default(),
 			res: Default::default(),
 			get_async: Self::get_async,
@@ -100,7 +153,7 @@ where
 	type Output = U;
 	fn poll(mut self: Pin<&mut Self>, cx: &mut ::core::task::Context<'_>) -> Poll<Self::Output> {
 		// get cb out of `cx`
-		let cb = Cb::from_waker(cx.waker());
+		let cb = cb_from_waker(cx.waker());
 		if let Some(fcn) = self.f1.take() {
 			// Register "wakeup"
 			(fcn)(cb);
@@ -116,57 +169,55 @@ where
 }
 
 
-macro_rules! make_null_waker_vt {
-	( $addr:expr ) => {
-	::core::task::RawWakerVTable::new(
-		|v| ::core::task::RawWaker::new(v, $addr),
-		|_| (),
-		|_| (),
-		|_| (),
-		)
-	}
-}
-fn checked_waker(waker: &::core::task::Waker, vt: &'static ::core::task::RawWakerVTable) -> *const () {
+pub fn gcb_from_waker(waker: &::core::task::Waker) -> &udi_cb_t {
 	let raw_waker = waker.as_raw();
 	let have_vt = raw_waker.vtable();
-	if have_vt as *const _ != vt as *const _ {
+	if have_vt as *const _ != &VTABLE_CB_T as *const _ {
 		panic!("Unexpected context used!");
 	}
-	raw_waker.data()
+	// SAFE: As this waker is for a CB, it has to be pointing at a valid CB
+	unsafe { &*(raw_waker.data() as *const udi_cb_t) }
 }
-unsafe fn make_waker(ptr: *const (), vt: &'static ::core::task::RawWakerVTable) -> ::core::task::Waker {
-	::core::task::Waker::from_raw( ::core::task::RawWaker::new(ptr, vt) )
-}
+pub(crate) fn cb_from_waker<Cb: GetCb>(waker: &::core::task::Waker) -> &Cb {
+	let exp_typeid = ::core::any::TypeId::of::<Cb>();
+	let gcb = gcb_from_waker(waker);
+	// Special case: If we're asking for `udi_cb_t` then allow it
+	if exp_typeid == ::core::any::TypeId::of::<udi_cb_t>() {
+		// SAFE: Same type!
+		return unsafe { &*(gcb as *const udi_cb_t as *const Cb) };
+	}
 
-pub(crate) trait GetCb
+	// A null scratch indicates that no state was needed
+	assert!( !gcb.scratch.is_null(), "cb_from_waker with no state?" );
+	// SAFE: Since the waker is from a cb, that cb has/should have been for an active task. The scratch is non-null
+	let task = unsafe { &*(gcb.scratch as *const Task<()>) };
+	assert!(task.cb_typeid == ::core::any::TypeId::of::<Cb>(),
+		"cb_from_waker with mismatched types: {:?} != {:?}", task.cb_typeid, ::core::any::TypeId::of::<Cb>());
+	// SAFE: Correct type
+	unsafe { &*(gcb as *const udi_cb_t as *const Cb) }
+}
+unsafe fn make_waker(cb: &udi_cb_t) -> ::core::task::Waker {
+	::core::task::Waker::from_raw( ::core::task::RawWaker::new(cb as *const _ as *const _, &VTABLE_CB_T) )
+}
+static VTABLE_CB_T: ::core::task::RawWakerVTable = ::core::task::RawWakerVTable::new(
+	|_| panic!("Cloning would be unsound"),
+	|_| panic!("No waking"),
+	|_| panic!("No waking"),
+	|_| (),
+	);
+
+/// SAFETY: `get_gcb` must return the first field of the struct
+pub(crate) unsafe trait GetCb: ::core::any::Any
 {
-	fn from_waker(w: &::core::task::Waker) -> &Self;
-	fn to_waker(&self) -> ::core::task::Waker;
 	fn get_gcb(&self) -> &udi_cb_t;
 }
 
-static VTABLE_CB_T: ::core::task::RawWakerVTable = make_null_waker_vt!(&VTABLE_CB_T);
-impl GetCb for udi_cb_t {
-	fn from_waker(w: &::core::task::Waker) -> &Self {
-		// SAFE: Checked that the vtable matches below
-		unsafe { &*(checked_waker(w, &VTABLE_CB_T) as *const _) }
-	}
-	fn to_waker(&self) -> ::core::task::Waker {
-		unsafe { make_waker(self as *const _ as *const _, &VTABLE_CB_T) }
-	}
+unsafe impl GetCb for udi_cb_t {
 	fn get_gcb(&self) -> &udi_cb_t {
 		self
 	}
 }
-static VTABLE_USAGE_CB_T: ::core::task::RawWakerVTable = make_null_waker_vt!(&VTABLE_USAGE_CB_T);
-impl GetCb for crate::ffi::meta_mgmt::udi_usage_cb_t {
-	fn from_waker(w: &::core::task::Waker) -> &Self {
-		// SAFE: Checked that the vtable matches below
-		unsafe { &*(checked_waker(w, &VTABLE_USAGE_CB_T) as *const _) }
-	}
-	fn to_waker(&self) -> ::core::task::Waker {
-		unsafe { make_waker(self as *const _ as *const _, &VTABLE_USAGE_CB_T) }
-	}
+unsafe impl GetCb for crate::ffi::meta_mgmt::udi_usage_cb_t {
 	fn get_gcb(&self) -> &udi_cb_t {
 		&self.gcb
 	}
