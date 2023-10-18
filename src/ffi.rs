@@ -1,6 +1,8 @@
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 
+pub mod cb;
+pub mod buf;
 pub mod meta_mgmt;
 pub mod log;
 pub mod imc;
@@ -15,8 +17,14 @@ pub use ::core::ffi::c_void;
 pub type udi_index_t = u8;
 pub type udi_size_t = usize;
 pub type udi_status_t = u32;
-pub type udi_channel_t = *mut c_void;
-pub type udi_origin_t = *mut c_void;
+pub type _udi_handle_t = *mut c_void;
+pub type udi_channel_t = _udi_handle_t;
+pub type udi_origin_t = _udi_handle_t;
+
+pub type udi_boolean_t = u8;
+pub type udi_ubit8_t = u8;
+pub type udi_ubit16_t = u16;
+pub type udi_ubit32_t = u32;
 
 pub type udi_layout_t = u8;
 

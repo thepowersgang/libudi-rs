@@ -5,7 +5,7 @@ use ::core::marker::PhantomData;
 
 macro_rules! pin_project {
 	($v:expr, $($fld:ident).+) => {
-		unsafe { Pin::new_unchecked( &mut Pin::get_unchecked_mut(Pin::as_mut(&mut $v)) $(.$fld)+ ) }
+		unsafe { ::core::pin::Pin::new_unchecked( &mut ::core::pin::Pin::get_unchecked_mut(::core::pin::Pin::as_mut(&mut $v)) $(.$fld)+ ) }
 	}
 }
 

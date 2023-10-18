@@ -11,6 +11,7 @@ use crate::ffi::udi_cb_t;
 pub(crate) enum WaitRes {
 	//Unit,
 	Pointer(*mut ()),
+	Data([usize; 3]),
 }
 /// A trait for top-level future types (stored in `scratch`)
 pub(crate) trait AsyncState {
@@ -107,10 +108,15 @@ where
 #[repr(C)]
 struct Task<T> {
 	// NOTE: I would love to be able to remove all of this state if the contained task is empty
+	/// TypeId of the control block (allows casting)
 	cb_typeid: ::core::any::TypeId,
+	/// Flag indicating that this task is currently waiting (so should be resumed)
 	waiting: ::core::cell::Cell<bool>,
+	/// Result of the most recent 
 	res: ::core::cell::Cell< Option<WaitRes> >,
+	/// Effectively the vtable for this task
 	get_async: unsafe fn(&mut ())->&mut dyn AsyncState,
+	/// Actual task/future data
 	inner: T,
 }
 

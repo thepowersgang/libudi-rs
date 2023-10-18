@@ -4,21 +4,21 @@ pub type udi_intr_attach_ack_op_t = unsafe extern "C" fn(cb: *mut udi_intr_attac
 pub type udi_intr_detach_ack_op_t = unsafe extern "C" fn(cb: *mut udi_intr_detach_cb_t);
 pub type udi_intr_event_ind_op_t = unsafe extern "C" fn(cb: *mut udi_intr_event_cb_t, flags: u8);
 
+extern "C" {
+    pub fn udi_intr_attach_req(cb: *mut udi_intr_attach_cb_t);
+    pub fn udi_intr_event_rdy(cb: *mut udi_intr_event_cb_t);
+}
+
 #[repr(C)]
 pub struct udi_intr_handler_ops_t
 {
     pub channel_event_ind_op: imc::udi_channel_event_ind_op_t,
     pub intr_event_ind_op: udi_intr_event_ind_op_t,
 }
-impl const crate::Ops for udi_intr_handler_ops_t {
-    fn get_num() -> super::udi_index_t {
-        // TODO: This is the number for the bus metalang, does that always apply?
-        // - It's defined in `meta_intr.h` for acess2's impl
-        3
-    }
-    fn to_ops_vector(&self) -> super::udi_ops_vector_t {
-        self as *const _ as *const _
-    }
+unsafe impl crate::Ops for udi_intr_handler_ops_t {
+    // TODO: This is the number for the bus metalang, does that always apply?
+    // - It's defined in `meta_intr.h` for acess2's impl
+    const OPS_NUM: super::udi_index_t = 3;
 }
 
 #[repr(C)]
@@ -58,3 +58,5 @@ unsafe impl crate::async_trickery::GetCb for udi_intr_event_cb_t {
         &self.gcb
     }
 }
+pub const UDI_INTR_UNCLAIMED: u16 = 1 << 0;
+pub const UDI_INTR_NO_EVENT: u16 = 1 << 1;

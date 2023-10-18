@@ -90,5 +90,6 @@ pub struct udi_init_t
 	// Sequence terminated by `region_idx=0`, can be null
 	pub secondary_init_list: *const udi_secondary_init_t,
 	pub ops_init_list: *const udi_ops_init_t,
+	pub cb_init_list: *const udi_cb_init_t,
 }
 unsafe impl Sync for udi_init_t {}
