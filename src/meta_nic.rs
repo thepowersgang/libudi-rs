@@ -39,7 +39,7 @@ pub enum OpsNum
 pub trait Control: crate::imc::ChannelHandler {
     async_method!(fn bind_req(&mut self, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->udi_status_t as Future_bind_req);
     async_method!(fn unbind_req(&mut self)->() as Future_unbind_req);
-    async_method!(fn enable_req(&mut self)->() as Future_enable_req);
+    async_method!(fn enable_req(&mut self)->udi_status_t as Future_enable_req);
     async_method!(fn disable_req(&mut self)->() as Future_disable_req);
     async_method!(fn ctrl_req(&mut self)->() as Future_ctrl_req);
     async_method!(fn info_req(&mut self, reset_statistics: bool)->() as Future_info_req);
@@ -59,7 +59,10 @@ future_wrapper!(nd_unbind_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t)
         }
     );
 future_wrapper!(nd_enable_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t) val @ {
-    val.enable_req()
+    crate::async_trickery::with_ack(
+        val.enable_req(),
+        |cb, res| unsafe { ffi::udi_nsr_enable_ack(cb, res) }
+        )
 });
 future_wrapper!(nd_disable_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t) val @ {
     val.disable_req()

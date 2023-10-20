@@ -11,6 +11,7 @@ struct Driver
 #[derive(Default)]
 struct PioHandles {
 	reset: ::udi::pio::Handle,
+	enable: ::udi::pio::Handle,
 	irq_ack: ::udi::pio::Handle,
 }
 ::udi::define_wrappers! {Driver: DriverIrq DriverNicCtrl}
@@ -48,7 +49,8 @@ impl ::udi::meta_bus::BusDevice for Driver
 
     fn bus_bind_ack(&mut self, _dma_constraints: udi::ffi::physio::udi_dma_constraints_t, _preferred_endianness: bool, _status: udi::ffi::udi_status_t) -> Self::Future_bind_ack<'_> {
 		async move {
-			self.pio_handles.reset = ::udi::pio::map(0/*UDI_PCI_BAR_0*/, 0x00,0x20, &pio_ops::RESET, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0).await;
+			self.pio_handles.reset   = ::udi::pio::map(0/*UDI_PCI_BAR_0*/, 0x00,0x20, &pio_ops::RESET, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0).await;
+			self.pio_handles.enable  = ::udi::pio::map(0/*UDI_PCI_BAR_0*/, 0x00,0x20, &pio_ops::ENABLE, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0).await;
 			self.pio_handles.irq_ack = ::udi::pio::map(0/*UDI_PCI_BAR_0*/, 0x00,0x20, &pio_ops::IRQACK, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0).await;
 
 			// Spawn channel
@@ -120,6 +122,7 @@ impl ::udi::meta_intr::IntrHandler for DriverIrq
 
     fn intr_event_ind(&mut self, flags: u8) -> Self::Future_intr_event_ind<'_> {
 		async move {
+			// TODO: Get the interrupt result from the cb
 			todo!()
 		}
     }
@@ -147,9 +150,13 @@ impl ::udi::meta_nic::Control for DriverNicCtrl
         async move { todo!() }
     }
 
-	type Future_enable_req<'s> = impl ::core::future::Future<Output=()> + 's;
+	type Future_enable_req<'s> = impl ::core::future::Future<Output=::udi::ffi::udi_status_t> + 's;
     fn enable_req(&mut self) -> Self::Future_enable_req<'_> {
-        async move { todo!() }
+        async move {
+			::udi::pio::trans(&self.0.pio_handles.enable, 0, None, None).await
+				.err()
+				.unwrap_or(0)
+		}
     }
 
 	type Future_disable_req<'s> = impl ::core::future::Future<Output=()> + 's;
@@ -176,8 +183,13 @@ mod regs {
 	pub const APG_RESET: u8 = 0x1F;
 
 	// -- Page 0
-	pub const PG0_CLDA0: u8 = 0x01;
-	pub const PG0_CLDA1: u8 = 0x02;
+	pub const PG0_CLDA0: u8 = 0x01;	// When read, PSTART when written
+	pub const PG0_CLDA1: u8 = 0x02;	// When read, PSTOP when written
+	/// Boundary Pointer (for ringbuffer)
+	pub const PG0_BNRY : u8 = 0x03;
+	/// - READ: Transmit Status Register
+	/// - WRITE: Transmit Page Start address Register
+	pub const PG0_TSR  : u8 = 0x04;	// When read, TPSR when written
 	pub const PG0_ISR  : u8 = 0x07;
 	/// Remote Start AddRess (Lo)
 	pub const PG0_RSAR0: u8 = 0x08;

@@ -52,6 +52,32 @@ use super::mem;
 	END_IMM 0;
 }
 
+::udi::define_pio_ops!{pub ENABLE =
+    // - Setup
+    // PSTART = First RX page [Receive area start]
+    LOAD_IMM.B R0, mem::RX_FIRST_PG;
+    OUT.B regs::PG0_CLDA0 as _, R0;  // Aka `PSTART`?
+    // BNRY = Last RX page - 1 [???]
+    LOAD_IMM.B R0, mem::RX_LAST_PG-1;
+    OUT.B regs::PG0_BNRY as _, R0;
+    // PSTOP = Last RX page [???]
+    LOAD_IMM.B R0, mem::RX_LAST_PG;
+    OUT.B regs::PG0_CLDA1 as _, R0; // Aka `PSTOP`?
+    // CMD = 0x22 [NoDMA, Start]
+    LOAD_IMM.B R0, 0x22;
+    OUT.B regs::APG_CMD as _, R0;
+    // RCR = 0x0F [Wrap, Promisc]
+    LOAD_IMM.B R0, 0x0F;
+    OUT.B regs::PG0_RCR as _, R0;
+    // TCR = 0x00 [Normal]
+    LOAD_IMM.B R0, 0x00;
+    OUT.B regs::PG0_TCR as _, R0;
+    // TPSR = 0x40 [TX Start]
+    LOAD_IMM.B R0, 0x40;
+    OUT.B regs::PG0_TSR as _, R0;   // Aka `TPSR`
+    END_IMM 0;
+}
+
 ::udi::define_pio_ops!{pub IRQACK =
         // Entrypoint 0: Enable interrupts
         // IMR = 0x3F []

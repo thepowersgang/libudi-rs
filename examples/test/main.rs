@@ -51,7 +51,7 @@ impl InnerCtxt {
 
 fn main()
 {
-	let pi = &driver::udi_init_info.primary_init_info.unwrap();
+	let pi = driver::udi_init_info.primary_init_info.unwrap();
 	println!("malloc {},{}", pi.rdata_size, pi.mgmt_scratch_requirement);
 	let (context,mgmt_scratch) = unsafe {
 		(malloc( pi.rdata_size ), malloc( pi.mgmt_scratch_requirement ),)
