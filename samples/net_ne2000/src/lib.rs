@@ -13,7 +13,7 @@ struct PioHandles {
 	reset: ::udi::pio::Handle,
 	irq_ack: ::udi::pio::Handle,
 }
-::udi::define_wrappers! {Driver: DriverIrq}
+::udi::define_wrappers! {Driver: DriverIrq DriverNicCtrl}
 
 impl ::udi::init::Driver for Driver
 {
@@ -65,16 +65,20 @@ impl ::udi::meta_bus::BusDevice for Driver
 				let intr_event_cb = ::udi::cb::alloc::<Cbs::IntrEvent>(::udi::get_gcb_channel().await).await;
 				::udi::meta_intr::event_rdy(intr_event_cb);
 			}
+
+			// Reset the hardware, and get the MAC address
 			match ::udi::pio::trans(&self.pio_handles.reset, 0, None, Some(unsafe { ::udi::pio::MemPtr::new(&mut self.mac_addr) })).await
 			{
 			Ok(_) => {},
 			Err(_) => {},
 			}
+
+			// Binding is complete!
+			//Ok( () )
 		}
     }
 
     type Future_unbind_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-
     fn bus_unbind_ack(&mut self) -> Self::Future_unbind_ack<'_> {
         async move {
 			todo!()
@@ -119,6 +123,50 @@ impl ::udi::meta_intr::IntrHandler for DriverIrq
 			todo!()
 		}
     }
+}
+
+impl ::udi::imc::ChannelHandler for DriverNicCtrl
+{
+    type Future<'s> = impl ::core::future::Future<Output=::udi::Result> + 's;
+
+    fn event_ind(&mut self) -> Self::Future<'_> {
+		async move {
+			todo!()
+		}
+    }
+}
+impl ::udi::meta_nic::Control for DriverNicCtrl
+{
+	type Future_bind_req<'s> = impl ::core::future::Future<Output=udi::ffi::udi_status_t> + 's;
+    fn bind_req(&mut self, tx_chan_index: udi::ffi::udi_index_t, rx_chan_index: udi::ffi::udi_index_t) -> Self::Future_bind_req<'_> {
+        async move { todo!() }
+    }
+
+	type Future_unbind_req<'s> = impl ::core::future::Future<Output=()> + 's;
+    fn unbind_req(&mut self) -> Self::Future_unbind_req<'_> {
+        async move { todo!() }
+    }
+
+	type Future_enable_req<'s> = impl ::core::future::Future<Output=()> + 's;
+    fn enable_req(&mut self) -> Self::Future_enable_req<'_> {
+        async move { todo!() }
+    }
+
+	type Future_disable_req<'s> = impl ::core::future::Future<Output=()> + 's;
+    fn disable_req(&mut self) -> Self::Future_disable_req<'_> {
+        async move { todo!() }
+    }
+
+	type Future_ctrl_req<'s> = impl ::core::future::Future<Output=()> + 's;
+    fn ctrl_req(&mut self) -> Self::Future_ctrl_req<'_> {
+        async move { todo!() }
+    }
+
+	type Future_info_req<'s> = impl ::core::future::Future<Output=()> + 's;
+    fn info_req(&mut self, reset_statistics: bool) -> Self::Future_info_req<'_> {
+        async move { todo!() }
+    }
+	
 }
 
 mod regs {
@@ -173,7 +221,7 @@ mod udiprops {
 	ops: {
 		// TODO: How to enforce the right mapping to metalangs?
 		Dev : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bus::udi_bus_device_ops_t,
-		//Ctrl: Meta=udiprops::meta::udi_nic   , Op=::udi::meta_nic::OpsNum::NdCtrl,
+		Ctrl: Meta=udiprops::meta::udi_nic   , ::udi::meta_nic::ffi::udi_nd_ctrl_ops_t : DriverNicCtrl,
 		Irq : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_intr::udi_intr_handler_ops_t : DriverIrq,
 		},
 	cbs: {

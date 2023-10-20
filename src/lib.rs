@@ -5,11 +5,13 @@
 #![feature(waker_getters)]	// For evil with contexts
 #![feature(const_trait_impl)]
 #![feature(concat_idents)]	// Very evil macros
+#![feature(const_mut_refs)]	// Used for getting size of taskss
 
 use self::async_trickery::WaitRes;
 //use self::future_ext::FutureExt;
 #[macro_use]
 mod future_ext;
+#[macro_use]
 mod async_trickery;
 
 pub mod ffi;
@@ -38,6 +40,9 @@ pub fn get_gcb_context() -> impl ::core::future::Future<Output=*mut ::core::ffi:
 // - rdata is the thread's data, i.e. the drive instance
 // - scratch is where the future should go
 
+pub const fn const_max(a: usize, b: usize) -> usize {
+	if a > b { a } else { b }
+}
 
 /// SAFETY: The pointed-to data must be valid as [udi_ops_init_t]
 pub unsafe trait Ops {

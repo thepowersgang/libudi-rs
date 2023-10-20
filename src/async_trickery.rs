@@ -75,6 +75,15 @@ where
 	}
 }
 
+pub(crate) const fn with_ack<Cb, Fut, Res, Ack>(f: Fut, ack: Ack) -> WithAck<Cb, Fut, Res, Ack>
+where
+	Fut: Future<Output=Res>,
+	Cb: GetCb,
+	Ack: FnOnce(*mut Cb,Res)
+{
+	WithAck { f, ack: Some(ack), _pd: PhantomData }
+}
+
 /// Obtain a value by introspecting the cb
 pub(crate) fn with_cb<Cb,F,U>(f: F) -> impl Future<Output=U>
 where
@@ -110,10 +119,13 @@ struct Task<T> {
 	// NOTE: I would love to be able to remove all of this state if the contained task is empty
 	/// TypeId of the control block (allows casting)
 	cb_typeid: ::core::any::TypeId,
+	// TODO: Combine `waiting` and `res` into one enum (`Idle, Waiting, Ready(WaitRes)`) to save a byte (rounded a whole word)
 	/// Flag indicating that this task is currently waiting (so should be resumed)
 	waiting: ::core::cell::Cell<bool>,
 	/// Result of the most recent 
 	res: ::core::cell::Cell< Option<WaitRes> >,
+
+	// TODO: Combine `get_async` and `cb_typeid` into a struct/vtable to save space.
 	/// Effectively the vtable for this task
 	get_async: unsafe fn(&mut ())->&mut dyn AsyncState,
 	/// Actual task/future data
@@ -172,6 +184,33 @@ where
 			Poll::Pending
 		}
 	}
+}
+
+pub(crate) struct WithAck<Cb, Fut, Res, Ack>
+{
+	f: Fut,
+	ack: Option<Ack>,
+	_pd: PhantomData<(fn(Cb,Res),)>
+}
+impl<Cb, Fut, Res, Ack> Future for WithAck<Cb, Fut, Res, Ack>
+where
+	Fut: Future<Output=Res>,
+	Cb: GetCb,
+	Ack: FnOnce(*mut Cb,Res)
+{
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut ::core::task::Context<'_>) -> Poll<Self::Output> {
+		match pin_project!(self, f).poll(cx)
+		{
+		Poll::Pending => Poll::Pending,
+		Poll::Ready(res) => {
+			let cb = cb_from_waker(cx.waker());
+			unsafe { (self.get_unchecked_mut().ack.take().unwrap())(cb as *const Cb as *mut _, res); }
+			Poll::Ready(())
+			}
+		}
+    }
 }
 
 
@@ -251,3 +290,45 @@ pub(crate) fn signal_waiter(gcb: &mut udi_cb_t, res: WaitRes) {
 	}
 }
 
+
+/// Define an async trait method
+macro_rules! async_method {
+    (fn $fcn_name:ident(&mut self$(, $a_n:ident: $a_ty:ty)*) -> $ret_ty:ty as $future_name:ident) => {
+        #[allow(non_camel_case_types)]
+        type $future_name<'s>: ::core::future::Future<Output=$ret_ty>;
+        fn $fcn_name(&mut self$(, $a_n: $a_ty)*) -> Self::$future_name<'_>;
+    }
+}
+/// Define a FFI wrapper 
+macro_rules! future_wrapper {
+    ($name:ident => <$t:ident as $trait:path>::$method:ident(cb: *mut $cb_ty:ty $(, $a_n:ident: $a_ty:ty)*) ) => {
+        future_wrapper!($name => <$t:ty as $trait>::$method(cb: *mut $cb_ty, $(, $a_n: $a_ty)*))
+    };
+    ($name:ident => <$t:ident as $trait:path>(cb: *mut $cb_ty:ty $(, $a_n:ident: $a_ty:ty)*) $val:ident @ $b:block ) => {
+        unsafe extern "C" fn $name<T: $trait>(cb: *mut $cb_ty$(, $a_n: $a_ty)*)
+        {
+            let job = {
+                let $val = &mut *((*cb).gcb.context as *mut T);
+                $b
+                };
+            crate::async_trickery::init_task(&*cb, job);
+        }
+        mod $name {
+            use super::*;
+            pub const fn task_size<$t: $trait>() -> usize {
+                crate::async_trickery::task_size_from_closure(|$val: &mut $t, ($($a_n,)*): ($($a_ty,)*)| $b)
+            }
+        }
+    };
+}
+/// Get the size of a task using a closure to resolve methods
+pub const fn task_size_from_closure<'a, Cls,Cb,Args,Task>(_cb: Cls) -> usize
+where
+    Cls: FnOnce(&'a mut Cb, Args) -> Task,
+    Task: 'a,
+    Cb: 'a,
+    Task: ::core::future::Future<Output=()> + 'static,
+{
+    ::core::mem::forget(_cb);
+    crate::async_trickery::task_size::<Task>()
+}
