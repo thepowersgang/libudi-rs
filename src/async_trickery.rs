@@ -31,12 +31,12 @@ where
 /// SAFETY: Caller must ensure that `cb`'s `scratch` is valid for this task
 pub(crate) unsafe fn init_task<Cb: GetCb, T: 'static+AsyncState>(cb: &Cb, inner: T)
 {
-	::core::ptr::write(cb.get_gcb().scratch as *mut _, Task::new::<Cb>(inner));
+	::core::ptr::write(cb.get_gcb().scratch as *mut _, Task::<T,Cb>::new(inner));
 	run(cb);
 }
 /// Get the size of the task state (for scratch) for a given async state structure
 pub(crate) const fn task_size<T: 'static+AsyncState>() -> usize {
-	::core::mem::size_of::<Task<T>>()
+	::core::mem::size_of::<Task<T,udi_cb_t>>()
 }
 
 /// Run async state stored in `cb`
@@ -46,7 +46,7 @@ unsafe fn run<Cb: GetCb>(cb: &Cb) {
 	let gcb = cb.get_gcb();
 	// TODO: Scratch isn't the right place for this, needs to be in context
 	// - Scratch is limited in size, and not all operations fill it?
-	let scratch = Pin::new(&mut *( (*gcb).scratch as *mut Task<()>));
+	let scratch = Pin::new(&mut *( (*gcb).scratch as *mut Task<(),udi_cb_t>));
 	let f = scratch.get_future();
 	
 	let waker = make_waker(gcb);
@@ -115,43 +115,63 @@ where
 
 // An async task state
 #[repr(C)]
-struct Task<T> {
-	// NOTE: I would love to be able to remove all of this state if the contained task is empty
-	/// TypeId of the control block (allows casting)
-	cb_typeid: ::core::any::TypeId,
-	// TODO: Combine `waiting` and `res` into one enum (`Idle, Waiting, Ready(WaitRes)`) to save a byte (rounded a whole word)
-	/// Flag indicating that this task is currently waiting (so should be resumed)
-	waiting: ::core::cell::Cell<bool>,
-	/// Result of the most recent 
-	res: ::core::cell::Cell< Option<WaitRes> >,
-
-	// TODO: Combine `get_async` and `cb_typeid` into a struct/vtable to save space.
+struct Task<T,Cb> {
+	pd: PhantomData<Cb>,
+	/// Current waiting state
+	state: ::core::cell::Cell<TaskState>,
 	/// Effectively the vtable for this task
-	get_async: unsafe fn(&mut ())->&mut dyn AsyncState,
+	get_inner: unsafe fn(*const Self)->*const dyn TaskTrait,
 	/// Actual task/future data
 	inner: T,
 }
+#[derive(Default,Copy,Clone)]
+enum TaskState {
+	/// The task is running, or is currently in a call
+	#[default]
+	Idle,
+	/// The task is now waiting on a call
+	Waiting,
+	/// A callback has been called
+	Ready(WaitRes),
+}
 
-impl<T: 'static + AsyncState> Task<T>
+trait TaskTrait {
+	unsafe fn get_async<'a>(&'a mut self) -> &'a mut dyn AsyncState;
+	fn get_cb_type(&self) -> ::core::any::TypeId;
+}
+impl<T: 'static + AsyncState, Cb: GetCb> Task<T, Cb>
 {
-	fn new<Cb: GetCb>(inner: T) -> Self {
+	fn new(inner: T) -> Self {
 		Task {
-			cb_typeid: ::core::any::TypeId::of::<Cb>(),
-			waiting: Default::default(),
-			res: Default::default(),
-			get_async: Self::get_async,
+			pd: PhantomData,
+			state: Default::default(),
+			get_inner: Self::get_inner,
 			inner,
 		}
 	}
-	unsafe fn get_async(v: &mut ()) -> &mut dyn AsyncState {
-		&mut *(v as *mut () as *mut T)
+	unsafe fn get_inner(this: *const Self) -> *const dyn TaskTrait {
+		this
 	}
 }
-impl Task<()>
+impl<T,Cb> TaskTrait for Task<T,Cb>
+where
+	T: 'static + AsyncState,
+	Cb: GetCb
+{
+    unsafe fn get_async<'a>(&'a mut self) -> &'a mut dyn AsyncState {
+        &mut self.inner
+    }
+    fn get_cb_type(&self) -> ::core::any::TypeId {
+        ::core::any::TypeId::of::<Cb>()
+    }
+}
+impl Task<(),udi_cb_t>
 {
 	pub fn get_future(self: Pin<&mut Self>) -> Pin<&mut dyn Future<Output=()>> {
+		let v = self.get_inner;
+		let this = unsafe { Pin::get_unchecked_mut(self) };
 		// SAFE: Pin projecting
-		unsafe { Pin::new_unchecked( (self.get_async)(&mut Pin::get_unchecked_mut(self).inner) ).get_future() }
+		unsafe { Pin::new_unchecked( (*((v)(this as *mut Self as *const Self) as *mut dyn TaskTrait)).get_async() ).get_future() }
 	}
 }
 
@@ -213,7 +233,7 @@ where
     }
 }
 
-
+/// Obtain the GCB (`udi_cb_t`) from a waker
 pub fn gcb_from_waker(waker: &::core::task::Waker) -> &udi_cb_t {
 	let raw_waker = waker.as_raw();
 	let have_vt = raw_waker.vtable();
@@ -223,6 +243,7 @@ pub fn gcb_from_waker(waker: &::core::task::Waker) -> &udi_cb_t {
 	// SAFE: As this waker is for a CB, it has to be pointing at a valid CB
 	unsafe { &*(raw_waker.data() as *const udi_cb_t) }
 }
+/// Obtain any CB (checked) from the waker
 pub(crate) fn cb_from_waker<Cb: GetCb>(waker: &::core::task::Waker) -> &Cb {
 	let exp_typeid = ::core::any::TypeId::of::<Cb>();
 	let gcb = gcb_from_waker(waker);
@@ -235,9 +256,12 @@ pub(crate) fn cb_from_waker<Cb: GetCb>(waker: &::core::task::Waker) -> &Cb {
 	// A null scratch indicates that no state was needed
 	assert!( !gcb.scratch.is_null(), "cb_from_waker with no state?" );
 	// SAFE: Since the waker is from a cb, that cb has/should have been for an active task. The scratch is non-null
-	let task = unsafe { &*(gcb.scratch as *const Task<()>) };
-	assert!(task.cb_typeid == ::core::any::TypeId::of::<Cb>(),
-		"cb_from_waker with mismatched types: {:?} != {:?}", task.cb_typeid, ::core::any::TypeId::of::<Cb>());
+	let cb_type = unsafe {
+		let task = &*(gcb.scratch as *const Task<(),udi_cb_t>);
+		(*(task.get_inner)(task)).get_cb_type()
+		};
+	assert!(cb_type == ::core::any::TypeId::of::<Cb>(),
+		"cb_from_waker with mismatched types: {:?} != {:?}", cb_type, ::core::any::TypeId::of::<Cb>());
 	// SAFE: Correct type
 	unsafe { &*(gcb as *const udi_cb_t as *const Cb) }
 }
@@ -270,23 +294,35 @@ unsafe impl GetCb for crate::ffi::meta_mgmt::udi_usage_cb_t {
 
 fn get_result(gcb: *const udi_cb_t) -> Option<WaitRes>
 {
-	let state = unsafe { &*((*gcb).scratch as *mut Task<()>) };
-	if let Some(v) = state.res.take() {
-		state.waiting.set(false);
-		Some(v)
-	}
-	else {
-		state.waiting.set(true);
+	let state = unsafe { &*((*gcb).scratch as *mut Task<(),udi_cb_t>) };
+	match state.state.replace(TaskState::Waiting)
+	{
+	TaskState::Idle => None,
+	TaskState::Waiting => {
+		// Should this be possible?
 		None
+		},
+	TaskState::Ready(v) => {
+		state.state.set(TaskState::Idle);
+		Some(v)
+		}
 	}
 }
 
 /// Flag that an operation is complete. This might be run downstream of the main task.
 pub(crate) fn signal_waiter(gcb: &mut udi_cb_t, res: WaitRes) {
-	let scratch = unsafe { &mut *(gcb.scratch as *mut Task<()>) };
-	scratch.res.set(Some(res));
-	if scratch.waiting.get() {
+	let scratch = unsafe { &mut *(gcb.scratch as *mut Task<(),udi_cb_t>) };
+	match scratch.state.replace(TaskState::Ready(res))
+	{
+	TaskState::Idle => {
+		// No run
+		},
+	TaskState::Waiting => {
 		unsafe { run(gcb); }
+		},
+	TaskState::Ready(_) => {
+		// How?
+		},
 	}
 }
 
