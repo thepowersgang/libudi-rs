@@ -36,13 +36,25 @@ pub enum OpsNum
     NsrRx,
 }
 
-pub trait Control: crate::imc::ChannelHandler {
+pub trait Control: 'static {
+    async_method!(fn channel_event_ind(&mut self)->crate::Result<()> as Future_event_ind);
+
     async_method!(fn bind_req(&mut self, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->udi_status_t as Future_bind_req);
     async_method!(fn unbind_req(&mut self)->() as Future_unbind_req);
-    async_method!(fn enable_req(&mut self)->udi_status_t as Future_enable_req);
+    async_method!(fn enable_req(&mut self)->crate::Result<()> as Future_enable_req);
     async_method!(fn disable_req(&mut self)->() as Future_disable_req);
     async_method!(fn ctrl_req(&mut self)->() as Future_ctrl_req);
     async_method!(fn info_req(&mut self, reset_statistics: bool)->() as Future_info_req);
+}
+struct MarkerControl;
+impl<T> crate::imc::ChannelHandler<MarkerControl> for T
+where
+    T: Control
+{
+    type Future<'s> = T::Future_event_ind<'s>;
+    fn event_ind(&mut self) -> Self::Future<'_> {
+        self.channel_event_ind()
+    }
 }
 
 future_wrapper!(nd_bind_req_op => <T as Control>(cb: *mut ffi::udi_nic_bind_cb_t, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)
@@ -61,7 +73,7 @@ future_wrapper!(nd_unbind_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t)
 future_wrapper!(nd_enable_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t) val @ {
     crate::async_trickery::with_ack(
         val.enable_req(),
-        |cb, res| unsafe { ffi::udi_nsr_enable_ack(cb, res) }
+        |cb, res| unsafe { ffi::udi_nsr_enable_ack(cb, crate::Error::to_status(res)) }
         )
 });
 future_wrapper!(nd_disable_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t) val @ {
@@ -76,7 +88,7 @@ future_wrapper!(nd_info_req_op => <T as Control>(cb: *mut ffi::udi_nic_info_cb_t
 impl ffi::udi_nd_ctrl_ops_t
 {
     pub const fn scratch_requirement<T: Control>() -> usize {
-        let v = crate::imc::task_size::<T>();
+        let v = crate::imc::task_size::<T, MarkerControl>();
         let v = crate::const_max(v, nd_bind_req_op::task_size::<T>());
         let v = crate::const_max(v, nd_unbind_req_op::task_size::<T>());
         let v = crate::const_max(v, nd_enable_req_op::task_size::<T>());
@@ -89,7 +101,7 @@ impl ffi::udi_nd_ctrl_ops_t
     /// SAFETY: The scratch size must be >= value returned by [scratch_requirement]
     pub const unsafe fn for_driver<T: Control>() -> Self {
         Self {
-            channel_event_ind_op: crate::imc::channel_event_ind_op::<T>,
+            channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerControl>,
             nd_bind_req_op: nd_bind_req_op::<T>,
             nd_unbind_req_op: nd_unbind_req_op::<T>,
             nd_enable_req_op: nd_enable_req_op::<T>,

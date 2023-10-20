@@ -4,23 +4,29 @@
 use crate::ffi::meta_bus::udi_bus_device_ops_t;
 use crate::ffi::meta_bus::udi_bus_bind_cb_t;
 
-pub trait BusDevice: 'static + crate::imc::ChannelHandler {
-    #[allow(non_camel_case_types)]
-    type Future_bind_ack<'s>: ::core::future::Future<Output=()>;
-    fn bus_bind_ack(&mut self, dma_constraints: crate::ffi::physio::udi_dma_constraints_t, preferred_endianness: bool, status: crate::ffi::udi_status_t) -> Self::Future_bind_ack<'_>;
+pub trait BusDevice: 'static {
+    async_method!(fn channel_event_ind(&mut self)->crate::Result<()> as Future_event_ind);
 
+    async_method!(fn bus_bind_ack(&mut self,
+        dma_constraints: crate::ffi::physio::udi_dma_constraints_t,
+        preferred_endianness: bool,
+        status: crate::ffi::udi_status_t
+        )->() as Future_bind_ack
+    );
 
-    #[allow(non_camel_case_types)]
-    type Future_unbind_ack<'s>: ::core::future::Future<Output=()>;
-    fn bus_unbind_ack(&mut self) -> Self::Future_unbind_ack<'_>;
-
-    #[allow(non_camel_case_types)]
-    type Future_intr_attach_ack<'s>: ::core::future::Future<Output=()>;
-    fn intr_attach_ack(&mut self, status: crate::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'_>;
-
-    #[allow(non_camel_case_types)]
-    type Future_intr_detach_ack<'s>: ::core::future::Future<Output=()>;
-    fn intr_detach_ack(&mut self) -> Self::Future_intr_detach_ack<'_>;
+    async_method!(fn bus_unbind_ack(&mut self) -> () as Future_unbind_ack);
+    async_method!(fn intr_attach_ack(&mut self, status: crate::ffi::udi_status_t) -> () as Future_intr_attach_ack);
+    async_method!(fn intr_detach_ack(&mut self) -> () as Future_intr_detach_ack);
+}
+struct MarkerBusDevice;
+impl<T> crate::imc::ChannelHandler<MarkerBusDevice> for T
+where
+    T: BusDevice
+{
+    type Future<'s> = T::Future_event_ind<'s>;
+    fn event_ind(&mut self) -> Self::Future<'_> {
+        self.channel_event_ind()
+    }
 }
 
 unsafe impl crate::async_trickery::GetCb for udi_bus_bind_cb_t {
@@ -31,13 +37,10 @@ unsafe impl crate::async_trickery::GetCb for udi_bus_bind_cb_t {
 
 impl udi_bus_device_ops_t {
     pub const fn scratch_requirement<T: BusDevice>() -> usize {
-        let rv = 0;
-        let a = crate::async_trickery::task_size::<T::Future_bind_ack<'static>>();
-        let rv = if rv > a { rv } else { a };
-        let a = crate::async_trickery::task_size::<T::Future_unbind_ack<'static>>();
-        let rv = if rv > a { rv } else { a };
-        let a = crate::async_trickery::task_size::<T::Future_intr_attach_ack<'static>>();
-        let rv = if rv > a { rv } else { a };
+        let rv = crate::imc::task_size::<T,MarkerBusDevice>();
+        let rv = crate::const_max(rv, crate::async_trickery::task_size::<T::Future_bind_ack<'static>>());
+        let rv = crate::const_max(rv, crate::async_trickery::task_size::<T::Future_unbind_ack<'static>>());
+        let rv = crate::const_max(rv, crate::async_trickery::task_size::<T::Future_intr_attach_ack<'static>>());
         rv
     }
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
@@ -45,7 +48,7 @@ impl udi_bus_device_ops_t {
     pub const unsafe fn for_driver<T: BusDevice>() -> Self {
         return udi_bus_device_ops_t {
             // TODO: Maybe have `channel_event_ind` be fully defined here? Handling the bind call
-            channel_event_ind_op: crate::imc::channel_event_ind_op::<T>,
+            channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerBusDevice>,
             bus_bind_ack_op: bus_bind_ack_op::<T>,
             bus_unbind_ack_op: bus_unbind_ack_op::<T>,
             intr_attach_ack_op: intr_attach_ack_op::<T>,

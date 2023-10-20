@@ -20,14 +20,14 @@ pub fn channel_spawn(
 		)
 }
 
-pub trait ChannelHandler: 'static {
-    type Future<'s>: ::core::future::Future<Output=crate::Result>;
+pub trait ChannelHandler<Marker>: 'static {
+    type Future<'s>: ::core::future::Future<Output=crate::Result<()>>;
     fn event_ind(&mut self) -> Self::Future<'_>;
 }
-struct Wrapper<'a, T: ChannelHandler> {
+struct Wrapper<'a, T: ChannelHandler<Marker>, Marker> {
     inner: T::Future<'a>,
 }
-impl<'a, T: ChannelHandler> ::core::future::Future for Wrapper<'a, T>
+impl<'a, T: ChannelHandler<Marker>, Marker> ::core::future::Future for Wrapper<'a, T, Marker>
 {
     type Output = ();
     fn poll(mut self: ::core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> ::core::task::Poll<Self::Output> {
@@ -41,7 +41,7 @@ impl<'a, T: ChannelHandler> ::core::future::Future for Wrapper<'a, T>
                 crate::ffi::imc::udi_channel_event_complete(cb as *const _ as *mut _, match r
                     {
                     Ok(()) => 0,
-                    Err(e) => e,
+                    Err(e) => e.into_inner(),
                     });
             }
             ::core::task::Poll::Ready(())
@@ -50,12 +50,12 @@ impl<'a, T: ChannelHandler> ::core::future::Future for Wrapper<'a, T>
     }
 }
 
-pub const fn task_size<T: ChannelHandler>() -> usize {
-    crate::async_trickery::task_size::<Wrapper<'static, T>>()
+pub const fn task_size<T: ChannelHandler<Marker>,Marker: 'static>() -> usize {
+    crate::async_trickery::task_size::<Wrapper<'static, T, Marker>>()
 }
-pub unsafe extern "C" fn channel_event_ind_op<T: ChannelHandler>(cb: *mut udi_channel_event_cb_t) {
+pub unsafe extern "C" fn channel_event_ind_op<T: ChannelHandler<Marker>, Marker: 'static>(cb: *mut udi_channel_event_cb_t) {
     // SAFE: Caller has ensured that the context is valid for this type
     let state: &mut T = unsafe { &mut *((*cb).gcb.context as *mut T) };
     // SAFE: Valid raw pointer deref, caller ensured cb scratch validity
-    unsafe { crate::async_trickery::init_task(&*cb, Wrapper::<T> { inner: state.event_ind() }); }
+    unsafe { crate::async_trickery::init_task(&*cb, Wrapper::<T,Marker> { inner: state.event_ind() }); }
 }

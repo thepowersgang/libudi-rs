@@ -7,6 +7,10 @@
 #![feature(concat_idents)]	// Very evil macros
 #![feature(const_mut_refs)]	// Used for getting size of taskss
 
+// A "region" is a thread
+// - rdata is the thread's data, i.e. the drive instance
+// - scratch is where the future should go
+
 use self::async_trickery::WaitRes;
 //use self::future_ext::FutureExt;
 #[macro_use]
@@ -27,7 +31,27 @@ pub mod meta_bus;
 pub mod meta_intr;
 pub mod meta_nic;
 
-pub type Result = ::core::result::Result<(),ffi::udi_status_t>;
+pub type Result<T> = ::core::result::Result<T,Error>;
+
+/// A wrapper around `udi_status_t` that cannot be `UDI_OK`
+pub struct Error(::core::num::NonZeroU32);
+impl Error {
+	pub fn into_inner(self) -> ffi::udi_status_t {
+		self.0.get()
+	}
+	pub fn from_status(s: ffi::udi_status_t) -> Result<()> {
+		match ::core::num::NonZeroU32::new(s) {
+		Some(v) => Err(Error(v)),
+		None => Ok( () ),
+		}
+	}
+	pub fn to_status(r: Result<()>) -> ffi::udi_status_t {
+		match r {
+		Ok(()) => ffi::UDI_OK as _,
+		Err(e) => e.into_inner(),
+		}
+	}
+}
 
 pub fn get_gcb_channel() -> impl ::core::future::Future<Output=ffi::udi_channel_t> {
 	async_trickery::with_cb::<ffi::udi_cb_t,_,_>(|cb| cb.channel)
@@ -35,10 +59,6 @@ pub fn get_gcb_channel() -> impl ::core::future::Future<Output=ffi::udi_channel_
 pub fn get_gcb_context() -> impl ::core::future::Future<Output=*mut ::core::ffi::c_void> {
 	async_trickery::with_cb::<ffi::udi_cb_t,_,_>(|cb| cb.context)
 }
-
-// A "region" is a thread
-// - rdata is the thread's data, i.e. the drive instance
-// - scratch is where the future should go
 
 pub const fn const_max(a: usize, b: usize) -> usize {
 	if a > b { a } else { b }
@@ -53,6 +73,7 @@ pub unsafe trait Ops {
 pub unsafe trait Wrapper<Inner> {
 }
 
+/// Define a set of wrapper types for another type, to separate trait impls
 #[macro_export]
 macro_rules! define_wrappers {
 	($root_type:ty : $($name:ident)+) => {
@@ -82,6 +103,7 @@ where
 {
 }
 
+/// Define a UDI driver
 #[macro_export]
 macro_rules! define_driver
 {

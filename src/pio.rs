@@ -60,7 +60,7 @@ pub fn trans<'a>(
 	start_label: crate::ffi::udi_index_t,
 	mut buf: Option<&'a mut crate::buf::Handle>,
 	mem_ptr: Option<MemPtr<'a>>
-	) -> impl ::core::future::Future<Output=Result<u16,crate::ffi::udi_status_t>> + 'a {
+	) -> impl ::core::future::Future<Output=Result<u16,crate::Error>> + 'a {
 	extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, new_buf: *mut crate::ffi::udi_buf_t, status: crate::ffi::udi_status_t, result: u16) {
 		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Data([new_buf as usize, status as usize, result as usize])); }
 	}
@@ -81,7 +81,7 @@ pub fn trans<'a>(
 				// SAFE: Trusting the environment
 				unsafe { buf.update_from_raw(new_buf as *mut _); }
 			}
-			if status != 0 { Err(status as crate::ffi::udi_status_t) } else { Ok(result as u16) }
+			crate::Error::from_status(status as crate::ffi::udi_status_t).map(|()| result as u16)
 			}
 		)
 }

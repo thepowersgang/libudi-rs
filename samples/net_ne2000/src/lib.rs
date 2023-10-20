@@ -30,11 +30,10 @@ impl ::udi::init::Driver for Driver
 		}
     }
 }
-impl ::udi::imc::ChannelHandler for Driver
+impl ::udi::meta_bus::BusDevice for Driver
 {
-    type Future<'s> = impl ::core::future::Future<Output=::udi::Result> + 's;
-
-    fn event_ind(&mut self) -> Self::Future<'_> {
+    type Future_event_ind<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
+    fn channel_event_ind(&mut self) -> Self::Future_event_ind<'_> {
 		async move {
 			//self.active_cb = ::udi::get_cur_cb_raw();
 			//let bind_cb = ::udi::imc::get_cb_bind_cb::<::udi::ffi::meta_bus::udi_bus_bind_cb_t>();
@@ -42,16 +41,14 @@ impl ::udi::imc::ChannelHandler for Driver
 			Ok( () )
 		}
     }
-}
-impl ::udi::meta_bus::BusDevice for Driver
-{
-    type Future_bind_ack<'s> = impl ::core::future::Future<Output=()> + 's;
 
+    type Future_bind_ack<'s> = impl ::core::future::Future<Output=()> + 's;
     fn bus_bind_ack(&mut self, _dma_constraints: udi::ffi::physio::udi_dma_constraints_t, _preferred_endianness: bool, _status: udi::ffi::udi_status_t) -> Self::Future_bind_ack<'_> {
 		async move {
-			self.pio_handles.reset   = ::udi::pio::map(0/*UDI_PCI_BAR_0*/, 0x00,0x20, &pio_ops::RESET, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0).await;
-			self.pio_handles.enable  = ::udi::pio::map(0/*UDI_PCI_BAR_0*/, 0x00,0x20, &pio_ops::ENABLE, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0).await;
-			self.pio_handles.irq_ack = ::udi::pio::map(0/*UDI_PCI_BAR_0*/, 0x00,0x20, &pio_ops::IRQACK, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0).await;
+			let pio_map = |trans_list| ::udi::pio::map(0/*UDI_PCI_BAR_0*/, 0x00,0x20, trans_list, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0);
+			self.pio_handles.reset   = pio_map(&pio_ops::RESET).await;
+			self.pio_handles.enable  = pio_map(&pio_ops::ENABLE).await;
+			self.pio_handles.irq_ack = pio_map(&pio_ops::IRQACK).await;
 
 			// Spawn channel
 			self.intr_channel = ::udi::imc::channel_spawn(::udi::get_gcb_channel().await, /*interrupt number*/0, OpsList::Irq as _, ::udi::get_gcb_context().await).await;
@@ -76,7 +73,6 @@ impl ::udi::meta_bus::BusDevice for Driver
 			}
 
 			// Binding is complete!
-			//Ok( () )
 		}
     }
 
@@ -106,20 +102,14 @@ impl ::udi::meta_bus::BusDevice for Driver
 		}
     }
 }
-impl ::udi::imc::ChannelHandler for DriverIrq
-{
-    type Future<'s> = impl ::core::future::Future<Output=::udi::Result> + 's;
-
-    fn event_ind(&mut self) -> Self::Future<'_> {
-		async move {
-			todo!()
-		}
-    }
-}
 impl ::udi::meta_intr::IntrHandler for DriverIrq
 {
-    type Future_intr_event_ind<'s> = impl ::core::future::Future<Output=()>+'s;
+    type Future_event_ind<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
+    fn channel_event_ind(&mut self) -> Self::Future_event_ind<'_> {
+		async move { Ok(()) }
+	}
 
+    type Future_intr_event_ind<'s> = impl ::core::future::Future<Output=()>+'s;
     fn intr_event_ind(&mut self, flags: u8) -> Self::Future_intr_event_ind<'_> {
 		async move {
 			// TODO: Get the interrupt result from the cb
@@ -128,19 +118,14 @@ impl ::udi::meta_intr::IntrHandler for DriverIrq
     }
 }
 
-impl ::udi::imc::ChannelHandler for DriverNicCtrl
-{
-    type Future<'s> = impl ::core::future::Future<Output=::udi::Result> + 's;
-
-    fn event_ind(&mut self) -> Self::Future<'_> {
-		async move {
-			todo!()
-		}
-    }
-}
 impl ::udi::meta_nic::Control for DriverNicCtrl
 {
-	type Future_bind_req<'s> = impl ::core::future::Future<Output=udi::ffi::udi_status_t> + 's;
+    type Future_event_ind<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
+    fn channel_event_ind(&mut self) -> Self::Future_event_ind<'_> {
+		async move { Ok(()) }
+	}
+
+	type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::ffi::udi_status_t> + 's;
     fn bind_req(&mut self, tx_chan_index: udi::ffi::udi_index_t, rx_chan_index: udi::ffi::udi_index_t) -> Self::Future_bind_req<'_> {
         async move { todo!() }
     }
@@ -150,12 +135,11 @@ impl ::udi::meta_nic::Control for DriverNicCtrl
         async move { todo!() }
     }
 
-	type Future_enable_req<'s> = impl ::core::future::Future<Output=::udi::ffi::udi_status_t> + 's;
+	type Future_enable_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
     fn enable_req(&mut self) -> Self::Future_enable_req<'_> {
         async move {
-			::udi::pio::trans(&self.0.pio_handles.enable, 0, None, None).await
-				.err()
-				.unwrap_or(0)
+			::udi::pio::trans(&self.0.pio_handles.enable, 0, None, None).await?;
+			Ok( () )
 		}
     }
 
