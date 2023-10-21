@@ -33,11 +33,14 @@ pub unsafe extern "C" fn channel_event_ind_op<T: ChannelHandler<Marker>, Marker:
     // NOTE: There's no scratch availble to this function, so cannot use async
 
     // SAFE: Caller has ensured that the context is valid for this type
-    let state: &mut T = unsafe { &mut *((*cb).gcb.context as *mut T) };
+    let state: &mut T = crate::async_trickery::get_rdata_t(&*cb);
     match (*cb).event
     {
     crate::ffi::imc::UDI_CHANNEL_CLOSED => state.channel_closed(),
-    crate::ffi::imc::UDI_CHANNEL_BOUND => state.channel_bound( &(*cb).params ),
+    crate::ffi::imc::UDI_CHANNEL_BOUND => {
+        crate::async_trickery::set_channel_cb(cb);
+        state.channel_bound( &(*cb).params );
+        },
     crate::ffi::imc::UDI_CHANNEL_OP_ABORTED => {
         let aborted_cb = (*cb).params.orig_cb;
         crate::async_trickery::abort_task(aborted_cb);

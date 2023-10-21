@@ -32,7 +32,7 @@ impl ::udi::init::Driver for Driver
 }
 impl ::udi::meta_bus::BusDevice for Driver
 {
-    type Future_bind_ack<'s> = impl ::core::future::Future<Output=()> + 's;
+    type Future_bind_ack<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
     fn bus_bind_ack(&mut self, _dma_constraints: udi::ffi::physio::udi_dma_constraints_t, _preferred_endianness: bool, _status: udi::ffi::udi_status_t) -> Self::Future_bind_ack<'_> {
 		async move {
 			let pio_map = |trans_list| ::udi::pio::map(0/*UDI_PCI_BAR_0*/, 0x00,0x20, trans_list, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0);
@@ -59,10 +59,11 @@ impl ::udi::meta_bus::BusDevice for Driver
 			match ::udi::pio::trans(&self.pio_handles.reset, 0, None, Some(unsafe { ::udi::pio::MemPtr::new(&mut self.mac_addr) })).await
 			{
 			Ok(_) => {},
-			Err(_) => {},
+			Err(e) => return Err(e),
 			}
 
 			// Binding is complete!
+			Ok( () )
 		}
     }
 
@@ -95,7 +96,7 @@ impl ::udi::meta_bus::BusDevice for Driver
 impl ::udi::meta_intr::IntrHandler for DriverIrq
 {
     type Future_intr_event_ind<'s> = impl ::core::future::Future<Output=()>+'s;
-    fn intr_event_ind(&mut self, flags: u8) -> Self::Future_intr_event_ind<'_> {
+    fn intr_event_ind(&mut self, _flags: u8) -> Self::Future_intr_event_ind<'_> {
 		async move {
 			// TODO: Get the interrupt result from the cb
 			todo!()
@@ -134,7 +135,7 @@ impl ::udi::meta_nic::Control for DriverNicCtrl
     }
 
 	type Future_info_req<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn info_req(&mut self, reset_statistics: bool) -> Self::Future_info_req<'_> {
+    fn info_req(&mut self, _reset_statistics: bool) -> Self::Future_info_req<'_> {
         async move { todo!() }
     }
 	

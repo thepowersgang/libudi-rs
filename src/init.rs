@@ -15,8 +15,9 @@ pub trait Driver: 'static {
 
 #[repr(C)]
 pub struct RData<T> {
-    init_context: ffi::init::udi_init_context_t,
-    inner: T,
+    pub(crate) init_context: ffi::init::udi_init_context_t,
+	pub(crate) channel_cb: *mut crate::ffi::imc::udi_channel_event_cb_t,
+    pub(crate) inner: T,
 }
 
 struct MgmtState<T: Driver> {

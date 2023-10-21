@@ -9,7 +9,7 @@ pub trait BusDevice: 'static {
         dma_constraints: crate::ffi::physio::udi_dma_constraints_t,
         preferred_endianness: bool,
         status: crate::ffi::udi_status_t
-        )->() as Future_bind_ack
+        )->crate::Result<()> as Future_bind_ack
     );
 
     async_method!(fn bus_unbind_ack(&mut self) -> () as Future_unbind_ack);
@@ -37,61 +37,48 @@ unsafe impl crate::async_trickery::GetCb for udi_bus_bind_cb_t {
     }
 }
 
+future_wrapper!(bus_bind_ack_op => <T as BusDevice>(
+    cb: *mut udi_bus_bind_cb_t,
+    dma_constraints: crate::ffi::physio::udi_dma_constraints_t,
+    preferred_endianness: u8,
+    status: crate::ffi::udi_status_t
+    ) val @ {
+    crate::async_trickery::with_ack(
+        val.bus_bind_ack(dma_constraints, preferred_endianness != 0, status),
+        |cb,res| unsafe { crate::async_trickery::channel_event_complete::<udi_bus_bind_cb_t>(cb, crate::Error::to_status(res)) }
+        )
+});
+future_wrapper!(bus_unbind_ack_op => <T as BusDevice>(cb: *mut udi_bus_bind_cb_t) val @ {
+    crate::async_trickery::with_ack(
+        val.bus_unbind_ack(),
+        |cb,_res| unsafe { crate::async_trickery::channel_event_complete::<udi_bus_bind_cb_t>(cb, 0 /*res*/) }
+        )
+});
+future_wrapper!(intr_attach_ack_op => <T as BusDevice>(cb: *mut crate::ffi::meta_intr::udi_intr_attach_cb_t, status: crate::ffi::udi_status_t) val @ {
+    val.intr_attach_ack(status)
+});
+future_wrapper!(intr_detach_ack_op => <T as BusDevice>(cb: *mut crate::ffi::meta_intr::udi_intr_detach_cb_t) val @ {
+    val.intr_detach_ack()
+});
+
 impl udi_bus_device_ops_t {
     pub const fn scratch_requirement<T: BusDevice>() -> usize {
         let rv = crate::imc::task_size::<T,MarkerBusDevice>();
-        let rv = crate::const_max(rv, crate::async_trickery::task_size::<T::Future_bind_ack<'static>>());
-        let rv = crate::const_max(rv, crate::async_trickery::task_size::<T::Future_unbind_ack<'static>>());
-        let rv = crate::const_max(rv, crate::async_trickery::task_size::<T::Future_intr_attach_ack<'static>>());
+        let rv = crate::const_max(rv, bus_bind_ack_op::task_size::<T>());
+        let rv = crate::const_max(rv, bus_unbind_ack_op::task_size::<T>());
+        let rv = crate::const_max(rv, intr_attach_ack_op::task_size::<T>());
+        let rv = crate::const_max(rv, intr_detach_ack_op::task_size::<T>());
         rv
     }
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
     /// SAFETY: The scratch size must be >= value returned by [scratch_requirement]
     pub const unsafe fn for_driver<T: BusDevice>() -> Self {
         return udi_bus_device_ops_t {
-            // TODO: Maybe have `channel_event_ind` be fully defined here? Handling the bind call
             channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerBusDevice>,
             bus_bind_ack_op: bus_bind_ack_op::<T>,
             bus_unbind_ack_op: bus_unbind_ack_op::<T>,
             intr_attach_ack_op: intr_attach_ack_op::<T>,
             intr_detach_ack_op: intr_detach_ack_op::<T>,
         };
-        extern "C" fn bus_bind_ack_op<T: BusDevice>(
-            cb: *mut udi_bus_bind_cb_t,
-            dma_constraints: crate::ffi::physio::udi_dma_constraints_t,
-            preferred_endianness: u8,
-            status: crate::ffi::udi_status_t
-        )
-        {
-            // SAFE: Caller has ensured that the context is valid for this type
-            let state: &mut T = unsafe { &mut *((*cb).gcb.context as *mut T) };
-            let job = state.bus_bind_ack(dma_constraints, preferred_endianness != 0, status);
-            // SAFE: Valid raw pointer deref, caller ensured cb scratch validity
-            unsafe { crate::async_trickery::init_task(&*cb, job); }
-        }
-        extern "C" fn bus_unbind_ack_op<T: BusDevice>(cb: *mut udi_bus_bind_cb_t)
-        {
-            // SAFE: Caller has ensured that the context is valid for this type
-            let state: &mut T = unsafe { &mut *((*cb).gcb.context as *mut T) };
-            let job = state.bus_unbind_ack();
-            // SAFE: Valid raw pointer deref, caller ensured cb scratch validity
-            unsafe { crate::async_trickery::init_task(&*cb, job); }
-        }
-        extern "C" fn intr_attach_ack_op<T: BusDevice>(cb: *mut crate::ffi::meta_intr::udi_intr_attach_cb_t, status: crate::ffi::udi_status_t)
-        {
-            // SAFE: Caller has ensured that the context is valid for this type
-            let state: &mut T = unsafe { &mut *((*cb).gcb.context as *mut T) };
-            let job = state.intr_attach_ack(status);
-            // SAFE: Valid raw pointer deref, caller ensured cb scratch validity
-            unsafe { crate::async_trickery::init_task(&*cb, job); }
-        }
-        extern "C" fn intr_detach_ack_op<T: BusDevice>(cb: *mut crate::ffi::meta_intr::udi_intr_detach_cb_t)
-        {
-            // SAFE: Caller has ensured that the context is valid for this type
-            let state: &mut T = unsafe { &mut *((*cb).gcb.context as *mut T) };
-            let job = state.intr_detach_ack();
-            // SAFE: Valid raw pointer deref, caller ensured cb scratch validity
-            unsafe { crate::async_trickery::init_task(&*cb, job); }
-        }
     }
 }

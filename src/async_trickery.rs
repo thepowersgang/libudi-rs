@@ -1,6 +1,13 @@
 //!
 //!
 //!
+//
+//
+// According to udi `core_spec_vol1.pdf` 5.2.2.1, `scratch` is preserved over async calls
+// so we can (... hopefully) use it as storage for the async task structure
+//
+// However, it might resize in some circumstances? And the docs aren't super clear as to when
+// scratch is invalidated.
 use ::core::task::Poll;
 use ::core::pin::Pin;
 use ::core::marker::{PhantomData,Unpin};
@@ -38,8 +45,34 @@ pub(crate) unsafe fn init_task<Cb: GetCb, T: 'static+AsyncState>(cb: &Cb, inner:
 pub(crate) const fn task_size<T: 'static+AsyncState>() -> usize {
 	::core::mem::size_of::<Task<T,udi_cb_t>>()
 }
-pub(crate) fn abort_task(cb: *mut udi_cb_t)
+/// Drop a task (due to a channel op_abort event)
+pub(crate) unsafe fn abort_task(cb: *mut udi_cb_t)
 {
+	let task = &mut *((*cb).scratch as *mut Task<(),udi_cb_t>);
+	let get_inner = task.get_inner;
+	(*(get_inner(task) as *mut dyn TaskTrait)).drop_in_place();
+}
+
+/// Obtain a pointer to the driver instance from a cb
+pub(crate) unsafe fn get_rdata_t<T, Cb: GetCb>(cb: &Cb) -> &mut T {
+	&mut (*(cb.get_gcb().context as *mut crate::init::RData<T>)).inner
+}
+/// Set the channel operation cb
+pub(crate) unsafe fn set_channel_cb(cb: *mut crate::ffi::imc::udi_channel_event_cb_t) {
+	let slot = &mut (*( (*cb).get_gcb().context as *mut crate::init::RData<()>)).channel_cb;
+	if *slot != ::core::ptr::null_mut() {
+		// Uh-oh
+	}
+	*slot = cb;
+}
+pub(crate) unsafe fn channel_event_complete<Cb: GetCb>(cb: *mut Cb, status: crate::ffi::udi_status_t) {
+	let slot = &mut (*( (*cb).get_gcb().context as *mut crate::init::RData<()>)).channel_cb;
+	let channel_cb = *slot;
+	*slot = ::core::ptr::null_mut();
+	if channel_cb == ::core::ptr::null_mut() {
+		// Uh-oh
+	}
+	crate::ffi::imc::udi_channel_event_complete(channel_cb, status);
 }
 
 /// Run async state stored in `cb`
@@ -47,8 +80,6 @@ pub(crate) fn abort_task(cb: *mut udi_cb_t)
 /// SAFETY: Caller must ensure that the cb is async
 unsafe fn run<Cb: GetCb>(cb: &Cb) {
 	let gcb = cb.get_gcb();
-	// TODO: Scratch isn't the right place for this, needs to be in context
-	// - Scratch is limited in size, and not all operations fill it?
 	let scratch = Pin::new(&mut *( (*gcb).scratch as *mut Task<(),udi_cb_t>));
 	let f = scratch.get_future();
 	
@@ -142,6 +173,7 @@ enum TaskState {
 trait TaskTrait {
 	unsafe fn get_async<'a>(&'a mut self) -> &'a mut dyn AsyncState;
 	fn get_cb_type(&self) -> ::core::any::TypeId;
+	unsafe fn drop_in_place(&mut self);
 }
 impl<T: 'static + AsyncState, Cb: GetCb> Task<T, Cb>
 {
@@ -168,6 +200,9 @@ where
     fn get_cb_type(&self) -> ::core::any::TypeId {
         ::core::any::TypeId::of::<Cb>()
     }
+	unsafe fn drop_in_place(&mut self) {
+		::core::ptr::drop_in_place(self);
+	}
 }
 impl Task<(),udi_cb_t>
 {
@@ -348,7 +383,7 @@ macro_rules! future_wrapper {
         unsafe extern "C" fn $name<T: $trait>(cb: *mut $cb_ty$(, $a_n: $a_ty)*)
         {
             let job = {
-                let $val = &mut *((*cb).gcb.context as *mut T);
+				let $val = crate::async_trickery::get_rdata_t::<T,_>(&*cb);
                 $b
                 };
             crate::async_trickery::init_task(&*cb, job);
