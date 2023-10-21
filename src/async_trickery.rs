@@ -38,6 +38,9 @@ pub(crate) unsafe fn init_task<Cb: GetCb, T: 'static+AsyncState>(cb: &Cb, inner:
 pub(crate) const fn task_size<T: 'static+AsyncState>() -> usize {
 	::core::mem::size_of::<Task<T,udi_cb_t>>()
 }
+pub(crate) fn abort_task(cb: *mut udi_cb_t)
+{
+}
 
 /// Run async state stored in `cb`
 /// 
@@ -75,6 +78,7 @@ where
 	}
 }
 
+/// Wrap a task to call an ack function once it completes
 pub(crate) const fn with_ack<Cb, Fut, Res, Ack>(f: Fut, ack: Ack) -> WithAck<Cb, Fut, Res, Ack>
 where
 	Fut: Future<Output=Res>,

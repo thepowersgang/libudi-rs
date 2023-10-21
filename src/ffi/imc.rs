@@ -51,3 +51,7 @@ pub enum ChannelEvent {
     Bound,
     OpAborted,
 }
+
+pub const UDI_CHANNEL_CLOSED: u8 = 0;
+pub const UDI_CHANNEL_BOUND: u8 = 1;
+pub const UDI_CHANNEL_OP_ABORTED: u8 = 2;

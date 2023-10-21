@@ -32,16 +32,6 @@ impl ::udi::init::Driver for Driver
 }
 impl ::udi::meta_bus::BusDevice for Driver
 {
-    type Future_channel_event_ind<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
-    fn channel_event_ind(&mut self, cb: ::udi::imc::ChannelEventCb) -> Self::Future_channel_event_ind<'_> {
-		async move {
-			//self.active_cb = ::udi::get_cur_cb_raw();
-			//let bind_cb = ::udi::imc::get_cb_bind_cb::<::udi::ffi::meta_bus::udi_bus_bind_cb_t>();
-			//udi_bus_bind_req(bind_cb);
-			Ok( () )
-		}
-    }
-
     type Future_bind_ack<'s> = impl ::core::future::Future<Output=()> + 's;
     fn bus_bind_ack(&mut self, _dma_constraints: udi::ffi::physio::udi_dma_constraints_t, _preferred_endianness: bool, _status: udi::ffi::udi_status_t) -> Self::Future_bind_ack<'_> {
 		async move {
@@ -104,11 +94,6 @@ impl ::udi::meta_bus::BusDevice for Driver
 }
 impl ::udi::meta_intr::IntrHandler for DriverIrq
 {
-    type Future_channel_event_ind<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
-    fn channel_event_ind(&mut self, cb: ::udi::imc::ChannelEventCb) -> Self::Future_channel_event_ind<'_> {
-		async move { Ok(()) }
-	}
-
     type Future_intr_event_ind<'s> = impl ::core::future::Future<Output=()>+'s;
     fn intr_event_ind(&mut self, flags: u8) -> Self::Future_intr_event_ind<'_> {
 		async move {
@@ -120,11 +105,6 @@ impl ::udi::meta_intr::IntrHandler for DriverIrq
 
 impl ::udi::meta_nic::Control for DriverNicCtrl
 {
-    type Future_channel_event_ind<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
-    fn channel_event_ind(&mut self, cb: ::udi::imc::ChannelEventCb) -> Self::Future_channel_event_ind<'_> {
-		async move { Ok(()) }
-	}
-
 	type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::ffi::udi_status_t> + 's;
     fn bind_req(&mut self, tx_chan_index: udi::ffi::udi_index_t, rx_chan_index: udi::ffi::udi_index_t) -> Self::Future_bind_req<'_> {
         async move { todo!() }

@@ -5,8 +5,6 @@ use crate::ffi::meta_bus::udi_bus_device_ops_t;
 use crate::ffi::meta_bus::udi_bus_bind_cb_t;
 
 pub trait BusDevice: 'static {
-    channel_handler_method!();
-
     async_method!(fn bus_bind_ack(&mut self,
         dma_constraints: crate::ffi::physio::udi_dma_constraints_t,
         preferred_endianness: bool,
@@ -18,7 +16,20 @@ pub trait BusDevice: 'static {
     async_method!(fn intr_attach_ack(&mut self, status: crate::ffi::udi_status_t) -> () as Future_intr_attach_ack);
     async_method!(fn intr_detach_ack(&mut self) -> () as Future_intr_detach_ack);
 }
-channel_handler_forward!(MarkerBusDevice, BusDevice);
+struct MarkerBusDevice;
+impl<T> crate::imc::ChannelHandler<MarkerBusDevice> for T
+where
+    T: BusDevice
+{
+    fn channel_closed(&mut self) {
+    }
+    fn channel_bound(&mut self, params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
+        // SAFE: Trusting that this trait is only being used through proper config.
+        unsafe {
+            crate::ffi::meta_bus::udi_bus_bind_req(params.parent_bound.bind_cb as *mut udi_bus_bind_cb_t);
+        }
+    }
+}
 
 unsafe impl crate::async_trickery::GetCb for udi_bus_bind_cb_t {
     fn get_gcb(&self) -> &crate::ffi::udi_cb_t {

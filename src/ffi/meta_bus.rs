@@ -1,5 +1,9 @@
 use crate::ffi::*;
 
+extern "C" {
+    pub fn udi_bus_bind_req(cb: *mut udi_bus_bind_cb_t);
+}
+
 pub struct udi_bus_device_ops_t
 {
     pub channel_event_ind_op: imc::udi_channel_event_ind_op_t,

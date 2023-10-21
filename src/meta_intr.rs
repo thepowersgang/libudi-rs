@@ -10,11 +10,18 @@ pub fn event_rdy(cb: super::cb::CbHandle<udi_intr_event_cb_t>) {
 
 pub trait IntrHandler: 'static
 {
-    channel_handler_method!();
-
     async_method!(fn intr_event_ind(&mut self, flags: u8)->() as Future_intr_event_ind);
 }
-channel_handler_forward!(MarkerIntrHandler, IntrHandler);
+struct MarkerIntrHandler;
+impl<T> crate::imc::ChannelHandler<MarkerIntrHandler> for T
+where
+    T: IntrHandler
+{
+    fn channel_closed(&mut self) {
+    }
+    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
+    }
+}
 
 
 future_wrapper!(intr_event_ind_op => <T as IntrHandler>(cb: *mut udi_intr_event_cb_t, flags: u8) val @ {

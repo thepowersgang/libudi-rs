@@ -37,8 +37,6 @@ pub enum OpsNum
 }
 
 pub trait Control: 'static {
-    channel_handler_method!();
-
     async_method!(fn bind_req(&mut self, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->udi_status_t as Future_bind_req);
     async_method!(fn unbind_req(&mut self)->() as Future_unbind_req);
     async_method!(fn enable_req(&mut self)->crate::Result<()> as Future_enable_req);
@@ -46,7 +44,17 @@ pub trait Control: 'static {
     async_method!(fn ctrl_req(&mut self)->() as Future_ctrl_req);
     async_method!(fn info_req(&mut self, reset_statistics: bool)->() as Future_info_req);
 }
-channel_handler_forward!(MarkerControl, Control);
+struct MarkerControl;
+impl<T> crate::imc::ChannelHandler<MarkerControl> for T
+where
+    T: Control
+{
+    fn channel_closed(&mut self) {
+    }
+    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
+        //crate::ffi::meta_bus::udi_bus_bind_req(params.parent_bound.bind_cb);
+    }
+}
 
 future_wrapper!(nd_bind_req_op => <T as Control>(cb: *mut ffi::udi_nic_bind_cb_t, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)
     val @ {
