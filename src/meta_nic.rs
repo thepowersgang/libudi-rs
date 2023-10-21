@@ -1,4 +1,4 @@
-use crate::ffi::{udi_index_t, udi_status_t};
+use crate::ffi::udi_index_t;
 
 // SAFE: Follows the contract, gcb is first field
 unsafe impl crate::async_trickery::GetCb for ffi::udi_nic_cb_t {
@@ -50,15 +50,17 @@ pub enum OpsNum
 
 pub type CbRefNic<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_cb_t>;
 pub type CbRefNicBind<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_bind_cb_t>;
+pub type CbRefNicCtrl<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_ctrl_cb_t>;
+pub type CbRefNicInfo<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_info_cb_t>;
 pub type CbRefNicTx<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_tx_cb_t>;
 
 pub trait Control: 'static {
     async_method!(fn bind_req(&'a mut self, cb: CbRefNicBind<'a>, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->crate::Result<NicInfo> as Future_bind_req);
     async_method!(fn unbind_req(&'a mut self, cb: CbRefNic<'a>)->() as Future_unbind_req);
     async_method!(fn enable_req(&'a mut self, cb: CbRefNic<'a>)->crate::Result<()> as Future_enable_req);
-    async_method!(fn disable_req(&mut self)->() as Future_disable_req);
-    async_method!(fn ctrl_req(&mut self)->() as Future_ctrl_req);
-    async_method!(fn info_req(&mut self, reset_statistics: bool)->() as Future_info_req);
+    async_method!(fn disable_req(&'a mut self, cb: CbRefNic<'a>)->() as Future_disable_req);
+    async_method!(fn ctrl_req(&'a mut self, cb: CbRefNicCtrl<'a>)->() as Future_ctrl_req);
+    async_method!(fn info_req(&'a mut self, cb: CbRefNicInfo<'a>, reset_statistics: bool)->() as Future_info_req);
 }
 struct MarkerControl;
 impl<T> crate::imc::ChannelHandler<MarkerControl> for T
@@ -109,13 +111,13 @@ future_wrapper!(nd_enable_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t) v
         )
 });
 future_wrapper!(nd_disable_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t) val @ {
-    val.disable_req()
+    val.disable_req(cb)
 });
 future_wrapper!(nd_ctrl_req_op => <T as Control>(cb: *mut ffi::udi_nic_ctrl_cb_t) val @ {
-    val.ctrl_req()
+    val.ctrl_req(cb)
 });
 future_wrapper!(nd_info_req_op => <T as Control>(cb: *mut ffi::udi_nic_info_cb_t, reset_statistics: crate::ffi::udi_boolean_t) val @ {
-    val.info_req(reset_statistics != 0)
+    val.info_req(cb, reset_statistics != 0)
 });
 impl ffi::udi_nd_ctrl_ops_t
 {
@@ -147,7 +149,6 @@ unsafe impl crate::Ops for ffi::udi_nd_ctrl_ops_t
 {
     const OPS_NUM: crate::ffi::udi_index_t = OpsNum::NdCtrl as _;
 }
-
 
 
 pub trait NdTx: 'static {

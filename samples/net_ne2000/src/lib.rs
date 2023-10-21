@@ -33,7 +33,13 @@ impl ::udi::init::Driver for Driver
 impl ::udi::meta_bus::BusDevice for Driver
 {
     type Future_bind_ack<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
-    fn bus_bind_ack<'a>(&'a mut self, cb: ::udi::CbRef<'a, ::udi::ffi::meta_bus::udi_bus_bind_cb_t>, _dma_constraints: udi::ffi::physio::udi_dma_constraints_t, _preferred_endianness: bool, _status: udi::ffi::udi_status_t) -> Self::Future_bind_ack<'a> {
+    fn bus_bind_ack<'a>(
+		&'a mut self,
+		cb: ::udi::meta_bus::CbRefBind<'a>,
+		_dma_constraints: udi::ffi::physio::udi_dma_constraints_t,
+		_preferred_endianness: bool,
+		_status: udi::ffi::udi_status_t
+	) -> Self::Future_bind_ack<'a> {
 		async move {
 			let pio_map = |trans_list| ::udi::pio::map(cb.gcb(), 0/*UDI_PCI_BAR_0*/, 0x00,0x20, trans_list, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0);
 			self.pio_handles.reset   = pio_map(&pio_ops::RESET).await;
@@ -56,11 +62,7 @@ impl ::udi::meta_bus::BusDevice for Driver
 			}
 
 			// Reset the hardware, and get the MAC address
-			match ::udi::pio::trans(cb.gcb(), &self.pio_handles.reset, 0, None, Some(unsafe { ::udi::pio::MemPtr::new(&mut self.mac_addr) })).await
-			{
-			Ok(_) => {},
-			Err(e) => return Err(e),
-			}
+			::udi::pio::trans(cb.gcb(), &self.pio_handles.reset, 0, None, Some(unsafe { ::udi::pio::MemPtr::new(&mut self.mac_addr) })).await?;
 
 			// Binding is complete!
 			Ok( () )
@@ -68,15 +70,14 @@ impl ::udi::meta_bus::BusDevice for Driver
     }
 
     type Future_unbind_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn bus_unbind_ack(&mut self) -> Self::Future_unbind_ack<'_> {
+    fn bus_unbind_ack<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefBind<'a>) -> Self::Future_unbind_ack<'a> {
         async move {
 			todo!()
 		}
     }
 
     type Future_intr_attach_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-
-    fn intr_attach_ack(&mut self, status: udi::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'_> {
+    fn intr_attach_ack<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefIntrAttach<'a>, status: udi::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'a> {
         async move {
 			if status != 0 {
 				// TODO: Free the CB?
@@ -86,8 +87,7 @@ impl ::udi::meta_bus::BusDevice for Driver
     }
 
     type Future_intr_detach_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-
-    fn intr_detach_ack(&mut self) -> Self::Future_intr_detach_ack<'_> {
+    fn intr_detach_ack<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_ack<'a> {
         async move {
 			todo!()
 		}
@@ -96,7 +96,7 @@ impl ::udi::meta_bus::BusDevice for Driver
 impl ::udi::meta_intr::IntrHandler for DriverIrq
 {
     type Future_intr_event_ind<'s> = impl ::core::future::Future<Output=()>+'s;
-    fn intr_event_ind(&mut self, _flags: u8) -> Self::Future_intr_event_ind<'_> {
+    fn intr_event_ind<'a>(&'a mut self, cb: ::udi::meta_intr::CbRefEvent<'a>, _flags: u8) -> Self::Future_intr_event_ind<'a> {
 		async move {
 			// TODO: Get the interrupt result from the cb
 			todo!()
@@ -130,29 +130,27 @@ impl ::udi::meta_nic::Control for DriverNicCtrl
     }
 
 	type Future_disable_req<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn disable_req(&mut self) -> Self::Future_disable_req<'_> {
+    fn disable_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_disable_req<'a> {
         async move { todo!() }
     }
 
 	type Future_ctrl_req<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn ctrl_req(&mut self) -> Self::Future_ctrl_req<'_> {
+    fn ctrl_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicCtrl<'a>) -> Self::Future_ctrl_req<'a> {
         async move { todo!() }
     }
 
 	type Future_info_req<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn info_req(&mut self, _reset_statistics: bool) -> Self::Future_info_req<'_> {
+    fn info_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicInfo<'a>, _reset_statistics: bool) -> Self::Future_info_req<'a> {
         async move { todo!() }
     }
 }
 impl ::udi::meta_nic::NdTx for DriverNicCtrl
 {
-    #[allow(non_camel_case_types)]
 	type Future_tx_req<'s> = impl ::core::future::Future<Output=()> + 's;
     fn tx_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicTx<'a>) -> Self::Future_tx_req<'a> {
         async move { todo!() }
     }
 
-    #[allow(non_camel_case_types)]
 	type Future_exp_tx_req<'s> = Self::Future_tx_req<'s>;
     fn exp_tx_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicTx<'a>) -> Self::Future_exp_tx_req<'a> {
         self.tx_req(cb)

@@ -4,6 +4,10 @@
 use crate::ffi::meta_bus::udi_bus_device_ops_t;
 use crate::ffi::meta_bus::udi_bus_bind_cb_t;
 
+pub type CbRefBind<'a> = crate::CbRef<'a, udi_bus_bind_cb_t>;
+pub type CbRefIntrAttach<'a> = crate::CbRef<'a, crate::ffi::meta_intr::udi_intr_attach_cb_t>;
+pub type CbRefIntrDetach<'a> = crate::CbRef<'a, crate::ffi::meta_intr::udi_intr_detach_cb_t>;
+
 pub trait BusDevice: 'static {
     async_method!(fn bus_bind_ack(&'a mut self,
         cb: crate::CbRef<'a, udi_bus_bind_cb_t>,
@@ -13,9 +17,9 @@ pub trait BusDevice: 'static {
         )->crate::Result<()> as Future_bind_ack
     );
 
-    async_method!(fn bus_unbind_ack(&mut self) -> () as Future_unbind_ack);
-    async_method!(fn intr_attach_ack(&mut self, status: crate::ffi::udi_status_t) -> () as Future_intr_attach_ack);
-    async_method!(fn intr_detach_ack(&mut self) -> () as Future_intr_detach_ack);
+    async_method!(fn bus_unbind_ack(&'a mut self, cb: CbRefBind<'a>) -> () as Future_unbind_ack);
+    async_method!(fn intr_attach_ack(&'a mut self, cb: CbRefIntrAttach<'a>, status: crate::ffi::udi_status_t) -> () as Future_intr_attach_ack);
+    async_method!(fn intr_detach_ack(&'a mut self, cb: CbRefIntrDetach<'a>) -> () as Future_intr_detach_ack);
 }
 struct MarkerBusDevice;
 impl<T> crate::imc::ChannelHandler<MarkerBusDevice> for T
@@ -51,15 +55,15 @@ future_wrapper!(bus_bind_ack_op => <T as BusDevice>(
 });
 future_wrapper!(bus_unbind_ack_op => <T as BusDevice>(cb: *mut udi_bus_bind_cb_t) val @ {
     crate::async_trickery::with_ack(
-        val.bus_unbind_ack(),
+        val.bus_unbind_ack(cb),
         |cb,_res| unsafe { crate::async_trickery::channel_event_complete::<udi_bus_bind_cb_t>(cb, 0 /*res*/) }
         )
 });
 future_wrapper!(intr_attach_ack_op => <T as BusDevice>(cb: *mut crate::ffi::meta_intr::udi_intr_attach_cb_t, status: crate::ffi::udi_status_t) val @ {
-    val.intr_attach_ack(status)
+    val.intr_attach_ack(cb, status)
 });
 future_wrapper!(intr_detach_ack_op => <T as BusDevice>(cb: *mut crate::ffi::meta_intr::udi_intr_detach_cb_t) val @ {
-    val.intr_detach_ack()
+    val.intr_detach_ack(cb)
 });
 
 impl udi_bus_device_ops_t {
