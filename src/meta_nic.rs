@@ -36,10 +36,13 @@ pub enum OpsNum
     NsrRx,
 }
 
+pub type CbRefNic<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_cb_t>;
+pub type CbRefNicBind<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_bind_cb_t>;
+
 pub trait Control: 'static {
-    async_method!(fn bind_req(&mut self, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->udi_status_t as Future_bind_req);
-    async_method!(fn unbind_req(&mut self)->() as Future_unbind_req);
-    async_method!(fn enable_req(&mut self)->crate::Result<()> as Future_enable_req);
+    async_method!(fn bind_req(&'a mut self, cb: CbRefNicBind<'a>, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->udi_status_t as Future_bind_req);
+    async_method!(fn unbind_req(&'a mut self, cb: CbRefNic<'a>)->() as Future_unbind_req);
+    async_method!(fn enable_req(&'a mut self, cb: CbRefNic<'a>)->crate::Result<()> as Future_enable_req);
     async_method!(fn disable_req(&mut self)->() as Future_disable_req);
     async_method!(fn ctrl_req(&mut self)->() as Future_ctrl_req);
     async_method!(fn info_req(&mut self, reset_statistics: bool)->() as Future_info_req);
@@ -59,19 +62,19 @@ where
 future_wrapper!(nd_bind_req_op => <T as Control>(cb: *mut ffi::udi_nic_bind_cb_t, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)
     val @ {
         crate::async_trickery::with_ack(
-            val.bind_req(tx_chan_index, rx_chan_index),
+            val.bind_req(cb, tx_chan_index, rx_chan_index),
             |cb, res| unsafe { ffi::udi_nsr_bind_ack(cb, res) }
             )
         }
     );
 future_wrapper!(nd_unbind_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t)
     val @ {
-        val.unbind_req()
+        val.unbind_req(cb)
         }
     );
 future_wrapper!(nd_enable_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t) val @ {
     crate::async_trickery::with_ack(
-        val.enable_req(),
+        val.enable_req(cb),
         |cb, res| unsafe { ffi::udi_nsr_enable_ack(cb, crate::Error::to_status(res)) }
         )
 });

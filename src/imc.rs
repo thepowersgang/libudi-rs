@@ -2,6 +2,7 @@ use crate::ffi::imc::udi_channel_event_cb_t;
 
 /// Spawn a new channel
 pub fn channel_spawn(
+	cb: crate::CbRef<crate::ffi::udi_cb_t>,
     channel: crate::ffi::udi_channel_t,
     spawn_idx: crate::ffi::udi_index_t,
     ops_idx: crate::ffi::udi_index_t,
@@ -11,6 +12,7 @@ pub fn channel_spawn(
 		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }
 	}
 	crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
+        cb,
 		move |cb| unsafe {
             crate::ffi::imc::udi_channel_spawn(callback, cb as *const _ as *mut _, channel, spawn_idx, ops_idx, channel_context)
 			},

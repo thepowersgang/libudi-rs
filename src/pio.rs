@@ -15,7 +15,8 @@ impl ::core::default::Default for Handle {
 /// - `pio_attributes`: 
 /// - `pace_us`: Minimum duration between two IO accesses (microseconds)
 /// - `serialization_domain`: All accesses to the same device with the same domain will be serialised (won't be interleaved)
-pub fn map(
+pub fn map<Cb: crate::async_trickery::GetCb>(
+	cb: crate::CbRef<Cb>,
 	regset: u32,
 	offset: u32, length: u32,
 	trans_list: &'static [crate::ffi::pio::udi_pio_trans_t],
@@ -27,14 +28,18 @@ pub fn map(
 	extern "C" fn cb_pio_map(gcb: *mut crate::ffi::udi_cb_t, handle: crate::ffi::pio::udi_pio_handle_t) {
 		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }
 	}
-	crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
-		move |cb| unsafe {
+	// TODO: Is there a way to call the FFI function outside of the future?
+	// - When this is run, we're already in execution - so should be able to get the gcb
+	// - Currently, the `start` callback cpatures all arguments, so is quite large (40 bytes or so?)
+	crate::async_trickery::wait_task::<_, _,_,_>(
+		cb,
+		move |gcb| unsafe {
 			crate::ffi::pio::udi_pio_map(
-				cb_pio_map, cb as *const _ as *mut _,
+				cb_pio_map, gcb,
 				regset, offset, length, trans_list.as_ptr(), trans_list.len() as u16,
 				pio_attributes, pace_us, serialization_domain
 			)
-			},
+		},
 		|res| {
 			let crate::WaitRes::Pointer(p) = res else { panic!(""); };
 			Handle(p as *mut _)
@@ -56,6 +61,7 @@ impl<'a> MemPtr<'a> {
 /// - `buf` is a buffer usable by PIO transactions
 /// - `mem_ptr` Memory block used by `UDI_PIO_MEM` transactions
 pub fn trans<'a>(
+	cb: crate::CbRef<crate::ffi::udi_cb_t>,
 	pio_handle: &'a Handle,
 	start_label: crate::ffi::udi_index_t,
 	mut buf: Option<&'a mut crate::buf::Handle>,
@@ -66,6 +72,7 @@ pub fn trans<'a>(
 	}
 	let buf_ptr = match buf { Some(ref mut v) => v.to_raw(), None => ::core::ptr::null_mut() };
 	crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
+		cb,
 		move |cb| unsafe {
 			crate::ffi::pio::udi_pio_trans(
 				callback, cb as *const _ as *mut _,

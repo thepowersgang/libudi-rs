@@ -18,6 +18,8 @@ mod future_ext;
 #[macro_use]
 mod async_trickery;
 
+pub use cb::CbRef;
+
 pub mod ffi;
 
 pub mod buf;
@@ -54,6 +56,10 @@ impl Error {
 	}
 }
 
+#[cfg(false_)]
+pub fn get_gcb() -> impl ::core::future::Future<Output=&'static ffi::udi_cb_t> {
+	async_trickery::with_cb::<ffi::udi_cb_t,_,_>(|cb| unsafe { &*(cb as *const _) })
+}
 pub fn get_gcb_channel() -> impl ::core::future::Future<Output=ffi::udi_channel_t> {
 	async_trickery::with_cb::<ffi::udi_cb_t,_,_>(|cb| cb.channel)
 }

@@ -5,7 +5,8 @@ use crate::ffi::meta_bus::udi_bus_device_ops_t;
 use crate::ffi::meta_bus::udi_bus_bind_cb_t;
 
 pub trait BusDevice: 'static {
-    async_method!(fn bus_bind_ack(&mut self,
+    async_method!(fn bus_bind_ack(&'a mut self,
+        cb: crate::CbRef<'a, udi_bus_bind_cb_t>,
         dma_constraints: crate::ffi::physio::udi_dma_constraints_t,
         preferred_endianness: bool,
         status: crate::ffi::udi_status_t
@@ -44,7 +45,7 @@ future_wrapper!(bus_bind_ack_op => <T as BusDevice>(
     status: crate::ffi::udi_status_t
     ) val @ {
     crate::async_trickery::with_ack(
-        val.bus_bind_ack(dma_constraints, preferred_endianness != 0, status),
+        val.bus_bind_ack(cb, dma_constraints, preferred_endianness != 0, status),
         |cb,res| unsafe { crate::async_trickery::channel_event_complete::<udi_bus_bind_cb_t>(cb, crate::Error::to_status(res)) }
         )
 });

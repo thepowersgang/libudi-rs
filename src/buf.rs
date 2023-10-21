@@ -13,11 +13,16 @@ impl Handle
         self.0
     }
 
-    pub fn new<'d>(init_data: &'d [u8], path_handle: crate::ffi::buf::udi_buf_path_t) -> impl ::core::future::Future<Output=Self> + 'd {
+    pub fn new<'d, Cb: crate::async_trickery::GetCb>(
+        cb: crate::CbRef<Cb>,
+        init_data: &'d [u8],
+        path_handle: crate::ffi::buf::udi_buf_path_t
+    ) -> impl ::core::future::Future<Output=Self> + 'd {
         extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, handle: *mut udi_buf_t) {
             unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }
         }
-        crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
+        crate::async_trickery::wait_task::<_, _,_,_>(
+            cb,
             move |cb| unsafe {
                 crate::ffi::buf::UDI_BUF_ALLOC(callback, cb as *const _ as *mut _, init_data.as_ptr() as *const _, init_data.len(), path_handle)
                 },
@@ -28,12 +33,17 @@ impl Handle
                 }
             )
     }
-    pub fn write<'a>(&'a mut self, dst: ::core::ops::Range<usize>, data: &'a [u8]) -> impl ::core::future::Future<Output=()> + 'a {
+    pub fn write<'a>(&'a mut self,
+    	cb: crate::CbRef<crate::ffi::udi_cb_t>,
+        dst: ::core::ops::Range<usize>,
+        data: &'a [u8]
+    ) -> impl ::core::future::Future<Output=()> + 'a {
         extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, handle: *mut udi_buf_t) {
             unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }
         }
         let self_buf = self.0;
         crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
+            cb,
             move |cb| unsafe {
                 crate::ffi::buf::udi_buf_write(
                     callback, cb as *const _ as *mut _,

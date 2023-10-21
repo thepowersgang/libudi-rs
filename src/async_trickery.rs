@@ -95,15 +95,17 @@ unsafe fn run<Cb: GetCb>(cb: &Cb) {
 /// 
 /// `start` should call the function, passing a closure that runs [signal_waiter]
 /// `map_result` converts the wait result into the output type
-pub(crate) fn wait_task<Cb,F1,F2,U>(start: F1, map_result: F2) -> impl Future<Output=U>
+pub(crate) fn wait_task<Cb,F1,F2,U>(_cb: crate::CbRef<Cb>, start: F1, map_result: F2) -> impl Future<Output=U>
 where
-	Cb: GetCb + Unpin,
-	F1: FnOnce(&Cb) + Unpin,
+	Cb: GetCb,
+	F1: FnOnce(*mut udi_cb_t) + Unpin,
 	F2: FnOnce(WaitRes) -> U + Unpin,
 	U: Unpin,
 {
+	start(_cb.to_raw() as *mut udi_cb_t);
 	WaitTask::<Cb,F1,F2,U> {
-		f1: Some(start),
+		_f1_pd: PhantomData,
+		//f1: Some(start),
 		f2: Some(map_result),
 		_pd: PhantomData,
 	}
@@ -216,25 +218,27 @@ impl Task<(),udi_cb_t>
 
 struct WaitTask<Cb,F1,F2,U>
 {
-	f1: Option<F1>,
+	_f1_pd: PhantomData<F1>,
+	//f1: Option<F1>,
 	f2: Option<F2>,
-	_pd: PhantomData<(fn(&Cb), fn(WaitRes)->U)>,
+	_pd: PhantomData<(*const Cb, fn(*mut udi_cb_t), fn(WaitRes)->U)>,
 }
 impl<F1,F2,U,Cb> Future for WaitTask<Cb,F1,F2,U>
 where
 	Cb: GetCb + Unpin,
-	F1: FnOnce(&Cb) + Unpin,
+	F1: FnOnce(*mut udi_cb_t) + Unpin,
 	F2: FnOnce(WaitRes) -> U + Unpin,
 	U: Unpin,
 {
 	type Output = U;
 	fn poll(mut self: Pin<&mut Self>, cx: &mut ::core::task::Context<'_>) -> Poll<Self::Output> {
 		// get cb out of `cx`
-		let cb = cb_from_waker(cx.waker());
-		if let Some(fcn) = self.f1.take() {
+		let cb: &udi_cb_t = cb_from_waker(cx.waker());
+		/*if let Some(fcn) = self.f1.take() {
 			// Register "wakeup"
-			(fcn)(cb);
+			(fcn)(cb as *const _ as *mut _);
 		}
+		*/
 		if let Some(res) = get_result( (*cb).get_gcb()) {
 			let fcn = self.f2.take().expect("Completed future polled again");
 			Poll::Ready(fcn(res))
@@ -315,7 +319,7 @@ static VTABLE_CB_T: ::core::task::RawWakerVTable = ::core::task::RawWakerVTable:
 	);
 
 /// SAFETY: `get_gcb` must return the first field of the struct
-pub(crate) unsafe trait GetCb: ::core::any::Any
+pub(crate) unsafe trait GetCb: ::core::any::Any + Unpin
 {
 	fn get_gcb(&self) -> &udi_cb_t;
 }
@@ -372,26 +376,32 @@ macro_rules! async_method {
         #[allow(non_camel_case_types)]
         type $future_name<'s>: ::core::future::Future<Output=$ret_ty>;
         fn $fcn_name(&mut self$(, $a_n: $a_ty)*) -> Self::$future_name<'_>;
-    }
+    };
+    (fn $fcn_name:ident(&$lft:lifetime mut self$(, $a_n:ident: $a_ty:ty)*) -> $ret_ty:ty as $future_name:ident) => {
+        #[allow(non_camel_case_types)]
+        type $future_name<'s>: ::core::future::Future<Output=$ret_ty>;
+        fn $fcn_name<$lft>(&$lft mut self$(, $a_n: $a_ty)*) -> Self::$future_name<$lft>;
+    };
 }
 /// Define a FFI wrapper 
 macro_rules! future_wrapper {
-    ($name:ident => <$t:ident as $trait:path>::$method:ident(cb: *mut $cb_ty:ty $(, $a_n:ident: $a_ty:ty)*) ) => {
-        future_wrapper!($name => <$t:ty as $trait>::$method(cb: *mut $cb_ty, $(, $a_n: $a_ty)*))
+    ($name:ident => <$t:ident as $trait:path>::$method:ident($cb:ident: *mut $cb_ty:ty $(, $a_n:ident: $a_ty:ty)*) ) => {
+        future_wrapper!($name => <$t:ty as $trait>::$method($cb: *mut $cb_ty, $(, $a_n: $a_ty)*))
     };
-    ($name:ident => <$t:ident as $trait:path>(cb: *mut $cb_ty:ty $(, $a_n:ident: $a_ty:ty)*) $val:ident @ $b:block ) => {
-        unsafe extern "C" fn $name<T: $trait>(cb: *mut $cb_ty$(, $a_n: $a_ty)*)
+    ($name:ident => <$t:ident as $trait:path>($cb:ident: *mut $cb_ty:ty $(, $a_n:ident: $a_ty:ty)*) $val:ident @ $b:block ) => {
+        unsafe extern "C" fn $name<T: $trait>($cb: *mut $cb_ty$(, $a_n: $a_ty)*)
         {
             let job = {
-				let $val = crate::async_trickery::get_rdata_t::<T,_>(&*cb);
+				let $val = crate::async_trickery::get_rdata_t::<T,_>(&*$cb);
+				let $cb = unsafe { crate::CbRef::new($cb) };
                 $b
                 };
-            crate::async_trickery::init_task(&*cb, job);
+            crate::async_trickery::init_task(&*$cb, job);
         }
         mod $name {
             use super::*;
             pub const fn task_size<$t: $trait>() -> usize {
-                crate::async_trickery::task_size_from_closure(|$val: &mut $t, ($($a_n,)*): ($($a_ty,)*)| $b)
+                crate::async_trickery::task_size_from_closure(|$val: &mut $t, ($cb, $($a_n,)*): (crate::CbRef<$cb_ty>, $($a_ty,)*)| $b)
             }
         }
     };
