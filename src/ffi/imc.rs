@@ -27,23 +27,23 @@ unsafe impl crate::async_trickery::GetCb for udi_channel_event_cb_t {
 #[repr(C)]
 pub union udi_channel_event_cb_t_params
 {
-    internal_bound: udi_channel_event_cb_t_params_internal_bound,
-    parent_bound: udi_channel_event_cb_t_params_parent_bound,
-    orig_cb: *mut super::udi_cb_t,
+    pub internal_bound: udi_channel_event_cb_t_params_internal_bound,
+    pub parent_bound: udi_channel_event_cb_t_params_parent_bound,
+    pub orig_cb: *mut super::udi_cb_t,
 }
 #[repr(C)]
 #[derive(Copy,Clone)]
 pub struct udi_channel_event_cb_t_params_internal_bound
 {
-    bind_cb: *mut super::udi_cb_t,
+    pub bind_cb: *mut super::udi_cb_t,
 }
 #[repr(C)]
 #[derive(Copy,Clone)]
 pub struct udi_channel_event_cb_t_params_parent_bound
 {
-    bind_cb: *mut super::udi_cb_t,
-    parent_id: u8,
-    //path_handles: *const udi_buf_path_t,
+    pub bind_cb: *mut super::udi_cb_t,
+    pub parent_id: u8,
+    pub path_handles: *const super::buf::udi_buf_path_t,
 }
 #[repr(u8)]
 pub enum ChannelEvent {
