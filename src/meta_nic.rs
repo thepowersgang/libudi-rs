@@ -24,6 +24,18 @@ unsafe impl crate::async_trickery::GetCb for ffi::udi_nic_info_cb_t {
         &self.gcb
     }
 }
+// SAFE: Follows the contract, gcb is first field
+unsafe impl crate::async_trickery::GetCb for ffi::udi_nic_tx_cb_t {
+    fn get_gcb(&self) -> &crate::ffi::udi_cb_t {
+        &self.gcb
+    }
+}
+// SAFE: Follows the contract, gcb is first field
+unsafe impl crate::async_trickery::GetCb for ffi::udi_nic_rx_cb_t {
+    fn get_gcb(&self) -> &crate::ffi::udi_cb_t {
+        &self.gcb
+    }
+}
 
 #[repr(u8)]
 pub enum OpsNum
@@ -38,9 +50,10 @@ pub enum OpsNum
 
 pub type CbRefNic<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_cb_t>;
 pub type CbRefNicBind<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_bind_cb_t>;
+pub type CbRefNicTx<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_tx_cb_t>;
 
 pub trait Control: 'static {
-    async_method!(fn bind_req(&'a mut self, cb: CbRefNicBind<'a>, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->udi_status_t as Future_bind_req);
+    async_method!(fn bind_req(&'a mut self, cb: CbRefNicBind<'a>, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->crate::Result<NicInfo> as Future_bind_req);
     async_method!(fn unbind_req(&'a mut self, cb: CbRefNic<'a>)->() as Future_unbind_req);
     async_method!(fn enable_req(&'a mut self, cb: CbRefNic<'a>)->crate::Result<()> as Future_enable_req);
     async_method!(fn disable_req(&mut self)->() as Future_disable_req);
@@ -55,7 +68,6 @@ where
     fn channel_closed(&mut self) {
     }
     fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
-        //crate::ffi::meta_bus::udi_bus_bind_req(params.parent_bound.bind_cb);
     }
 }
 
@@ -63,7 +75,25 @@ future_wrapper!(nd_bind_req_op => <T as Control>(cb: *mut ffi::udi_nic_bind_cb_t
     val @ {
         crate::async_trickery::with_ack(
             val.bind_req(cb, tx_chan_index, rx_chan_index),
-            |cb, res| unsafe { ffi::udi_nsr_bind_ack(cb, res) }
+            |cb: *mut ffi::udi_nic_bind_cb_t, res| unsafe {
+                let status = match res {
+                    Ok(v) => {
+                        let cb = &mut *cb;
+                        cb.media_type = v.media_type as _;
+                        cb.min_pdu_size = v.min_pdu_size;
+                        cb.max_pdu_size = v.max_pdu_size;
+                        cb.rx_hw_threshold = v.rx_hw_threshold;
+                        cb.capabilities = v.capabilities;
+                        cb.max_perfect_multicast = v.max_perfect_multicast;
+                        cb.max_total_multicast = v.max_total_multicast;
+                        cb.mac_addr_len = v.mac_addr_len;
+                        cb.mac_addr = v.mac_addr;
+                        0
+                        },
+                    Err(s) => s.into_inner(),
+                    };
+                ffi::udi_nsr_bind_ack(cb, status)
+                }
             )
         }
     );
@@ -116,6 +146,65 @@ impl ffi::udi_nd_ctrl_ops_t
 unsafe impl crate::Ops for ffi::udi_nd_ctrl_ops_t
 {
     const OPS_NUM: crate::ffi::udi_index_t = OpsNum::NdCtrl as _;
+}
+
+
+
+pub trait NdTx: 'static {
+    async_method!(fn tx_req(&'a mut self, cb: CbRefNicTx<'a>)->() as Future_tx_req);
+    async_method!(fn exp_tx_req(&'a mut self, cb: CbRefNicTx<'a>)->() as Future_exp_tx_req);
+}
+struct MarkerNdTx;
+impl<T> crate::imc::ChannelHandler<MarkerNdTx> for T
+where
+    T: NdTx
+{
+    fn channel_closed(&mut self) {
+    }
+    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
+    }
+}
+
+future_wrapper!(nd_tx_req_op => <T as NdTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
+    val.tx_req(cb)
+});
+future_wrapper!(nd_exp_tx_req_op => <T as NdTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
+    val.exp_tx_req(cb)
+});
+impl ffi::udi_nd_tx_ops_t
+{
+    pub const fn scratch_requirement<T: NdTx>() -> usize {
+        let v = crate::imc::task_size::<T, MarkerNdTx>();
+        let v = crate::const_max(v, nd_tx_req_op::task_size::<T>());
+        let v = crate::const_max(v, nd_exp_tx_req_op::task_size::<T>());
+        v
+    }
+    /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
+    /// SAFETY: The scratch size must be >= value returned by [scratch_requirement]
+    pub const unsafe fn for_driver<T: NdTx>() -> Self {
+        Self {
+            channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerNdTx>,
+            nd_tx_req_op: nd_tx_req_op::<T>,
+            nd_exp_tx_req_op: nd_exp_tx_req_op::<T>,
+        }
+    }
+}
+unsafe impl crate::Ops for ffi::udi_nd_tx_ops_t
+{
+    const OPS_NUM: crate::ffi::udi_index_t = OpsNum::NdTx as _;
+}
+
+/// Result type from a bind
+pub struct NicInfo {
+    pub media_type: ffi::MediaType,
+    pub min_pdu_size: u32,
+    pub max_pdu_size: u32,
+    pub rx_hw_threshold: u32,
+    pub capabilities: u32,
+    pub max_perfect_multicast: u8,
+    pub max_total_multicast: u8,
+    pub mac_addr_len: u8,
+    pub mac_addr: [u8; ffi::UDI_NIC_MAC_ADDRESS_SIZE],
 }
 
 #[allow(non_camel_case_types)]

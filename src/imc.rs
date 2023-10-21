@@ -3,6 +3,27 @@ use crate::ffi::imc::udi_channel_event_cb_t;
 /// Spawn a new channel
 pub fn channel_spawn(
 	cb: crate::CbRef<crate::ffi::udi_cb_t>,
+    spawn_idx: crate::ffi::udi_index_t,
+    ops_idx: crate::ffi::udi_index_t,
+) -> impl ::core::future::Future<Output=crate::ffi::udi_channel_t> {
+	extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, handle: crate::ffi::udi_channel_t) {
+		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }
+	}
+	crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
+        cb,
+		move |cb| unsafe {
+            crate::ffi::imc::udi_channel_spawn(callback, cb as *const _ as *mut _, (*cb).channel, spawn_idx, ops_idx, (*cb).context)
+			},
+		|res| {
+			let crate::WaitRes::Pointer(p) = res else { panic!(""); };
+			p as *mut _
+			}
+		)
+}
+
+/// Spawn a new channel (with custom channel and context values)
+pub fn channel_spawn_ex(
+	cb: crate::CbRef<crate::ffi::udi_cb_t>,
     channel: crate::ffi::udi_channel_t,
     spawn_idx: crate::ffi::udi_index_t,
     ops_idx: crate::ffi::udi_index_t,

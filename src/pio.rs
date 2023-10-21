@@ -15,8 +15,8 @@ impl ::core::default::Default for Handle {
 /// - `pio_attributes`: 
 /// - `pace_us`: Minimum duration between two IO accesses (microseconds)
 /// - `serialization_domain`: All accesses to the same device with the same domain will be serialised (won't be interleaved)
-pub fn map<Cb: crate::async_trickery::GetCb>(
-	cb: crate::CbRef<Cb>,
+pub fn map(
+	cb: crate::CbRef<crate::ffi::udi_cb_t>,
 	regset: u32,
 	offset: u32, length: u32,
 	trans_list: &'static [crate::ffi::pio::udi_pio_trans_t],

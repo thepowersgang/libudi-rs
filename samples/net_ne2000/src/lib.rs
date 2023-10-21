@@ -41,7 +41,7 @@ impl ::udi::meta_bus::BusDevice for Driver
 			self.pio_handles.irq_ack = pio_map(&pio_ops::IRQACK).await;
 
 			// Spawn channel
-			self.intr_channel = ::udi::imc::channel_spawn(cb.gcb(), ::udi::get_gcb_channel().await, /*interrupt number*/0, OpsList::Irq as _, ::udi::get_gcb_context().await).await;
+			self.intr_channel = ::udi::imc::channel_spawn(cb.gcb(), /*interrupt number*/0, OpsList::Irq as _).await;
 			let mut intr_cb = ::udi::cb::alloc::<Cbs::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
 			intr_cb.interrupt_index = 0;
 			intr_cb.min_event_pend = 2;
@@ -106,9 +106,14 @@ impl ::udi::meta_intr::IntrHandler for DriverIrq
 
 impl ::udi::meta_nic::Control for DriverNicCtrl
 {
-	type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::ffi::udi_status_t> + 's;
+	type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::Result<::udi::meta_nic::NicInfo>> + 's;
     fn bind_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicBind<'a>, tx_chan_index: udi::ffi::udi_index_t, rx_chan_index: udi::ffi::udi_index_t) -> Self::Future_bind_req<'a> {
-        async move { todo!() }
+        async move {
+			//let tx_channel = ::udi::imc::channel_spawn(cb.gcb(), tx_chan_index, OpsList::Tx).await;
+			//let rx_channel = ::udi::imc::channel_spawn(cb.gcb(), rx_chan_index, OpsList::Rx).await;
+			// Fill in the CB with the device info
+			todo!()
+		}
     }
 
 	type Future_unbind_req<'s> = impl ::core::future::Future<Output=()> + 's;
@@ -138,7 +143,20 @@ impl ::udi::meta_nic::Control for DriverNicCtrl
     fn info_req(&mut self, _reset_statistics: bool) -> Self::Future_info_req<'_> {
         async move { todo!() }
     }
-	
+}
+impl ::udi::meta_nic::NdTx for DriverNicCtrl
+{
+    #[allow(non_camel_case_types)]
+	type Future_tx_req<'s> = impl ::core::future::Future<Output=()> + 's;
+    fn tx_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicTx<'a>) -> Self::Future_tx_req<'a> {
+        async move { todo!() }
+    }
+
+    #[allow(non_camel_case_types)]
+	type Future_exp_tx_req<'s> = Self::Future_tx_req<'s>;
+    fn exp_tx_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicTx<'a>) -> Self::Future_exp_tx_req<'a> {
+        self.tx_req(cb)
+    }
 }
 
 mod regs {
@@ -199,6 +217,8 @@ mod udiprops {
 		// TODO: How to enforce the right mapping to metalangs?
 		Dev : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bus::udi_bus_device_ops_t,
 		Ctrl: Meta=udiprops::meta::udi_nic   , ::udi::meta_nic::ffi::udi_nd_ctrl_ops_t : DriverNicCtrl,
+		Tx  : Meta=udiprops::meta::udi_nic   , ::udi::meta_nic::ffi::udi_nd_tx_ops_t : DriverNicCtrl,
+		//Rx  : Meta=udiprops::meta::udi_nic   , ::udi::meta_nic::ffi::udi_nd_rx_ops_t : DriverNicCtrl,
 		Irq : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_intr::udi_intr_handler_ops_t : DriverIrq,
 		},
 	cbs: {

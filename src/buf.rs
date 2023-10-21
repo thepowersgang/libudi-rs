@@ -13,8 +13,8 @@ impl Handle
         self.0
     }
 
-    pub fn new<'d, Cb: crate::async_trickery::GetCb>(
-        cb: crate::CbRef<Cb>,
+    pub fn new<'d>(
+    	cb: crate::CbRef<crate::ffi::udi_cb_t>,
         init_data: &'d [u8],
         path_handle: crate::ffi::buf::udi_buf_path_t
     ) -> impl ::core::future::Future<Output=Self> + 'd {

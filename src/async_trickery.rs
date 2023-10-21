@@ -319,7 +319,7 @@ static VTABLE_CB_T: ::core::task::RawWakerVTable = ::core::task::RawWakerVTable:
 	);
 
 /// SAFETY: `get_gcb` must return the first field of the struct
-pub(crate) unsafe trait GetCb: ::core::any::Any + Unpin
+pub unsafe trait GetCb: ::core::any::Any + Unpin
 {
 	fn get_gcb(&self) -> &udi_cb_t;
 }
