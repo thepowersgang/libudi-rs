@@ -10,6 +10,7 @@ struct Driver
 	channel_rx: ::udi::ffi::udi_channel_t,
 	rx_cb_queue: ::udi::meta_nic::ReadCbQueue,
 	mac_addr: [u8; 6],
+	rx_next_page: u8,
 }
 #[derive(Default)]
 struct PioHandles {
@@ -34,6 +35,7 @@ impl ::udi::init::Driver for Driver
 				channel_rx: ::core::ptr::null_mut(),
 				rx_cb_queue: Default::default(),
 				mac_addr: [0; 6],
+				rx_next_page: mem::RX_FIRST_PG,
 			}
 		}
     }
@@ -162,7 +164,10 @@ impl ::udi::meta_intr::IntrHandler for DriverIrq
 					// Ensure that it's big enough for an entire packet
 					buf.ensure_size(cb.gcb(), 1520).await;
 					// Pull the packet off the device
-					match ::udi::pio::trans(cb.gcb(), &self.0.pio_handles.rx, 0, Some(&mut buf), None).await
+					match ::udi::pio::trans(
+						cb.gcb(), &self.0.pio_handles.rx, 0, 
+						Some(&mut buf), Some(unsafe { ::udi::pio::MemPtr::new(::core::slice::from_mut(&mut self.0.rx_next_page)) })
+					).await
 					{
 					Ok(res) => {
 						// If that succeeded, then set the size and hand to the NSR
@@ -245,7 +250,7 @@ impl ::udi::meta_nic::Control for DriverNicCtrl
 	type Future_disable_req<'s> = impl ::core::future::Future<Output=()> + 's;
     fn disable_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_disable_req<'a> {
         async move {
-			//::udi::pio::trans(cb.gcb(), &self.0.pio_handles.enable, 0, None, None).await?;
+			//::udi::pio::trans(cb.gcb(), &self.0.pio_handles.disable, 0, None, None).await?;
 			//Ok( () )
 			todo!("disable_req");
 		}
@@ -276,9 +281,9 @@ impl ::udi::meta_nic::NdTx for DriverNicCtrl
 impl ::udi::meta_nic::NdRx for DriverNicCtrl
 {
 	type Future_rx_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn rx_rdy<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicRx<'a>) -> Self::Future_rx_rdy<'a> {
+    fn rx_rdy<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_rx_rdy<'a> {
         async move {
-			//self.0.rx_cb_queue.push(cb);
+			self.0.rx_cb_queue.push(cb);
 		}
     }
 }

@@ -31,6 +31,7 @@ def_cb!(unsafe CbRefNicInfo => ffi::udi_nic_info_cb_t : 5);
 def_cb!(unsafe CbRefNicTx => ffi::udi_nic_tx_cb_t : 6);
 // SAFE: Follows the contract, gcb is first field
 def_cb!(unsafe CbRefNicRx => ffi::udi_nic_rx_cb_t : 7);
+pub type CbHandleNicRx = crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>;
 
 /// A queue of RX CBs
 pub struct ReadCbQueue
@@ -238,7 +239,7 @@ unsafe impl crate::Ops for ffi::udi_nd_tx_ops_t {
 }
 
 pub trait NdRx: 'static {
-    async_method!(fn rx_rdy(&'a mut self, cb: CbRefNicRx<'a>)->() as Future_rx_rdy);
+    async_method!(fn rx_rdy(&'a mut self, cb: CbHandleNicRx)->() as Future_rx_rdy);
 }
 struct MarkerNdRx;
 impl<T> crate::imc::ChannelHandler<MarkerNdRx> for T
@@ -251,7 +252,7 @@ where
     }
 }
 future_wrapper!(nd_rx_rdy_op => <T as NdRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
-    val.rx_rdy(cb)
+    val.rx_rdy(unsafe { cb.into_owned() })
 });
 impl ffi::udi_nd_rx_ops_t
 {
