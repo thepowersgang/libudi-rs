@@ -3,6 +3,7 @@
 
 pub mod cb;
 pub mod buf;
+pub mod attr;
 pub mod meta_mgmt;
 pub mod log;
 pub mod imc;

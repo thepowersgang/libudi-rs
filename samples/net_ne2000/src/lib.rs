@@ -18,15 +18,51 @@ struct PioHandles {
 
 impl ::udi::init::Driver for Driver
 {
-    type Future_init<'s> = impl ::core::future::Future<Output=Driver> + 's;
+	const MAX_ATTRS: u8 = 4;
 
-    fn init(_cb: ::udi::CbRef<'_, ::udi::ffi::meta_mgmt::udi_usage_cb_t>, _resouce_level: u8) -> Self::Future_init<'_> {
+    type Future_init<'s> = impl ::core::future::Future<Output=Driver> + 's;
+    fn usage_ind(_cb: ::udi::meta_mgmt::CbRefUsage<'_>, _resouce_level: u8) -> Self::Future_init<'_> {
         async move {
 			Driver {
 				pio_handles: Default::default(),
 				intr_channel: ::core::ptr::null_mut(),
 				mac_addr: [0; 6],
 			}
+		}
+    }
+
+    type Future_enumerate<'s> = impl ::core::future::Future<Output=(::udi::init::EnumerateResult,::udi::init::AttrSink<'s>)> + 's;
+    fn enumerate_req<'s>(
+		&'s mut self,
+		_cb: ::udi::init::CbRefEnumerate<'s>,
+		level: ::udi::init::EnumerateLevel,
+		mut attrs_out: ::udi::init::AttrSink<'s>
+	) -> Self::Future_enumerate<'s> {
+        async move {
+			match level
+			{
+			::udi::init::EnumerateLevel::Start
+			|::udi::init::EnumerateLevel::StartRescan => {
+				attrs_out.push_u32("if_num", 0);
+				attrs_out.push_string("if_media", "eth");
+				attrs_out.push_string_fmt("identifier", format_args!("{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
+					self.mac_addr[0], self.mac_addr[1], self.mac_addr[2],
+					self.mac_addr[3], self.mac_addr[4], self.mac_addr[5],
+					));
+				(::udi::init::EnumerateResult::Ok(OpsList::Ctrl as _), attrs_out)
+				},
+			udi::init::EnumerateLevel::Next => (::udi::init::EnumerateResult::Done, attrs_out),
+			udi::init::EnumerateLevel::New => todo!(),
+			udi::init::EnumerateLevel::Directed => todo!(),
+			udi::init::EnumerateLevel::Release => todo!(),
+			}
+		}
+    }
+
+    type Future_devmgmt<'s> = impl ::core::future::Future<Output=::udi::Result<u8>> + 's;
+    fn devmgmt_req<'s>(&'s mut self, cb: ::udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, parent_id: ::udi::ffi::udi_index_t) -> Self::Future_devmgmt<'s> {
+        async move {
+			todo!()
 		}
     }
 }
@@ -156,6 +192,13 @@ impl ::udi::meta_nic::NdTx for DriverNicCtrl
         self.tx_req(cb)
     }
 }
+impl ::udi::meta_nic::NdRx for DriverNicCtrl
+{
+	type Future_rx_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
+    fn rx_rdy<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicRx<'a>) -> Self::Future_rx_rdy<'a> {
+        async move { todo!() }
+    }
+}
 
 mod regs {
 	// -- Registers present in all pages
@@ -216,7 +259,7 @@ mod udiprops {
 		Dev : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bus::udi_bus_device_ops_t,
 		Ctrl: Meta=udiprops::meta::udi_nic   , ::udi::meta_nic::ffi::udi_nd_ctrl_ops_t : DriverNicCtrl,
 		Tx  : Meta=udiprops::meta::udi_nic   , ::udi::meta_nic::ffi::udi_nd_tx_ops_t : DriverNicCtrl,
-		//Rx  : Meta=udiprops::meta::udi_nic   , ::udi::meta_nic::ffi::udi_nd_rx_ops_t : DriverNicCtrl,
+		Rx  : Meta=udiprops::meta::udi_nic   , ::udi::meta_nic::ffi::udi_nd_rx_ops_t : DriverNicCtrl,
 		Irq : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_intr::udi_intr_handler_ops_t : DriverIrq,
 		},
 	cbs: {

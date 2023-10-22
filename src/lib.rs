@@ -158,7 +158,7 @@ macro_rules! define_driver
 					mgmt_scratch_requirement: _STATE_SIZE,
 					rdata_size: ::core::mem::size_of::<$crate::init::RData<Driver>>(),
 					child_data_size: 0,
-					enumeration_attr_list_length: 0,
+					enumeration_attr_list_length: <$driver as $crate::init::Driver>::MAX_ATTRS,
 					per_parent_paths: 0,
 				}),
 			secondary_init_list: ::core::ptr::null(),

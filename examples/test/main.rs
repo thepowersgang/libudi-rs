@@ -11,6 +11,22 @@ extern "C" fn udi_usage_res(cb: *mut ::udi::ffi::meta_mgmt::udi_usage_cb_t) {
 	InnerCtxt::from_cb(unsafe { &(&mut (*cb).gcb as *mut _) }).set_complete();
 }
 #[no_mangle]
+extern "C" fn udi_enumerate_ack(cb: *mut ::udi::ffi::meta_mgmt::udi_enumerate_cb_t, _enumeration_result: ::udi::ffi::udi_ubit8_t, _ops_idx: ::udi::ffi::udi_index_t) {
+	println!("udi_enumrate_ack()");
+	InnerCtxt::from_cb(unsafe { &(&mut (*cb).gcb as *mut _) }).set_complete();
+}
+#[no_mangle]
+extern "C" fn udi_devmgmt_ack(cb: *mut ::udi::ffi::meta_mgmt::udi_mgmt_cb_t, _flags: ::udi::ffi::udi_ubit8_t, _status: ::udi::ffi::udi_status_t) {
+	println!("udi_devmgmt_ack()");
+	InnerCtxt::from_cb(unsafe { &(&mut (*cb).gcb as *mut _) }).set_complete();
+}
+#[no_mangle]
+extern "C" fn udi_final_cleanup_ack(cb: *mut ::udi::ffi::meta_mgmt::udi_mgmt_cb_t) {
+	println!("udi_final_cleanup_ack()");
+	InnerCtxt::from_cb(unsafe { &(&mut (*cb).gcb as *mut _) }).set_complete();
+}
+
+#[no_mangle]
 extern "C" fn udi_pio_map(
 	callback: extern "C" fn (*mut ::udi::ffi::udi_cb_t, *mut ()),
 	gcb: *mut ::udi::ffi::udi_cb_t,

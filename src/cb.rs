@@ -21,6 +21,13 @@ impl<'a, T: 'static> CbRef<'a, T> {
         CbRef(self.0 as *mut _, ::core::marker::PhantomData)
     }
 }
+impl<'a, T: 'static> ::core::ops::Deref for CbRef<'a,T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        // SAFE: Pointer is valid... and it shouldn't change while this handle is open?
+        unsafe { &*self.0 }
+    }
+}
 
 /// An owning handle to a CB
 pub struct CbHandle<T>(*mut T);

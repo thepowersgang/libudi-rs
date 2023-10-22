@@ -53,6 +53,7 @@ pub type CbRefNicBind<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_bind_
 pub type CbRefNicCtrl<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_ctrl_cb_t>;
 pub type CbRefNicInfo<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_info_cb_t>;
 pub type CbRefNicTx<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_tx_cb_t>;
+pub type CbRefNicRx<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_rx_cb_t>;
 
 pub trait Control: 'static {
     async_method!(fn bind_req(&'a mut self, cb: CbRefNicBind<'a>, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->crate::Result<NicInfo> as Future_bind_req);
@@ -190,9 +191,44 @@ impl ffi::udi_nd_tx_ops_t
         }
     }
 }
-unsafe impl crate::Ops for ffi::udi_nd_tx_ops_t
-{
+unsafe impl crate::Ops for ffi::udi_nd_tx_ops_t {
     const OPS_NUM: crate::ffi::udi_index_t = OpsNum::NdTx as _;
+}
+
+pub trait NdRx: 'static {
+    async_method!(fn rx_rdy(&'a mut self, cb: CbRefNicRx<'a>)->() as Future_rx_rdy);
+}
+struct MarkerNdRx;
+impl<T> crate::imc::ChannelHandler<MarkerNdRx> for T
+where
+    T: NdRx
+{
+    fn channel_closed(&mut self) {
+    }
+    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
+    }
+}
+future_wrapper!(nd_rx_rdy_op => <T as NdRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
+    val.rx_rdy(cb)
+});
+impl ffi::udi_nd_rx_ops_t
+{
+    pub const fn scratch_requirement<T: NdRx>() -> usize {
+        let v = crate::imc::task_size::<T, MarkerNdRx>();
+        let v = crate::const_max(v, nd_rx_rdy_op::task_size::<T>());
+        v
+    }
+    /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
+    /// SAFETY: The scratch size must be >= value returned by [scratch_requirement]
+    pub const unsafe fn for_driver<T: NdRx>() -> Self {
+        Self {
+            channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerNdRx>,
+            nd_rx_rdy_op: nd_rx_rdy_op::<T>,
+        }
+    }
+}
+unsafe impl crate::Ops for ffi::udi_nd_rx_ops_t {
+    const OPS_NUM: crate::ffi::udi_index_t = OpsNum::NdRx as _;
 }
 
 /// Result type from a bind
