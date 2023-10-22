@@ -39,7 +39,7 @@ impl ::udi::init::Driver for Driver
     }
 
     type Future_devmgmt<'s> = impl ::core::future::Future<Output=::udi::Result<u8>> + 's;
-    fn devmgmt_req<'s>(&'s mut self, cb: ::udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, parent_id: ::udi::ffi::udi_index_t) -> Self::Future_devmgmt<'s> {
+    fn devmgmt_req<'s>(&'s mut self, _cb: ::udi::init::CbRefMgmt<'s>, _mgmt_op: udi::init::MgmtOp, _parent_id: ::udi::ffi::udi_index_t) -> Self::Future_devmgmt<'s> {
         async move {
 			todo!()
 		}
