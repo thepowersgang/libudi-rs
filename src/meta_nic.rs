@@ -4,8 +4,8 @@ use crate::ffi::udi_index_t;
 pub fn nsr_rx_ind(rx_cb: crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>) {
     unsafe { ffi::udi_nsr_rx_ind(rx_cb.into_raw()) }
 }
-pub fn nsr_tx_rdy(rx_cb: crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>) {
-    unsafe { ffi::udi_nsr_tx_rdy(rx_cb.into_raw()) }
+pub fn nsr_tx_rdy(cb: crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>) {
+    unsafe { ffi::udi_nsr_tx_rdy(cb.into_raw()) }
 }
 
 macro_rules! def_cb {

@@ -305,6 +305,7 @@ impl ::udi::meta_nic::NdTx for DriverNicCtrl
 					cb.chain = ::core::ptr::null_mut();
 					Some( unsafe { ::udi::meta_nic::CbHandleNicTx::from_raw(n) } )
 				};
+				::udi::meta_nic::nsr_tx_rdy(cb);
 				if let Some(next) = next {
 					cb = next;
 				}
