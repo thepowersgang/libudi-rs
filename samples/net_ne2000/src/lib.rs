@@ -6,6 +6,8 @@ struct Driver
 {
 	pio_handles: PioHandles,
 	intr_channel: ::udi::ffi::udi_channel_t,
+	channel_tx: ::udi::ffi::udi_channel_t,
+	channel_rx: ::udi::ffi::udi_channel_t,
 	mac_addr: [u8; 6],
 }
 #[derive(Default)]
@@ -26,6 +28,8 @@ impl ::udi::init::Driver for Driver
 			Driver {
 				pio_handles: Default::default(),
 				intr_channel: ::core::ptr::null_mut(),
+				channel_tx: ::core::ptr::null_mut(),
+				channel_rx: ::core::ptr::null_mut(),
 				mac_addr: [0; 6],
 			}
 		}
@@ -62,7 +66,16 @@ impl ::udi::init::Driver for Driver
     type Future_devmgmt<'s> = impl ::core::future::Future<Output=::udi::Result<u8>> + 's;
     fn devmgmt_req<'s>(&'s mut self, cb: ::udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, parent_id: ::udi::ffi::udi_index_t) -> Self::Future_devmgmt<'s> {
         async move {
-			todo!()
+			use ::udi::init::MgmtOp;
+			match mgmt_op
+			{
+			MgmtOp::PrepareToSuspend => todo!(),
+			MgmtOp::Suspend => todo!(),
+			MgmtOp::Shutdown => todo!(),
+			MgmtOp::ParentSuspend => todo!(),
+			MgmtOp::Resume => todo!(),
+			MgmtOp::Unbind => todo!(),
+			}
 		}
     }
 }
@@ -87,10 +100,11 @@ impl ::udi::meta_bus::BusDevice for Driver
 			let mut intr_cb = ::udi::cb::alloc::<Cbs::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
 			intr_cb.interrupt_index = 0;
 			intr_cb.min_event_pend = 2;
-			intr_cb.preprocessing_handle = self.pio_handles.irq_ack.as_raw();
+			intr_cb.preprocessing_handle = self.pio_handles.irq_ack.as_raw();	// NOTE: This transfers ownership
 			::udi::meta_intr::attach_req(intr_cb);
 			// TODO: Does this need to wait until the attach ACKs?
 			// - Probably should, just in case the operation fails
+			//::udi::Error::from_status(self.intr_attach_res.wait().await)?;
 
 			for _ in 0 .. 4/*NE2K_NUM_INTR_EVENT_CBS*/ {
 				let intr_event_cb = ::udi::cb::alloc::<Cbs::IntrEvent>(cb.gcb(), ::udi::get_gcb_channel().await).await;
@@ -115,17 +129,19 @@ impl ::udi::meta_bus::BusDevice for Driver
     type Future_intr_attach_ack<'s> = impl ::core::future::Future<Output=()> + 's;
     fn intr_attach_ack<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefIntrAttach<'a>, status: udi::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'a> {
         async move {
+			let _ = cb;
 			if status != 0 {
-				// TODO: Free the CB?
+				// TODO: Free the CB and channel?
 			}
-			//self.intr_attach_cb = ::udi::get_gcb();
+			// Flag to the "caller" that this is complete, and what the result was
+			//self.intr_attach_res.set(status);
 		}
     }
 
     type Future_intr_detach_ack<'s> = impl ::core::future::Future<Output=()> + 's;
     fn intr_detach_ack<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_ack<'a> {
         async move {
-			todo!()
+			let _ = cb;
 		}
     }
 }
@@ -134,8 +150,52 @@ impl ::udi::meta_intr::IntrHandler for DriverIrq
     type Future_intr_event_ind<'s> = impl ::core::future::Future<Output=()>+'s;
     fn intr_event_ind<'a>(&'a mut self, cb: ::udi::meta_intr::CbRefEvent<'a>, _flags: u8) -> Self::Future_intr_event_ind<'a> {
 		async move {
-			// TODO: Get the interrupt result from the cb
-			todo!()
+			#[cfg(false_)]
+			if cb.intr_result & 0x01 != 0 {
+				// RX complete
+				// - Pop a RX CB off the list
+				if let Some(cb) = self.0.rx_cb_queue.pop() {
+					let buf = ::udi::buf::Handle::from_raw(cb.rx_buf);
+					// Ensure that it's big enough for an entire packet
+					buf.ensure_size(1520).await;
+					// Pull the packet off the device
+					match ::udi::pio::trans(cb.gcb(), &self.0.pio_handles.rx, 0, Some(&mut buf), None).await
+					{
+					Ok(res) => {
+						// If that succeeded, then set the size and hand to the NSR
+						buf.truncate(res as usize);
+						::udi::meta_nic::nsr_rx_ind(cb);
+						},
+					Err(e) => {
+						// Otherwise, return the cb to the queue
+						self.0.rx_cb_queue.push(cb);
+						}
+					}
+				}
+				else {
+					// RX undeflow :(
+					// - TODO: Flush from the device
+				}
+			}
+			if cb.intr_result & 0x02 != 0 {
+				// TX complete
+			}
+			if cb.intr_result & 0x04 != 0 {
+				// RX complete, but had errors
+			}
+			if cb.intr_result & 0x08 != 0 {
+				// Transmission halted due to excessive collisions
+			}
+			if cb.intr_result & 0x10 != 0 {
+				// RX buffer exhausted
+			}
+			if cb.intr_result & 0x40 != 0 {
+				// Remote DMA is complete
+			}
+			if cb.intr_result & 0x80 != 0 {
+				// Card reset complet
+				// - ignore
+			}
 		}
     }
 }
@@ -145,10 +205,24 @@ impl ::udi::meta_nic::Control for DriverNicCtrl
 	type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::Result<::udi::meta_nic::NicInfo>> + 's;
     fn bind_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicBind<'a>, tx_chan_index: udi::ffi::udi_index_t, rx_chan_index: udi::ffi::udi_index_t) -> Self::Future_bind_req<'a> {
         async move {
-			//let tx_channel = ::udi::imc::channel_spawn(cb.gcb(), tx_chan_index, OpsList::Tx).await;
-			//let rx_channel = ::udi::imc::channel_spawn(cb.gcb(), rx_chan_index, OpsList::Rx).await;
-			// Fill in the CB with the device info
-			todo!()
+			self.0.channel_tx = ::udi::imc::channel_spawn(cb.gcb(), tx_chan_index, OpsList::Tx as _).await;
+			self.0.channel_rx = ::udi::imc::channel_spawn(cb.gcb(), rx_chan_index, OpsList::Rx as _).await;
+			Ok(::udi::meta_nic::NicInfo {
+				media_type: ::udi::meta_nic::ffi::MediaType::UDI_NIC_ETHER,
+				min_pdu_size: 0,
+				max_pdu_size: 0,
+				rx_hw_threshold: 2,
+				capabilities: 0,
+				max_perfect_multicast: 0,
+				max_total_multicast: 0,
+				mac_addr_len: 6,
+				mac_addr: [
+					self.0.mac_addr[0], self.0.mac_addr[1], self.0.mac_addr[2],
+					self.0.mac_addr[3], self.0.mac_addr[4], self.0.mac_addr[5],
+					0,0,0,0,
+					0,0,0,0,0,0,0,0,0,0,
+				],
+			})
 		}
     }
 
@@ -167,7 +241,11 @@ impl ::udi::meta_nic::Control for DriverNicCtrl
 
 	type Future_disable_req<'s> = impl ::core::future::Future<Output=()> + 's;
     fn disable_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_disable_req<'a> {
-        async move { todo!() }
+        async move {
+			//::udi::pio::trans(cb.gcb(), &self.0.pio_handles.enable, 0, None, None).await?;
+			//Ok( () )
+			todo!("disable_req");
+		}
     }
 
 	type Future_ctrl_req<'s> = impl ::core::future::Future<Output=()> + 's;
@@ -196,7 +274,9 @@ impl ::udi::meta_nic::NdRx for DriverNicCtrl
 {
 	type Future_rx_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
     fn rx_rdy<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicRx<'a>) -> Self::Future_rx_rdy<'a> {
-        async move { todo!() }
+        async move {
+			//self.0.rx_cb_queue.push(cb);
+		}
     }
 }
 
