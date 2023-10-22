@@ -7,11 +7,18 @@ impl Handle
     pub unsafe fn from_raw(raw: *mut udi_buf_t) -> Self {
         Self(raw)
     }
+    pub unsafe fn take_raw(raw: &mut *mut udi_buf_t) -> Self {
+        Self(::core::ptr::replace(raw, ::core::ptr::null_mut()))
+    }
     pub unsafe fn update_from_raw(&mut self, raw: *mut udi_buf_t) {
         self.0 = raw;
     }
     pub fn to_raw(&mut self) -> *mut udi_buf_t {
         self.0
+    }
+    pub fn into_raw(self) -> *mut udi_buf_t {
+        let Handle(rv) = self;
+        rv
     }
 
     pub fn len(&self) -> usize {
@@ -114,6 +121,12 @@ impl Handle
             )
     }
 
+    pub fn free(self)
+    {
+        if !self.0.is_null() {
+            unsafe { crate::ffi::buf::udi_buf_free(self.0); }
+        }
+    }
 
     extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, handle: *mut udi_buf_t) {
         unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }

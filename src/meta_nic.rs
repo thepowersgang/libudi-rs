@@ -4,6 +4,9 @@ use crate::ffi::udi_index_t;
 pub fn nsr_rx_ind(rx_cb: crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>) {
     unsafe { ffi::udi_nsr_rx_ind(rx_cb.into_raw()) }
 }
+pub fn nsr_tx_rdy(rx_cb: crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>) {
+    unsafe { ffi::udi_nsr_tx_rdy(rx_cb.into_raw()) }
+}
 
 macro_rules! def_cb {
     (unsafe $ref_name:ident => $t:ty : $cb_num:expr) => {
@@ -29,6 +32,7 @@ def_cb!(unsafe CbRefNicStatus => ffi::udi_nic_status_cb_t : 4);
 def_cb!(unsafe CbRefNicInfo => ffi::udi_nic_info_cb_t : 5);
 // SAFE: Follows the contract, gcb is first field
 def_cb!(unsafe CbRefNicTx => ffi::udi_nic_tx_cb_t : 6);
+pub type CbHandleNicTx = crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>;
 // SAFE: Follows the contract, gcb is first field
 def_cb!(unsafe CbRefNicRx => ffi::udi_nic_rx_cb_t : 7);
 pub type CbHandleNicRx = crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>;
@@ -196,8 +200,8 @@ unsafe impl crate::Ops for ffi::udi_nd_ctrl_ops_t
 
 
 pub trait NdTx: 'static {
-    async_method!(fn tx_req(&'a mut self, cb: CbRefNicTx<'a>)->() as Future_tx_req);
-    async_method!(fn exp_tx_req(&'a mut self, cb: CbRefNicTx<'a>)->() as Future_exp_tx_req);
+    async_method!(fn tx_req(&'a mut self, cb: CbHandleNicTx)->() as Future_tx_req);
+    async_method!(fn exp_tx_req(&'a mut self, cb: CbHandleNicTx)->() as Future_exp_tx_req);
 }
 struct MarkerNdTx;
 impl<T> crate::imc::ChannelHandler<MarkerNdTx> for T
@@ -211,10 +215,10 @@ where
 }
 
 future_wrapper!(nd_tx_req_op => <T as NdTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
-    val.tx_req(cb)
+    val.tx_req(unsafe { cb.into_owned() })
 });
 future_wrapper!(nd_exp_tx_req_op => <T as NdTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
-    val.exp_tx_req(cb)
+    val.exp_tx_req(unsafe { cb.into_owned() })
 });
 impl ffi::udi_nd_tx_ops_t
 {

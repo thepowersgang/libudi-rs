@@ -11,12 +11,14 @@ struct Driver
 	rx_cb_queue: ::udi::meta_nic::ReadCbQueue,
 	mac_addr: [u8; 6],
 	rx_next_page: u8,
+	tx_next_page: u8,
 }
 #[derive(Default)]
 struct PioHandles {
 	reset: ::udi::pio::Handle,
 	enable: ::udi::pio::Handle,
 	rx: ::udi::pio::Handle,
+	tx: ::udi::pio::Handle,
 	irq_ack: ::udi::pio::Handle,
 }
 ::udi::define_wrappers! {Driver: DriverIrq DriverNicCtrl}
@@ -36,6 +38,7 @@ impl ::udi::init::Driver for Driver
 				rx_cb_queue: Default::default(),
 				mac_addr: [0; 6],
 				rx_next_page: mem::RX_FIRST_PG,
+				tx_next_page: mem::TX_FIRST,
 			}
 		}
     }
@@ -69,7 +72,7 @@ impl ::udi::init::Driver for Driver
     }
 
     type Future_devmgmt<'s> = impl ::core::future::Future<Output=::udi::Result<u8>> + 's;
-    fn devmgmt_req<'s>(&'s mut self, cb: ::udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, parent_id: ::udi::ffi::udi_index_t) -> Self::Future_devmgmt<'s> {
+    fn devmgmt_req<'s>(&'s mut self, _cb: ::udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, _parent_id: ::udi::ffi::udi_index_t) -> Self::Future_devmgmt<'s> {
         async move {
 			use ::udi::init::MgmtOp;
 			match mgmt_op
@@ -99,6 +102,7 @@ impl ::udi::meta_bus::BusDevice for Driver
 			self.pio_handles.reset   = pio_map(&pio_ops::RESET).await;
 			self.pio_handles.enable  = pio_map(&pio_ops::ENABLE).await;
 			self.pio_handles.rx      = pio_map(&pio_ops::RX).await;
+			self.pio_handles.tx      = pio_map(&pio_ops::TX).await;
 			self.pio_handles.irq_ack = pio_map(&pio_ops::IRQACK).await;
 
 			// Spawn channel
@@ -126,9 +130,8 @@ impl ::udi::meta_bus::BusDevice for Driver
     }
 
     type Future_unbind_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn bus_unbind_ack<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefBind<'a>) -> Self::Future_unbind_ack<'a> {
+    fn bus_unbind_ack<'a>(&'a mut self, _cb: ::udi::meta_bus::CbRefBind<'a>) -> Self::Future_unbind_ack<'a> {
         async move {
-			todo!()
 		}
     }
 
@@ -159,7 +162,7 @@ impl ::udi::meta_intr::IntrHandler for DriverIrq
 			if cb.intr_result & 0x01 != 0 {
 				// RX complete
 				// - Pop a RX CB off the list
-				if let Some(rx_cb) = self.0.rx_cb_queue.pop() {
+				if let Some(mut rx_cb) = self.0.rx_cb_queue.pop() {
 					let mut buf = unsafe { ::udi::buf::Handle::from_raw(rx_cb.rx_buf) };
 					// Ensure that it's big enough for an entire packet
 					buf.ensure_size(cb.gcb(), 1520).await;
@@ -172,6 +175,7 @@ impl ::udi::meta_intr::IntrHandler for DriverIrq
 					Ok(res) => {
 						// If that succeeded, then set the size and hand to the NSR
 						buf.truncate(res as usize);
+						rx_cb.rx_buf = buf.into_raw();
 						::udi::meta_nic::nsr_rx_ind(rx_cb);
 						},
 					Err(_e) => {
@@ -236,7 +240,11 @@ impl ::udi::meta_nic::Control for DriverNicCtrl
 
 	type Future_unbind_req<'s> = impl ::core::future::Future<Output=()> + 's;
     fn unbind_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_unbind_req<'a> {
-        async move { todo!() }
+        async move {
+			let _ = cb;
+			// Close the channels?
+			//::udi::imc::
+		}
     }
 
 	type Future_enable_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
@@ -269,12 +277,47 @@ impl ::udi::meta_nic::Control for DriverNicCtrl
 impl ::udi::meta_nic::NdTx for DriverNicCtrl
 {
 	type Future_tx_req<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn tx_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicTx<'a>) -> Self::Future_tx_req<'a> {
-        async move { todo!() }
+    fn tx_req<'a>(&'a mut self, mut cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_tx_req<'a> {
+        async move {
+			// Linked list of cbs for multiple packets
+			loop {
+				let mut buf = unsafe { ::udi::buf::Handle::take_raw(&mut cb.tx_buf) };
+
+				let len = (buf.len() as u16).to_ne_bytes();
+				let mut mem_buf = [len[0], len[1], self.0.tx_next_page];
+				let mem_ptr = unsafe { ::udi::pio::MemPtr::new(&mut mem_buf) };
+				self.0.tx_next_page += ((buf.len() + 256-1) / 256) as u8;
+				if self.0.tx_next_page > mem::TX_LAST {
+					self.0.tx_next_page -= mem::TX_BUF_SIZE;
+				}
+				match ::udi::pio::trans(cb.gcb(), &self.0.pio_handles.tx, 0, Some(&mut buf), Some(mem_ptr)).await
+				{
+				Ok(_) => {},
+				Err(_) => {},
+				}
+				buf.free();
+
+				let next = if cb.chain.is_null() {
+					None
+				}
+				else {
+					let n = cb.chain;
+					cb.chain = ::core::ptr::null_mut();
+					Some( unsafe { ::udi::meta_nic::CbHandleNicTx::from_raw(n) } )
+				};
+				if let Some(next) = next {
+					cb = next;
+				}
+				else {
+					break;
+				}
+			}
+			todo!()
+		}
     }
 
 	type Future_exp_tx_req<'s> = Self::Future_tx_req<'s>;
-    fn exp_tx_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicTx<'a>) -> Self::Future_exp_tx_req<'a> {
+    fn exp_tx_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_exp_tx_req<'a> {
         self.tx_req(cb)
     }
 }
@@ -301,7 +344,11 @@ mod regs {
 	pub const PG0_BNRY : u8 = 0x03;
 	/// - READ: Transmit Status Register
 	/// - WRITE: Transmit Page Start address Register
-	pub const PG0_TSR  : u8 = 0x04;	// When read, TPSR when written
+	pub const PG0_TSR   : u8 = 0x04;	// When read, TPSR when written
+	pub const PG0R_NCR  : u8 = 0x05;	// TBCR0 when wrtiten
+	pub const PG0W_TBCR0: u8 = PG0R_NCR;
+	pub const PG0R_FIFO : u8 = 0x06;	// TBCR1 when wrtiten
+	pub const PG0W_TBCR1: u8 = PG0R_FIFO;
 	pub const PG0_ISR  : u8 = 0x07;
 	/// Remote Start AddRess (Lo)
 	pub const PG0_RSAR0: u8 = 0x08;
@@ -331,9 +378,13 @@ mod mem {
 
 	// Internal values
 	pub const RX_BUF_SIZE: u8 = 0x40;
+	pub const TX_BUF_SIZE: u8 = 0x40;
 
 	pub const RX_FIRST_PG: u8 = MEM_START;
 	pub const RX_LAST_PG : u8 = MEM_START + RX_BUF_SIZE - 1;
+
+	pub const TX_FIRST: u8 = MEM_START+RX_BUF_SIZE;
+	pub const TX_LAST: u8 = MEM_END;
 }
 
 

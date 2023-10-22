@@ -152,6 +152,51 @@ use super::mem;
     END.S R4;   // End with packet length
 }
 
+// Expects `mem` to be `length: u16, page: u8`
+::udi::define_pio_ops!{pub TX =
+    // Read header into regs, then data into buffer
+    // - CMD = 0x22 (Page0, Start, NoDMA)
+    LOAD_IMM.B R0, 0x22; OUT.B regs::APG_CMD as _, R0;
+    // - Clear RDMA flag in ISR
+    LOAD_IMM.B R0, 0x40; OUT.B regs::PG0_ISR as _, R0;
+
+    LOAD_IMM.S R7, 0;
+    LOAD.S R6, [mem R7];
+    LOAD.S R0, R6;
+    // "Transmite Byte Count" and "Remote Byte Count"
+    OUT.B regs::PG0W_TBCR0 as _, R0;
+    OUT.B regs::PG0_RBCR0 as _, R0;
+    SHIFT_RIGHT.S R0, 8;
+    OUT.B regs::PG0W_TBCR1 as _, R0;
+    OUT.B regs::PG0_RBCR1 as _, R0;
+    // Remote Start Address
+    LOAD_IMM.S R0, 0;
+    OUT.B regs::PG0_RSAR0 as _, R0;
+    LOAD_IMM.S R7, 2;
+    LOAD.B R0, [mem R7];
+    OUT.B regs::PG0_RSAR1 as _, R0;
+    // Start a remote write
+    // - CMD = 0x12 (Page0, ?)
+    LOAD_IMM.B R0, 0x12; OUT.B regs::APG_CMD as _, R0;
+    // - Write `length` bytes
+    LOAD_IMM.B R0, 0;
+    LOAD_IMM.B R1, regs::APG_MEM;
+    LOAD.S R2, R6;
+    ADD_IMM.S R2, 1;    SHIFT_RIGHT.S R2, 1;    // (len+1)/2 to write u16s
+    REP_OUT_IND.S [buf R0 STEP1], R1, R2;
+
+    // Wait for 0x40 (RDMA Complete) in ISR
+    LABEL 1;
+    IN.B R0, regs::PG0_ISR as _;
+    AND_IMM.B R0, 0x40;
+    CSKIP.B R0 NZ;
+    BRANCH 1;
+    // ACK/clear the Interrupt
+    OUT.B regs::PG0_ISR as _, R0;
+
+    END_IMM 0;
+}
+
 ::udi::define_pio_ops!{pub IRQACK =
         // Entrypoint 0: Enable interrupts
         // IMR = 0x3F []

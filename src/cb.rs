@@ -46,6 +46,12 @@ impl<T> CbHandle<T> {
     pub fn into_raw(self) -> *mut T {
         self.0
     }
+    pub fn gcb(&self) -> CbRef<'_, crate::ffi::udi_cb_t>
+    where
+        T: crate::async_trickery::GetCb,
+    {
+        CbRef(self.0 as *mut _, ::core::marker::PhantomData)
+    }
 }
 impl<T> ::core::ops::Deref for CbHandle<T> {
     type Target = T;
