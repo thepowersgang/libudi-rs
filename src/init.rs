@@ -60,15 +60,67 @@ pub struct AttrSink<'a>
 {
 	dst: *mut crate::ffi::attr::udi_instance_attr_list_t,
 	remaining_space: usize,
-	pd: ::core::marker::PhantomData<&'a crate::ffi::attr::udi_instance_attr_list_t>,
+	pd: ::core::marker::PhantomData<&'a mut crate::ffi::attr::udi_instance_attr_list_t>,
 }
 impl<'a> AttrSink<'a>
 {
+	fn get_entry(&mut self) -> Option<&mut crate::ffi::attr::udi_instance_attr_list_t> {
+		if self.remaining_space == 0 {
+			None
+		}
+		else {
+			self.remaining_space -= 1;
+			// SAFE: This type controls the `*mut` as a unique borrow, pointer is in-range
+			unsafe {
+				let rv = self.dst;
+				self.dst = self.dst.offset(1);
+				Some(&mut *rv)
+			}
+		}
+	}
+	fn set_name_and_type(e: &mut crate::ffi::attr::udi_instance_attr_list_t, name: &str, ty: crate::ffi::attr::_udi_instance_attr_type_t) {
+		let len = usize::max(name.len(), e.attr_name.len());
+		e.attr_name[..len].copy_from_slice(&name.as_bytes()[..len]);
+		if len < e.attr_name.len() {
+			e.attr_name[len] = 0;
+		}
+		e.attr_type = ty as _;
+	}
 	pub fn push_u32(&mut self, name: &str, val: u32) {
+		if let Some(e) = self.get_entry() {
+			Self::set_name_and_type(e, name, crate::ffi::attr::UDI_ATTR_UBIT32);
+			e.attr_length = 4;
+			e.attr_value[..4].copy_from_slice(&val.to_ne_bytes());
+		}
 	}
 	pub fn push_string(&mut self, name: &str, val: &str) {
+		if let Some(e) = self.get_entry() {
+			Self::set_name_and_type(e, name, crate::ffi::attr::UDI_ATTR_STRING);
+			e.attr_length = val.len() as _;
+			e.attr_value[..val.len()].copy_from_slice(val.as_bytes());
+		}
 	}
 	pub fn push_string_fmt(&mut self, name: &str, val: ::core::fmt::Arguments) {
+		if let Some(e) = self.get_entry() {
+			Self::set_name_and_type(e, name, crate::ffi::attr::UDI_ATTR_STRING);
+			// Create a quick helper that implements `fmt::Write` backed by a fixed-size buffer
+			struct Buf<'a>(&'a mut [u8]);
+			impl<'a> ::core::fmt::Write for Buf<'a> {
+				fn write_str(&mut self, s: &str) -> core::fmt::Result {
+					let len = usize::max(s.len(), self.0.len());
+					let (d, t) = ::core::mem::replace(&mut self.0, &mut []).split_at_mut(len);
+					d.copy_from_slice(&s.as_bytes()[..len]);
+					self.0 = t;
+					Ok( () )
+				}
+			}
+			let mut buf = Buf(&mut e.attr_value[..]);
+			let _ = ::core::fmt::write(&mut buf, val);
+			// Calculate the length using pointer differences
+			// SAFE: These two pointers are from the same source
+			let len = unsafe { buf.0.as_ptr().offset_from( e.attr_value.as_ptr() ) };
+			e.attr_length = len as u8;
+		}
 	}
 }
 
@@ -222,7 +274,8 @@ future_wrapper!{final_cleanup_req_op => <T as Driver>(cb: *mut udi_mgmt_cb_t) va
 	crate::async_trickery::with_ack(
 		async move {
 			let _ = cb;
-			todo!("Drop rdata")
+			// SAFE: We're trusting the environment to only call this once per region
+			unsafe { ::core::ptr::drop_in_place(val); }
 		},
 		|cb,_res| unsafe { crate::ffi::meta_mgmt::udi_final_cleanup_ack(cb) }
 	)

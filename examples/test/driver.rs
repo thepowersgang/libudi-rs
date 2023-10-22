@@ -21,12 +21,20 @@ impl ::udi::init::Driver for Driver
     type Future_enumerate<'s> = impl ::core::future::Future<Output=(::udi::init::EnumerateResult,::udi::init::AttrSink<'s>)> + 's;
     fn enumerate_req<'s>(
 		&'s mut self,
-		cb: ::udi::init::CbRefEnumerate<'s>,
+		_cb: ::udi::init::CbRefEnumerate<'s>,
 		level: ::udi::init::EnumerateLevel,
 		attrs_out: ::udi::init::AttrSink<'s>
 	) -> Self::Future_enumerate<'s> {
         async move {
-			todo!()
+			match level {
+			::udi::init::EnumerateLevel::Start
+			|::udi::init::EnumerateLevel::StartRescan
+			|::udi::init::EnumerateLevel::Next
+				=> (::udi::init::EnumerateResult::Done, attrs_out),
+			::udi::init::EnumerateLevel::New => todo!("EnumerateLevel::New"),
+			::udi::init::EnumerateLevel::Directed => todo!(),
+			::udi::init::EnumerateLevel::Release => todo!(),
+			}
 		}
     }
 
