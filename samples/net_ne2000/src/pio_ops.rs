@@ -48,7 +48,7 @@ use super::mem;
 	LOAD_IMM.B R0, 0;	// R0: buffer offset
 	LOAD_IMM.B R1, regs::APG_MEM as _;	// R1: Register offset (this is not incremented)
 	LOAD_IMM.B R2, 6;	// R2: Iteration count (6)
-	REP_IN_IND.B mem R0 STEP1, R1, R2;
+	REP_IN_IND.B [mem R0 STEP1], R1, R2;
 	END_IMM 0;
 }
 
@@ -76,6 +76,80 @@ use super::mem;
     LOAD_IMM.B R0, 0x40;
     OUT.B regs::PG0_TSR as _, R0;   // Aka `TPSR`
     END_IMM 0;
+}
+
+// NOTE: This expects `rx_next_page` as the input memory buffer
+::udi::define_pio_ops!{pub RX =
+    // Get current page into R7
+    LOAD_IMM.B R0, 0; LOAD.B R7, [mem R0];
+    // Read header into regs, then data into buffer
+    // - CMD = 0x22
+    LOAD_IMM.B R0, 0x22; OUT.B regs::APG_CMD as _, R0;
+    // - Clear RDMA flag in ISR
+    LOAD_IMM.B R0, 0x40; OUT.B regs::PG0_ISR as _, R0;
+    // - Set up transaction for 1 page from CurRX
+    LOAD_IMM.B R0, 0;   // Zero used for page offset and subpage count
+    LOAD_IMM.B R1, 1;   // used for page count
+    OUT.B regs::PG0_RSAR0 as _, R0;
+    OUT.B regs::PG0_RSAR1 as _, R7; // `rx_next_page`
+    OUT.B regs::PG0_RBCR0 as _, R0;
+    OUT.B regs::PG0_RBCR1 as _, R1;
+    // - Start read (CMD=0x0A)
+    LOAD_IMM.B R0, 0x0A; OUT.B regs::APG_CMD as _, R0;
+    DELAY 0;
+    //  > Header to registers
+    IN.S R6, regs::APG_MEM as _;    // Status,NextPacketPage
+    IN.S R5, regs::APG_MEM as _;    // R5 = Length (bytes)
+    STORE.S R4, R5; // save length until return
+    //  > Data to buffer (126 words)
+    LOAD_IMM.B R0, 0;   // - Buffer offset (incremented by 1 each iteration)
+    LOAD_IMM.B R1, regs::APG_MEM;  // - Reg offset (no increment)
+    LOAD_IMM.B R2, (256u16/2 - 2) as u8;   // Count
+    REP_IN_IND.B [buf R0 STEP1], R1, R2;
+    // - Subtract 256-4 from R5(length), if <=0 we've grabbed the entire packet
+    LOAD_IMM.B R3, (256-4) as u8;   // R3 is the offset in the output buffer, we've loaded 126 words currently
+    ADD_IMM.S R5, -(256i16-4) as u16;
+    LABEL 2;
+    CSKIP.S R5 NZ;
+    BRANCH 1;   // 1: End if R5(length)==0
+    CSKIP.S R5 NNeg;
+    BRANCH 1;   // 1: End if R5(length)<0
+    // - Read pages until all of packet RXd
+    ADD_IMM.B R7, 1;
+    STORE.B R0, R7;
+    ADD_IMM.B R0, -(mem::RX_LAST_PG as i16+1) as u8;
+    CSKIP.B R0 NZ;  // if R7-RX_LAST == 0
+    LOAD_IMM.B R7, mem::RX_FIRST_PG;    // R7 = RX_FIRST
+    //  > Transaction start
+    LOAD_IMM.B R0, 0;   // Zero used for page offset and subpage count
+    LOAD_IMM.B R1, 1;   // used for page count
+    OUT.B regs::PG0_RSAR0 as _, R0;
+    OUT.B regs::PG0_RSAR1 as _, R7; // Current RX page
+    OUT.B regs::PG0_RBCR0 as _, R0;
+    OUT.B regs::PG0_RBCR1 as _, R1;
+    // - Start read (CMD=0x0A)
+    LOAD_IMM.B R0, 0x0A; OUT.B regs::APG_CMD as _, R0;
+    DELAY 0;
+    //  > Data to buffer (128 words)
+    // buffer offset maintained in R3
+    LOAD_IMM.B R1, regs::APG_MEM;
+    LOAD_IMM.B R2, (256u16/2) as u8;   // Count (full 128 words)
+    REP_IN_IND.B [buf R3 STEP1], R1, R2;
+    ADD_IMM.S R3, 256;
+    ADD_IMM.S R3, -256i16 as u16;
+    // - Jump to length check
+    BRANCH 2;   // 2: Check against length
+
+    // Cleanup
+    LABEL 1;
+    // - Update next RX page, return status
+    OUT.B regs::PG0_BNRY as _, R7;
+    STORE.S R7, R6;  // Saved tuple of Status,Next
+    SHIFT_RIGHT.S R7, 8;    // Get `Next` from that tuple
+    LOAD_IMM.B R0, 0;
+    STORE.S [mem R0], R7; // Store in `rx_next_page`
+
+    END.S R4;   // End with packet length
 }
 
 ::udi::define_pio_ops!{pub IRQACK =

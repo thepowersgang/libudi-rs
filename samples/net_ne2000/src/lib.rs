@@ -8,12 +8,14 @@ struct Driver
 	intr_channel: ::udi::ffi::udi_channel_t,
 	channel_tx: ::udi::ffi::udi_channel_t,
 	channel_rx: ::udi::ffi::udi_channel_t,
+	rx_cb_queue: ::udi::meta_nic::ReadCbQueue,
 	mac_addr: [u8; 6],
 }
 #[derive(Default)]
 struct PioHandles {
 	reset: ::udi::pio::Handle,
 	enable: ::udi::pio::Handle,
+	rx: ::udi::pio::Handle,
 	irq_ack: ::udi::pio::Handle,
 }
 ::udi::define_wrappers! {Driver: DriverIrq DriverNicCtrl}
@@ -30,6 +32,7 @@ impl ::udi::init::Driver for Driver
 				intr_channel: ::core::ptr::null_mut(),
 				channel_tx: ::core::ptr::null_mut(),
 				channel_rx: ::core::ptr::null_mut(),
+				rx_cb_queue: Default::default(),
 				mac_addr: [0; 6],
 			}
 		}
@@ -93,6 +96,7 @@ impl ::udi::meta_bus::BusDevice for Driver
 			let pio_map = |trans_list| ::udi::pio::map(cb.gcb(), 0/*UDI_PCI_BAR_0*/, 0x00,0x20, trans_list, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0);
 			self.pio_handles.reset   = pio_map(&pio_ops::RESET).await;
 			self.pio_handles.enable  = pio_map(&pio_ops::ENABLE).await;
+			self.pio_handles.rx      = pio_map(&pio_ops::RX).await;
 			self.pio_handles.irq_ack = pio_map(&pio_ops::IRQACK).await;
 
 			// Spawn channel
@@ -150,25 +154,24 @@ impl ::udi::meta_intr::IntrHandler for DriverIrq
     type Future_intr_event_ind<'s> = impl ::core::future::Future<Output=()>+'s;
     fn intr_event_ind<'a>(&'a mut self, cb: ::udi::meta_intr::CbRefEvent<'a>, _flags: u8) -> Self::Future_intr_event_ind<'a> {
 		async move {
-			#[cfg(false_)]
 			if cb.intr_result & 0x01 != 0 {
 				// RX complete
 				// - Pop a RX CB off the list
-				if let Some(cb) = self.0.rx_cb_queue.pop() {
-					let buf = ::udi::buf::Handle::from_raw(cb.rx_buf);
+				if let Some(rx_cb) = self.0.rx_cb_queue.pop() {
+					let mut buf = unsafe { ::udi::buf::Handle::from_raw(rx_cb.rx_buf) };
 					// Ensure that it's big enough for an entire packet
-					buf.ensure_size(1520).await;
+					buf.ensure_size(cb.gcb(), 1520).await;
 					// Pull the packet off the device
 					match ::udi::pio::trans(cb.gcb(), &self.0.pio_handles.rx, 0, Some(&mut buf), None).await
 					{
 					Ok(res) => {
 						// If that succeeded, then set the size and hand to the NSR
 						buf.truncate(res as usize);
-						::udi::meta_nic::nsr_rx_ind(cb);
+						::udi::meta_nic::nsr_rx_ind(rx_cb);
 						},
-					Err(e) => {
+					Err(_e) => {
 						// Otherwise, return the cb to the queue
-						self.0.rx_cb_queue.push(cb);
+						self.0.rx_cb_queue.push(rx_cb);
 						}
 					}
 				}

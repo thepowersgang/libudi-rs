@@ -105,6 +105,19 @@ pub mod vals {
 		pub const _8: u8 = 3;//crate::ffi::pio::UDI_PIO_8BYTE;
 		pub const _16: u8 = 4;//crate::ffi::pio::UDI_PIO_16BYTE;
 		pub const _32: u8 = 5;//crate::ffi::pio::UDI_PIO_32BYTE;
+
+		#[allow(non_snake_case)]
+		pub mod B {
+			pub const fn to_u16(v: u8) -> u16 {
+				v as u16
+			}
+		}
+		#[allow(non_snake_case)]
+		pub mod S {
+			pub const fn to_u16(v: u16) -> u16 {
+				v
+			}
+		}
 	}
 	pub mod stride {
 		pub const STEP1: u16 = 1;
@@ -121,6 +134,12 @@ pub mod vals {
 	pub mod regs {
 		pub const R0: u8 = 0;
 		pub const R1: u8 = 1;
+		pub const R2: u8 = 2;
+		pub const R3: u8 = 3;
+		pub const R4: u8 = 4;
+		pub const R5: u8 = 5;
+		pub const R6: u8 = 6;
+		pub const R7: u8 = 7;
 	}
 	// Group A operations: The register parameter can be a memory reference, or direct
 	pub mod ops_group_a {
@@ -139,11 +158,25 @@ pub mod vals {
 		pub const SHIFT_RIGHT: u8 = 0xA8;
 		pub const AND        : u8 = 0xB0;
 		pub const AND_IMM    : u8 = 0xB8;
+		pub const OR         : u8 = 0xC0;
+		pub const OR_IMM     : u8 = 0xC8;
+		pub const XOR        : u8 = 0xD0;
+		pub const ADD        : u8 = 0xD8;
+		pub const ADD_IMM    : u8 = 0xE0;
+		pub const SUB        : u8 = 0xE8;
 	}
 	pub mod ops_group_c {
 		pub const LABEL     : u8 = 0xF0;
 		pub const BRANCH    : u8 = 0xF1;
 		pub const REP_IN_IND: u8 = 0xF2;
+		pub const REP_OUT_IND: u8 = 0xF3;
+		/// Delay for at least `operand` microseconds
+		pub const DELAY   : u8 = 0xF4;
+		pub const BARRIER : u8 = 0xF5;
+		pub const SYNC    : u8 = 0xF6;
+		pub const SYNC_OUT: u8 = 0xF7;
+		pub const DEBUG   : u8 = 0xF8;
+		// Unallocated
 		pub const END    : u8 = 0xFE;
 		pub const END_IMM: u8 = 0xFF;
 	}
@@ -162,10 +195,13 @@ macro_rules! define_pio_ops
 
 	(@expand $($output:expr,)*; ) => { [ $($output,)* ] };
 
+	// Group A
+	// - IN Rd, reg
 	(@expand $($output:expr,)*; IN.$sizecode:ident $reg:tt, $src:expr; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
 		$($output,)* $crate::define_pio_ops!(@a $sizecode, IN, $reg, $src), ;
 		$($rest)*
 	) };
+	// - OUT reg, Rs
 	(@expand $($output:expr,)*; OUT.$sizecode:ident $dst:expr, $reg:tt; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
 		$($output,)* $crate::define_pio_ops!(@a $sizecode, OUT, $reg, $dst), ;
 		$($rest)*
@@ -179,55 +215,127 @@ macro_rules! define_pio_ops
 		$($rest)*
 	) };
 
-	(@expand $($output:expr,)*; LOAD_IMM.B $reg:ident, $val:expr; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
-		$($output,)* $crate::define_pio_ops!(@b B, LOAD_IMM, $reg, $crate::pio::vals::u8_to_u16($val)), ;
+	// Group B
+	// - LOAD_IMM.[BS] Rd, IMM
+	(@expand $($output:expr,)*; LOAD_IMM.$sizecode:ident $reg:ident, $val:expr; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, LOAD_IMM, $reg, $crate::pio::vals::size::$sizecode::to_u16($val)), ;
 		$($rest)*
 	) };
-	(@expand $($output:expr,)*; LOAD_IMM.H $reg:ident, $val:expr; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
-		$($output,)* $crate::define_pio_ops!(@b H, LOAD_IMM, $reg, $val), ;
-		$($rest)*
-	) };
+	// - CSKIP.s Rt, cc
 	(@expand $($output:expr,)*; CSKIP.$sizecode:ident $reg:ident $cc:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
 		$($output,)* $crate::define_pio_ops!(@b $sizecode, CSKIP, $reg, $crate::pio::vals::ConditionCode::$cc as _), ;
 		$($rest)*
 	) };
-	(@expand $($output:expr,)*; AND_IMM.$sizecode:ident $reg:tt, $val:expr; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
-		$($output,)* $crate::define_pio_ops!(@b $sizecode, AND_IMM, $reg, $val), ;
+	// - IN_IND
+	(@expand $($output:expr,)*; IN_IND.$sizecode:ident $reg:ident, $pio_reg:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, IN_IND, $reg, $crate::pio::regs::$pio_reg as _), ;
+		$($rest)*
+	) };
+	// - OUT_IND
+	(@expand $($output:expr,)*; OUT_IND.$sizecode:ident $pio_reg:ident, $reg:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, OUT_IND, $reg, $crate::pio::regs::$pio_reg as _), ;
+		$($rest)*
+	) };
+	// - SHIFT_LEFT.s Rd, bits
+	(@expand $($output:expr,)*; SHIFT_LEFT.$sizecode:ident $reg:ident, $val:expr; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, SHIFT_LEFT, $reg, $val), ;
+		$($rest)*
+	) };
+	// - SHIFT_RIGHT.s Rd, bits
+	(@expand $($output:expr,)*; SHIFT_RIGHT.$sizecode:ident $reg:ident, $val:expr; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, SHIFT_RIGHT, $reg, $val), ;
+		$($rest)*
+	) };
+	// - AND.s Rd, Rs
+	(@expand $($output:expr,)*; AND.$sizecode:ident $reg:ident, $rs:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, AND, $reg, $crate::pio::regs::$rs as _), ;
+		$($rest)*
+	) };
+	// - AND_IMM Rd, IMM
+	(@expand $($output:expr,)*; AND_IMM.$sizecode:ident $reg:ident, $val:expr; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, AND_IMM, $reg, $crate::pio::vals::size::$sizecode::to_u16($val)), ;
+		$($rest)*
+	) };
+	// - OR.s Rd, Rs
+	(@expand $($output:expr,)*; OR.$sizecode:ident $reg:ident, $rs:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, OR, $reg, $crate::pio::regs::$rs as _), ;
+		$($rest)*
+	) };
+	// - OR_IMM.s Rd, IMM
+	(@expand $($output:expr,)*; OR_IMM.$sizecode:ident $reg:ident, $val:expr; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, OR_IMM, $reg, $crate::pio::vals::size::$sizecode::to_u16($val)), ;
+		$($rest)*
+	) };
+	// - XOR.s Rd, Rs
+	(@expand $($output:expr,)*; XOR.$sizecode:ident $reg:ident, $rs:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, XOR, $reg, $crate::pio::regs::$rs as _), ;
+		$($rest)*
+	) };
+	// - ADD.s Rd, Rs
+	(@expand $($output:expr,)*; ADD.$sizecode:ident $reg:ident, $rs:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, ADD, $reg, $crate::pio::regs::$rs as _), ;
+		$($rest)*
+	) };
+	// - ADD_IMM.s Rd, IMM
+	(@expand $($output:expr,)*; ADD_IMM.$sizecode:ident $reg:ident, $val:expr; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, ADD_IMM, $reg, $crate::pio::vals::size::$sizecode::to_u16($val)), ;
+		$($rest)*
+	) };
+	// - SUB.s Rd, Rs
+	(@expand $($output:expr,)*; SUB.$sizecode:ident $reg:ident, $rs:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, SUB, $reg, $crate::pio::regs::$rs as _), ;
 		$($rest)*
 	) };
 
+	// Group C
+	// - BRANCH idx
 	(@expand $($output:expr,)*; BRANCH $idx:expr; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
 		$($output,)* $crate::define_pio_ops!(@c B, BRANCH, $idx), ;
 		$($rest)*
 	) };
+	// - LABEL idx
 	(@expand $($output:expr,)*; LABEL $idx:expr; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
 		$($output,)* $crate::define_pio_ops!(@c B, LABEL, $idx), ;
 		$($rest)*
 	) };
+	// REP_IN_IND [ {mem,buf} Rmem {|stride} ], Rreg {|stride}, Rcount
 	(@expand $($output:expr,)*;
-		REP_IN_IND.$sizecode:ident $ty:ident $mem_reg:ident $($mem_stride:ident)?, $pio_reg:ident $($pio_stride:ident)?, $count_reg:ident;
+		REP_IN_IND.$sizecode:ident [$ty:ident $mem_reg:ident $($mem_stride:ident)?], $pio_reg:ident $($pio_stride:ident)?, $count_reg:ident;
 		$($rest:tt)*
 	) => { $crate::define_pio_ops!(@expand
 		$($output,)* $crate::define_pio_ops!(@c B, REP_IN_IND, $crate::define_pio_ops!(@rep_args $ty $mem_reg $($mem_stride)?, $pio_reg $($pio_stride)?, $count_reg)), ;
 		$($rest)*
 	) };
+	// REP_OUT_IND.s [ [mem|buf] Rmem [stride]], Rreg [stride], Rcount
 	(@expand $($output:expr,)*;
-		REP_OUT_IND.$sizecode:ident $ty:ident $mem_reg:ident $($mem_stride:ident)?, $pio_reg:ident $($pio_stride:ident)?, $count_reg:ident;
+		REP_OUT_IND.$sizecode:ident [$ty:ident $mem_reg:ident $($mem_stride:ident)?], $pio_reg:ident $($pio_stride:ident)?, $count_reg:ident;
 		$($rest:tt)*
 	) => { $crate::define_pio_ops!(@expand
 		$($output,)* $crate::define_pio_ops!(@c B, REP_OUT_IND, $crate::define_pio_ops!(@rep_args $ty $mem_reg $($mem_stride)?, $pio_reg $($pio_stride)?, $count_reg)), ;
 		$($rest)*
 	) };
 
-	(@expand $($output:expr,)*; END.$sizecode:ident $reg:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
-		$($output,)* $crate::define_pio_ops!(@c $sizecode, END, $crate::pio::vals::regs::$reg as _), ;
+	// `END.[BS] Rn` - 
+	(@expand $($output:expr,)*; END.B $reg:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@c B, END, $crate::pio::vals::regs::$reg as _), ;
 		$($rest)*
 	) };
+	(@expand $($output:expr,)*; END.S $reg:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@c S, END, $crate::pio::vals::regs::$reg as _), ;
+		$($rest)*
+	) };
+	// `DELAY microseconds` - Delay for AT LEAST `microseconds`
+	(@expand $($output:expr,)*; DELAY $val:expr; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
+		$($output,)* $crate::define_pio_ops!(@c B, DELAY, $val), ;
+		$($rest)*
+	) };
+	// `END imm` - 
 	(@expand $($output:expr,)*; END_IMM $val:expr; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
-		$($output,)* $crate::define_pio_ops!(@c B, END_IMM, $val), ;
+		$($output,)* $crate::define_pio_ops!(@c S, END_IMM, $val), ;
 		$($rest)*
 	) };
 
+	// ----- Encoding -----
 	// Group A
 	(@a $size:ident, $opname:ident, $regname:ident, $val:expr) => {
 		$crate::ffi::pio::udi_pio_trans_t {
@@ -280,8 +388,19 @@ macro_rules! define_pio_ops
 	(@count ($output:expr); (; $($rest:tt)*)) => { $crate::define_pio_ops!(@count ($output+1); ($($rest)*)) };
 	(@count ($output:expr); ($t:tt $($rest:tt)*)) => { $crate::define_pio_ops!(@count ($output); ($($rest)*)) };
 
+	// ----- Arguments for the repeat ops -----
 	(@rep_args mem $mem_reg:ident $($mem_stride:ident)?, $pio_reg:ident $($pio_stride:ident)?, $count_reg:ident) => {
 		$crate::ffi::pio::UDI_PIO_MEM as u16
+		|($crate::pio::vals::regs::$mem_reg as u16)
+		$(| $crate::pio::vals::stride::$mem_stride << 5)?
+	};
+	(@rep_args buf $mem_reg:ident $($mem_stride:ident)?, $pio_reg:ident $($pio_stride:ident)?, $count_reg:ident) => {
+		$crate::ffi::pio::UDI_PIO_BUF as u16
+		|($crate::pio::vals::regs::$mem_reg as u16)
+		$(| $crate::pio::vals::stride::$mem_stride << 5)?
+	};
+	(@rep_args scratch $mem_reg:ident $($mem_stride:ident)?, $pio_reg:ident $($pio_stride:ident)?, $count_reg:ident) => {
+		$crate::ffi::pio::UDI_PIO_SCRATCH as u16
 		|($crate::pio::vals::regs::$mem_reg as u16)
 		$(| $crate::pio::vals::stride::$mem_stride << 5)?
 	};

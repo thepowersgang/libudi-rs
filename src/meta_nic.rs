@@ -1,39 +1,88 @@
+///! Network Interface Card Metalanguage
 use crate::ffi::udi_index_t;
 
-// SAFE: Follows the contract, gcb is first field
-unsafe impl crate::async_trickery::GetCb for ffi::udi_nic_cb_t {
-    fn get_gcb(&self) -> &crate::ffi::udi_cb_t {
-        &self.gcb
+pub fn nsr_rx_ind(rx_cb: crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>) {
+    unsafe { ffi::udi_nsr_rx_ind(rx_cb.into_raw()) }
+}
+
+macro_rules! def_cb {
+    (unsafe $ref_name:ident => $t:ty : $cb_num:expr) => {
+        // SAFE: Follows the contract, gcb is first field
+        unsafe impl crate::async_trickery::GetCb for $t {
+            fn get_gcb(&self) -> &crate::ffi::udi_cb_t {
+                &self.gcb
+            }
+            //const CB_NUM: u8 = $cb_num;
+        }
+        pub type $ref_name<'a> = crate::CbRef<'a, $t>;
     }
 }
 // SAFE: Follows the contract, gcb is first field
-unsafe impl crate::async_trickery::GetCb for ffi::udi_nic_bind_cb_t {
-    fn get_gcb(&self) -> &crate::ffi::udi_cb_t {
-        &self.gcb
+def_cb!(unsafe CbRefNic => ffi::udi_nic_cb_t : 1);
+// SAFE: Follows the contract, gcb is first field
+def_cb!(unsafe CbRefNicBind => ffi::udi_nic_bind_cb_t : 2);
+// SAFE: Follows the contract, gcb is first field
+def_cb!(unsafe CbRefNicCtrl => ffi::udi_nic_ctrl_cb_t : 3);
+// SAFE: Follows the contract, gcb is first field
+def_cb!(unsafe CbRefNicStatus => ffi::udi_nic_status_cb_t : 4);
+// SAFE: Follows the contract, gcb is first field
+def_cb!(unsafe CbRefNicInfo => ffi::udi_nic_info_cb_t : 5);
+// SAFE: Follows the contract, gcb is first field
+def_cb!(unsafe CbRefNicTx => ffi::udi_nic_tx_cb_t : 6);
+// SAFE: Follows the contract, gcb is first field
+def_cb!(unsafe CbRefNicRx => ffi::udi_nic_rx_cb_t : 7);
+
+/// A queue of RX CBs
+pub struct ReadCbQueue
+{
+    head: *mut ffi::udi_nic_rx_cb_t,
+    tail: *mut ffi::udi_nic_rx_cb_t,
+}
+impl Default for ReadCbQueue {
+    fn default() -> Self {
+        Self::new()
     }
 }
-// SAFE: Follows the contract, gcb is first field
-unsafe impl crate::async_trickery::GetCb for ffi::udi_nic_ctrl_cb_t {
-    fn get_gcb(&self) -> &crate::ffi::udi_cb_t {
-        &self.gcb
+impl ReadCbQueue
+{
+    pub const fn new() -> Self {
+        Self {
+            head: ::core::ptr::null_mut(),
+            tail: ::core::ptr::null_mut(),
+        }
     }
-}
-// SAFE: Follows the contract, gcb is first field
-unsafe impl crate::async_trickery::GetCb for ffi::udi_nic_info_cb_t {
-    fn get_gcb(&self) -> &crate::ffi::udi_cb_t {
-        &self.gcb
+    pub fn push(&mut self, cb: crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>) {
+        if self.head.is_null() {
+            self.head = cb.into_raw();
+            self.tail = self.head;
+        }
+        else {
+            // SAFE: This type logically owns these pointers (so they're non-NULL)
+            // SAFE: Trusting the `chain` on incoming cbs to be a valid single-linked list
+            unsafe {
+                (*self.tail).chain = cb.into_raw();
+                while !(*self.tail).chain.is_null() {
+                    self.tail = (*self.tail).chain;
+                }
+            }
+        }
     }
-}
-// SAFE: Follows the contract, gcb is first field
-unsafe impl crate::async_trickery::GetCb for ffi::udi_nic_tx_cb_t {
-    fn get_gcb(&self) -> &crate::ffi::udi_cb_t {
-        &self.gcb
-    }
-}
-// SAFE: Follows the contract, gcb is first field
-unsafe impl crate::async_trickery::GetCb for ffi::udi_nic_rx_cb_t {
-    fn get_gcb(&self) -> &crate::ffi::udi_cb_t {
-        &self.gcb
+    pub fn pop(&mut self) -> Option< crate::cb::CbHandle<ffi::udi_nic_rx_cb_t> > {
+        if self.head.is_null() {
+            None
+        }
+        else {
+            let rv = self.head;
+            // SAFE: The chain is a valid singularly-linked list of owned pointers
+            unsafe {
+                self.head = (*rv).chain;
+                if self.head.is_null() {
+                    // Defensive measure.
+                    self.tail = ::core::ptr::null_mut();
+                }
+                Some( crate::cb::CbHandle::from_raw(rv) )
+            }
+        }
     }
 }
 
@@ -47,13 +96,6 @@ pub enum OpsNum
     NsrTx,
     NsrRx,
 }
-
-pub type CbRefNic<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_cb_t>;
-pub type CbRefNicBind<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_bind_cb_t>;
-pub type CbRefNicCtrl<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_ctrl_cb_t>;
-pub type CbRefNicInfo<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_info_cb_t>;
-pub type CbRefNicTx<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_tx_cb_t>;
-pub type CbRefNicRx<'a> = crate::CbRef<'a, crate::meta_nic::ffi::udi_nic_rx_cb_t>;
 
 pub trait Control: 'static {
     async_method!(fn bind_req(&'a mut self, cb: CbRefNicBind<'a>, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->crate::Result<NicInfo> as Future_bind_req);

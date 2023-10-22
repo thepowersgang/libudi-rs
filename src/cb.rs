@@ -1,3 +1,6 @@
+///! Control blocks
+///!
+///! Control blocks are the core context for UDI calls between drivers and the environment or each other
 use crate::ffi::udi_channel_t;
 
 /// A reference to a Cb (for async calls)
@@ -11,8 +14,13 @@ impl<'a, T: 'static> CbRef<'a, T> {
     pub unsafe fn new(p: *mut T) -> Self {
         CbRef(p, ::core::marker::PhantomData)
     }
+    /// Get the raw pointer from this reference
     pub fn to_raw(&self) -> *mut T {
         self.0
+    }
+    /// UNSAFE: Caller must ensure that this is the only reference
+    pub unsafe fn into_owned(self) -> CbHandle<T> {
+        CbHandle(self.0)
     }
     pub fn gcb(&self) -> CbRef<'a, crate::ffi::udi_cb_t>
     where
@@ -32,6 +40,9 @@ impl<'a, T: 'static> ::core::ops::Deref for CbRef<'a,T> {
 /// An owning handle to a CB
 pub struct CbHandle<T>(*mut T);
 impl<T> CbHandle<T> {
+    pub unsafe fn from_raw(v: *mut T) -> Self {
+        Self(v)
+    }
     pub fn into_raw(self) -> *mut T {
         self.0
     }
@@ -55,6 +66,7 @@ pub trait CbDefinition {
     type Cb;
 }
 
+/// Allocate a new control block for the nominated channel
 pub fn alloc<CbDef>(
 	cb: crate::CbRef<crate::ffi::udi_cb_t>,
     default_channel: udi_channel_t
