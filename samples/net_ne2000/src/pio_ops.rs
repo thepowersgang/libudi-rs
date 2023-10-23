@@ -74,7 +74,7 @@ use super::mem;
     OUT.B regs::PG0_TCR as _, R0;
     // TPSR = 0x40 [TX Start]
     LOAD_IMM.B R0, 0x40;
-    OUT.B regs::PG0_TSR as _, R0;   // Aka `TPSR`
+    OUT.B regs::PG0W_TPSR as _, R0;
     END_IMM 0;
 }
 
@@ -193,6 +193,14 @@ use super::mem;
     BRANCH 1;
     // ACK/clear the Interrupt
     OUT.B regs::PG0_ISR as _, R0;
+
+    // TPSR = page
+    LOAD_IMM.S R7, 2;
+    LOAD.B R0, [mem R7];
+    OUT.B regs::PG0W_TPSR as _, R0;
+    // Trigger TX
+    // - CMD = 0x16
+    LOAD_IMM.B R0, 0x16; OUT.B regs::APG_CMD as _, R0;
 
     END_IMM 0;
 }

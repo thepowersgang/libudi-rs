@@ -345,7 +345,8 @@ mod regs {
 	pub const PG0_BNRY : u8 = 0x03;
 	/// - READ: Transmit Status Register
 	/// - WRITE: Transmit Page Start address Register
-	pub const PG0_TSR   : u8 = 0x04;	// When read, TPSR when written
+	pub const PG0R_TSR   : u8 = 0x04;	// When read, TPSR when written
+	pub const PG0W_TPSR  : u8 = PG0R_TSR;
 	pub const PG0R_NCR  : u8 = 0x05;	// TBCR0 when wrtiten
 	pub const PG0W_TBCR0: u8 = PG0R_NCR;
 	pub const PG0R_FIFO : u8 = 0x06;	// TBCR1 when wrtiten
