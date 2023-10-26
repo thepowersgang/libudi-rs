@@ -1,10 +1,9 @@
 [package]
-name = "udi-net_ne2000"
+name = "udi-environment"
 version = "0.0.0"
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib","rlib"]
-
 [dependencies]
+libc = "0.2.149"
 udi = { path = "../../" }
+udi-net_ne2000 = { path = "../net_ne2000" }

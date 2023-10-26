@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = [".", "samples/net_ne2000"]
+members = [".", "samples/net_ne2000", "samples/udi_env"]
