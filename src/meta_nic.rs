@@ -180,7 +180,7 @@ impl ffi::udi_nd_ctrl_ops_t
         v
     }
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
-    /// SAFETY: The scratch size must be >= value returned by [scratch_requirement]
+    /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
     pub const unsafe fn for_driver<T: Control>() -> Self {
         Self {
             channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerControl>,
@@ -229,7 +229,7 @@ impl ffi::udi_nd_tx_ops_t
         v
     }
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
-    /// SAFETY: The scratch size must be >= value returned by [scratch_requirement]
+    /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
     pub const unsafe fn for_driver<T: NdTx>() -> Self {
         Self {
             channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerNdTx>,
@@ -266,7 +266,7 @@ impl ffi::udi_nd_rx_ops_t
         v
     }
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
-    /// SAFETY: The scratch size must be >= value returned by [scratch_requirement]
+    /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
     pub const unsafe fn for_driver<T: NdRx>() -> Self {
         Self {
             channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerNdRx>,

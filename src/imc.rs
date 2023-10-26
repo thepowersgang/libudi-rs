@@ -1,3 +1,6 @@
+//! Inter-Module Communication
+//! 
+//! 
 use crate::ffi::imc::udi_channel_event_cb_t;
 
 /// Spawn a new channel

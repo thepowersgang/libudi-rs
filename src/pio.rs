@@ -1,3 +1,8 @@
+//! Programmed IO
+//! 
+//! A feature that allows doing register IO using a simple register-based VM
+//! instead of needing drivers to run with direct IO access.
+
 #[derive(Debug)]
 pub struct Handle(crate::ffi::pio::udi_pio_handle_t);
 impl Handle {
@@ -10,6 +15,8 @@ impl ::core::default::Default for Handle {
 		Handle(::core::ptr::null_mut())
 	}
 }
+/// Map (register) a set of PIO operations and registers
+/// 
 /// - `regset`: Register set index (see the bus documentation)
 /// - `offset` and `length` are the address region within the regset
 /// - `pio_attributes`: 
@@ -47,6 +54,7 @@ pub fn map(
 		)
 }
 
+/// An unsafe-to-construct pointer used for [trans]'s `mem_ptr` argument
 pub struct MemPtr<'a>(&'a mut [u8]);
 impl<'a> MemPtr<'a> {
 	/// UNSAFE: There is no ability to bounds check this buffer, the PIO ops must not write out of range
@@ -58,6 +66,8 @@ impl<'a> MemPtr<'a> {
 	}
 }
 
+//// Execute a PIO transaction
+/// 
 /// - `buf` is a buffer usable by PIO transactions
 /// - `mem_ptr` Memory block used by `UDI_PIO_MEM` transactions
 pub fn trans<'a>(
@@ -182,6 +192,20 @@ pub mod vals {
 	}
 }
 
+/// Define a set of PIO operations
+/// 
+/// This macro implements a domain-specific syntax for PIO transation operations
+/// 
+/// Definitions:
+/// - `size`: An operation size code. B = byte (`u8`), S = short (`u16`), `L` = long (`u32`), `_8` = `u64`, `_16` = `u128`, `_32` = 32 bytes)
+/// - `Rsomething`: A register name, `R0` through to `R7`
+/// - `regaddr`: A device register address
+/// - `stride`: A memory stride distance, `STEP1`, `STEP2`, or `STEP4`. Strides are in multiples of the operation size
+///
+/// Commands:
+/// - `IN.size Rd, regaddr` - Read from IO
+/// - `OUT.size regaddr, Rs` - Write to IO
+/// - ...
 #[macro_export]
 macro_rules! define_pio_ops
 {
@@ -383,10 +407,6 @@ macro_rules! define_pio_ops
 			operand: $val
 		}
 		};
-
-	(@count ($output:expr); ()) => { $output };
-	(@count ($output:expr); (; $($rest:tt)*)) => { $crate::define_pio_ops!(@count ($output+1); ($($rest)*)) };
-	(@count ($output:expr); ($t:tt $($rest:tt)*)) => { $crate::define_pio_ops!(@count ($output); ($($rest)*)) };
 
 	// ----- Arguments for the repeat ops -----
 	(@rep_args mem $mem_reg:ident $($mem_stride:ident)?, $pio_reg:ident $($pio_stride:ident)?, $count_reg:ident) => {

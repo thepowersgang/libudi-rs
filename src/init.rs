@@ -1,4 +1,4 @@
-
+//! Driver initialisation (related to [crate::meta_mgmt])
 use ::core::pin::Pin;
 use ::core::future::Future;
 use ::core::task::Poll;
@@ -26,6 +26,7 @@ unsafe impl crate::async_trickery::GetCb for udi_mgmt_cb_t {
 }
 
 #[allow(non_camel_case_types)]
+/// Trait for all drivers
 pub trait Driver: 'static {
 	const MAX_ATTRS: u8;
 

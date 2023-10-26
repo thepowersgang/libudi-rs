@@ -1,3 +1,4 @@
+//! Management metalanguage
 
 pub type CbRefUsage<'a> = crate::CbRef<'a, crate::ffi::meta_mgmt::udi_usage_cb_t>;
 

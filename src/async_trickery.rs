@@ -1,4 +1,4 @@
-//!
+//! Trickery to convert between completion-based async and polling async
 //!
 //!
 //

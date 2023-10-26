@@ -1,4 +1,4 @@
-//!
+//! Bus Bridge metalanguage (Phsical I/O Specification)
 //! 
 //! 
 use crate::ffi::meta_bus::udi_bus_device_ops_t;
@@ -8,6 +8,7 @@ pub type CbRefBind<'a> = crate::CbRef<'a, udi_bus_bind_cb_t>;
 pub type CbRefIntrAttach<'a> = crate::CbRef<'a, crate::ffi::meta_intr::udi_intr_attach_cb_t>;
 pub type CbRefIntrDetach<'a> = crate::CbRef<'a, crate::ffi::meta_intr::udi_intr_detach_cb_t>;
 
+/// Trait for a device on a bus
 pub trait BusDevice: 'static {
     async_method!(fn bus_bind_ack(&'a mut self,
         cb: crate::CbRef<'a, udi_bus_bind_cb_t>,
@@ -76,7 +77,7 @@ impl udi_bus_device_ops_t {
         rv
     }
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
-    /// SAFETY: The scratch size must be >= value returned by [scratch_requirement]
+    /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
     pub const unsafe fn for_driver<T: BusDevice>() -> Self {
         return udi_bus_device_ops_t {
             channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerBusDevice>,

@@ -1,6 +1,6 @@
-///! Control blocks
-///!
-///! Control blocks are the core context for UDI calls between drivers and the environment or each other
+//! Control blocks
+//!
+//! Control blocks are the core context for UDI calls between drivers and the environment or each other
 use crate::ffi::udi_channel_t;
 
 /// A reference to a Cb (for async calls)
@@ -67,6 +67,7 @@ impl<T> ::core::ops::DerefMut for CbHandle<T> {
     }
 }
 
+/// Trait covering the definition of a Control Block (in [crate::define_driver])
 pub trait CbDefinition {
     const INDEX: u8;
     type Cb;

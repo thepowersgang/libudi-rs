@@ -1,3 +1,4 @@
+//! Interrupt metalanguage (Phsical I/O Specification)
 use crate::ffi::meta_intr::{udi_intr_event_cb_t, udi_intr_attach_cb_t};
 
 
@@ -40,6 +41,8 @@ impl crate::ffi::meta_intr::udi_intr_handler_ops_t {
         let v = crate::const_max(v, intr_event_ind_op::task_size::<T>());
         v
     }
+    /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
+    /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
     pub const unsafe fn for_driver<T: IntrHandler>() -> Self {
         Self {
             channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerIntrHandler>,

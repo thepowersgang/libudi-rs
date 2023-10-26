@@ -15,7 +15,7 @@ pub struct udi_limits_t
 	pub max_safe_alloc: udi_size_t,
 	pub max_trace_log_formatted_len: udi_size_t,
 	pub max_instance_attr_len: udi_size_t,
-	/// Minumum time difference (in nanoseconds between unique values returned by [udi_time_current]
+	/// Minumum time difference (in nanoseconds between unique values returned by `udi_time_current``
 	pub min_curtime_res: u32,
 	pub min_timer_res: u32,
 }
@@ -35,8 +35,8 @@ pub struct udi_primary_init_t
 #[repr(C)]
 pub struct udi_secondary_init_t
 {
-	region_idx: udi_index_t,
-	rdata_size: udi_size_t,
+	pub region_idx: udi_index_t,
+	pub rdata_size: udi_size_t,
 }
 #[repr(C)]
 pub struct udi_ops_init_t

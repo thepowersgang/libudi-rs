@@ -1,26 +1,41 @@
+//! Buffers (`udi_buf_t`)
+//! 
+//! 
 use crate::ffi::udi_buf_t;
 
+/// An owning buffer handle
 pub struct Handle(*mut udi_buf_t);
 impl Handle
 {
+    /// Construct a buffer handle from a raw pointer
+    /// 
     /// UNSAFE: Caller must ensure either ownership or mutable access to `raw` (it can be null)
     pub unsafe fn from_raw(raw: *mut udi_buf_t) -> Self {
         Self(raw)
     }
+    /// Steal a buffer pointer from some other location
+    /// 
+    /// UNSAFE: Caller must ensure either ownership or mutable access to `raw` (it can be null)
     pub unsafe fn take_raw(raw: &mut *mut udi_buf_t) -> Self {
         Self(::core::ptr::replace(raw, ::core::ptr::null_mut()))
     }
+    /// Update this handle from a raw pointer
+    /// 
+    /// UNSAFE: Caller must ensure either ownership or mutable access to `raw` (it can be null)
     pub unsafe fn update_from_raw(&mut self, raw: *mut udi_buf_t) {
         self.0 = raw;
     }
+    /// Obtain the raw pointer
     pub fn to_raw(&mut self) -> *mut udi_buf_t {
         self.0
     }
+    /// Obtain the raw pointer (moving)
     pub fn into_raw(self) -> *mut udi_buf_t {
         let Handle(rv) = self;
         rv
     }
 
+    /// Get the buffer length
     pub fn len(&self) -> usize {
         if self.0.is_null() {
             0
@@ -31,7 +46,7 @@ impl Handle
         }
     }
 
-    /// Construct a new buffer
+    /// Construct a new buffer using provided data
     pub fn new<'d>(
     	cb: crate::CbRef<crate::ffi::udi_cb_t>,
         init_data: &'d [u8],
@@ -121,10 +136,12 @@ impl Handle
             )
     }
 
-    pub fn free(self)
+    /// Consume and free this buffer
+    pub fn free(mut self)
     {
         if !self.0.is_null() {
             unsafe { crate::ffi::buf::udi_buf_free(self.0); }
+            self.0 = ::core::ptr::null_mut();
         }
     }
 

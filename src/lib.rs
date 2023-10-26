@@ -1,6 +1,6 @@
+//! UDI - Uniform Driver Interface
 //!
-//!
-//!
+//! An absolutely evil attempt at making bindings for the various UDI interfaces 
 #![no_std]
 #![feature(waker_getters)]	// For evil with contexts
 #![feature(const_trait_impl)]
@@ -67,11 +67,14 @@ pub fn get_gcb_context() -> impl ::core::future::Future<Output=*mut ::core::ffi:
 	async_trickery::with_cb::<ffi::udi_cb_t,_,_>(|cb| cb.context)
 }
 
+/// HELPER: A constant `max` operation on `usize`
 pub const fn const_max(a: usize, b: usize) -> usize {
 	if a > b { a } else { b }
 }
 
-/// SAFETY: The pointed-to data must be valid as [udi_ops_init_t]
+/// Trait for `udi_*_ops_t` types
+/// 
+/// SAFETY: The pointed-to data must be valid as [ffi::init::udi_ops_init_t]
 pub unsafe trait Ops {
 	const OPS_NUM: ffi::udi_index_t;
 }
@@ -81,6 +84,11 @@ pub unsafe trait Wrapper<Inner> {
 }
 
 /// Define a set of wrapper types for another type, to separate trait impls
+/// 
+/// ```rust
+/// struct MyType;
+/// define_wrappers!(MyType: MyType1 MyType2)
+/// ```
 #[macro_export]
 macro_rules! define_wrappers {
 	($root_type:ty : $($name:ident)+) => {
@@ -111,6 +119,16 @@ where
 }
 
 /// Define a UDI driver
+/// 
+/// ```rust
+/// struct Driver;
+/// define_driver!{Driver;
+/// ops: {
+/// 	},
+/// cbs: {
+///		}
+/// }
+/// ```
 #[macro_export]
 macro_rules! define_driver
 {
