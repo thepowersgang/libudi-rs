@@ -26,4 +26,9 @@ name = "udi-net_ne2000"
 version = "0.0.0"
 dependencies = [
  "udi",
+ "udiprops_parse",
 ]
+
+[[package]]
+name = "udiprops_parse"
+version = "0.0.1"

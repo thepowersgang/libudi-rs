@@ -45,7 +45,9 @@ fn main() {
         meta_idx: 0,
     };
     unsafe {
+        cb.gcb.scratch = ::libc::malloc(driver_module.pri_init.mgmt_scratch_requirement);
         (driver_module.pri_init.mgmt_ops.usage_ind_op)(&mut cb, 3 /*UDI_RESOURCES_NORMAL*/);
+        ::libc::free(cb.gcb.scratch);
     }
     // - Initialise secondary regions (bind them to the primary region)
     #[cfg(false_)]
