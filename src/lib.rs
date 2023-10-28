@@ -193,6 +193,8 @@ macro_rules! define_driver
 				//$( $crate::make_cb_init(CbList::$cb_name as _, $cb_meta, Cbs::$cb_name::Cb::META_CB_NUM, _STATE_SIZE, None), )*
 				$crate::ffi::init::udi_cb_init_t::end_of_list()
 			].as_ptr(),
+			gcb_init_list: ::core::ptr::null(),
+			cb_select_list: ::core::ptr::null(),
 			};
 	};
 

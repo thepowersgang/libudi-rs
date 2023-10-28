@@ -18,13 +18,13 @@ fn main() {
 
     // - Create primary region
     let mut instance = Box::new(DriverInstance {
-        regions: vec![DriverRegion {
-            context: unsafe {
-                let v = ::libc::malloc( driver_module.pri_init.rdata_size ) as *mut ::udi::ffi::init::udi_init_context_t;
-                //(*v).
-                v
-                },
-            }],
+        regions: {
+            let mut v = vec![DriverRegion::new(driver_module.pri_init.rdata_size)];
+            for secondary_region in driver_module.sec_init {
+                v.push(DriverRegion::new(secondary_region.rdata_size));
+            }
+            v
+            },
         management_channel: ::core::ptr::null_mut(),
         cur_state: DriverState::UsageInd,
     });
@@ -32,7 +32,11 @@ fn main() {
     instance.management_channel = unsafe {
         unsafe extern "C" fn usage_res(cb: *mut ::udi::ffi::meta_mgmt::udi_usage_cb_t) {
             // Update state.
-            todo!();
+            let i = (*cb).gcb.context as *mut DriverInstance;
+            match (*i).cur_state {
+            DriverState::UsageInd => {},
+            _ => {},
+            }
         }
         unsafe extern "C" fn devmgmt_ack(cb: *mut ::udi::ffi::meta_mgmt::udi_mgmt_cb_t, _: u8, _: u32) {
             todo!();
@@ -50,7 +54,7 @@ fn main() {
             final_cleanup_ack_op: final_cleanup_ack,
         };
         let ch = channels::allocate_channel(instance.as_ref() as *const _ as *mut _, &MA_OPS, 0);
-        channels::bind_channel_other(ch, instance.regions[0].context as *mut _, driver_module.pri_init.mgmt_ops, driver_module.pri_init.mgmt_scratch_requirement);
+        channels::bind_channel_other(ch, &driver_module, instance.regions[0].context as *mut _, driver_module.pri_init.mgmt_ops, driver_module.pri_init.mgmt_scratch_requirement);
         ch
     };
     // - call `udi_usage_ind`
@@ -66,36 +70,45 @@ fn main() {
         meta_idx: 0,
     };
     unsafe {
-        udi_impl::meta_mgmt::udi_usage_ind(&mut cb, 3 /*UDI_RESOURCES_NORMAL*/);
+        (driver_module.pri_init.mgmt_ops.usage_ind_op)(&mut cb, 3 /*UDI_RESOURCES_NORMAL*/);
+        //udi_impl::meta_mgmt::udi_usage_ind(&mut cb, 3 /*UDI_RESOURCES_NORMAL*/);
     }
-    // - Initialise secondary regions
+    // - Initialise secondary regions (bind them to the primary region)
 }
 
 struct DriverModule<'a> {
     pri_init: &'a ::udi::ffi::init::udi_primary_init_t,
     sec_init: &'a [::udi::ffi::init::udi_secondary_init_t],
-    // CB list
-    cbs: &'a [::udi::ffi::init::udi_cb_init_t],
-    // Ops list
     ops: &'a [::udi::ffi::init::udi_ops_init_t],
+    cbs: &'a [::udi::ffi::init::udi_cb_init_t],
 }
 impl<'a> DriverModule<'a> {
     unsafe fn new(init: &'a ::udi::ffi::init::udi_init_t) -> Self {
-        let sec_init = if !init.secondary_init_list.is_null() {
-            terminated_list(init.secondary_init_list, |si| si.region_idx == 0)
-        }
-        else {
-            &[]
-        };
         Self {
             pri_init: init.primary_init_info.expect(""),
-            sec_init,
-            cbs: terminated_list(init.cb_init_list, |cbi| cbi.cb_idx == 0),
+            sec_init: terminated_list(init.secondary_init_list, |si| si.region_idx == 0),
             ops: terminated_list(init.ops_init_list, |v| v.ops_idx == 0),
+            cbs: terminated_list(init.cb_init_list, |cbi: &udi::ffi::init::udi_cb_init_t| cbi.cb_idx == 0),
         }
     }
+
+    fn get_ops_init(&self, ops_idx: ::udi::ffi::udi_index_t) -> Option<&::udi::ffi::init::udi_ops_init_t> {
+        self.ops.iter()
+            .find(|v| v.ops_idx == ops_idx)
+    }
+    fn get_cb_init(&self, cb_idx: ::udi::ffi::udi_index_t) -> Option<&::udi::ffi::init::udi_cb_init_t> {
+        self.cbs.iter()
+            .find(|v| v.cb_idx == cb_idx)
+    }
 }
+/// Get a slice from a NUL-terminated list
+/// 
+/// SAFETY: The caller attests that the input pointer is either NULL, or points to a list that ends with an
+/// item that causes `cb` to return `true`
 unsafe fn terminated_list<'a, T: 'a>(input: *const T, cb: impl Fn(&T)->bool) -> &'a [T] {
+    if input.is_null() {
+        return &[];
+    }
     let mut p = input;
     let mut count = 0;
     while ! cb(&*p) {
@@ -121,4 +134,16 @@ enum DriverState {
 struct DriverRegion
 {
     context: *mut ::udi::ffi::init::udi_init_context_t,
+}
+impl DriverRegion
+{
+    fn new(rdata_size: usize) -> DriverRegion {
+        DriverRegion {
+            context: unsafe {
+                let v = ::libc::malloc(rdata_size) as *mut ::udi::ffi::init::udi_init_context_t;
+                //(*v).
+                v
+                },
+        }
+    }
 }

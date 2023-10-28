@@ -19,9 +19,9 @@ pub struct udi_mgmt_ops_t
 #[repr(C)]
 pub struct udi_usage_cb_t
 {
-	pub gcb:	udi_cb_t,
+	pub gcb: udi_cb_t,
 	pub trace_mask:	super::log::udi_trevent_t,
-	pub meta_idx:	udi_index_t,
+	pub meta_idx: udi_index_t,
 }
 #[repr(C)]
 pub struct udi_enumerate_cb_t

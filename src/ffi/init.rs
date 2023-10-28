@@ -28,7 +28,9 @@ pub struct udi_primary_init_t
 	pub mgmt_scratch_requirement: super::udi_size_t,
 	pub enumeration_attr_list_length: u8,
 	pub rdata_size: super::udi_size_t,
+	/// Number of bytes for each call to `udi_enumerate_req`
 	pub child_data_size: super::udi_size_t,
+	/// Number of path handles from each parent
 	pub per_parent_paths: u8,
 }
 
@@ -84,12 +86,29 @@ impl udi_cb_init_t {
 }
 
 #[repr(C)]
+pub struct udi_cb_select_t
+{
+	pub ops_idx: udi_index_t,
+	pub cb_idx: udi_index_t,
+}
+
+#[repr(C)]
+pub struct udi_gcb_init_t
+{
+	pub cb_idx: udi_index_t,
+	pub scratch_requirement: udi_size_t,
+}
+
+#[repr(C)]
 pub struct udi_init_t
 {
+	// Can be NULL for secondary modules
 	pub primary_init_info: Option<&'static udi_primary_init_t>,
 	// Sequence terminated by `region_idx=0`, can be null
 	pub secondary_init_list: *const udi_secondary_init_t,
 	pub ops_init_list: *const udi_ops_init_t,
 	pub cb_init_list: *const udi_cb_init_t,
+	pub gcb_init_list: *const udi_gcb_init_t,
+	pub cb_select_list: *const udi_cb_select_t,
 }
 unsafe impl Sync for udi_init_t {}

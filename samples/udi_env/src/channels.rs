@@ -21,7 +21,14 @@ pub fn allocate_channel<O: MetalangOps>(context: *mut ::udi::ffi::c_void, ops: &
     let handle = Box::into_raw(handle);
     handle as *mut _
 }
-pub unsafe fn bind_channel_other<O: MetalangOps>(ch: ::udi::ffi::udi_channel_t, context: *mut ::udi::ffi::c_void, ops: &'static O, scratch_requirement: usize) {
+pub unsafe fn bind_channel_other<O: MetalangOps>(
+    ch: ::udi::ffi::udi_channel_t,
+    driver_module: *const crate::DriverModule,
+    context: *mut ::udi::ffi::c_void,
+    ops: &'static O,
+    scratch_requirement: usize
+)
+{
     assert!(ch as usize & 1 == 0);
     let inner = &mut *(ch as *mut ChannelInner);
     let side = &mut inner.sides[1];
@@ -55,4 +62,8 @@ pub unsafe fn prepare_cb_for_call<O: MetalangOps>(cb: &mut ::udi::ffi::udi_cb_t)
     else {
         &*(ch_side.ops as *const O)
     }
+}
+
+pub unsafe fn get_driver_module(ch: &::udi::ffi::udi_channel_t) -> &crate::DriverModule {
+    todo!()
 }

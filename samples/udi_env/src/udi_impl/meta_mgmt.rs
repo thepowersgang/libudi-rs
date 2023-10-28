@@ -15,11 +15,9 @@ impl crate::channels::MetalangOps for udi_mgmt_ops_t {
 impl crate::channels::MetalangOps for ManagementAgentOps {
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn udi_usage_ind(cb: *mut udi_usage_cb_t, resource_level: u8)
-{
-    let ops = crate::channels::prepare_cb_for_call::<udi_mgmt_ops_t>(&mut (*cb).gcb);
-    (ops.usage_ind_op)(cb, resource_level);
+dispatch_call!{
+    pub fn udi_usage_ind(cb: *mut udi_usage_cb_t, resource_level: u8)
+        => udi_mgmt_ops_t:usage_ind_op;
 }
 #[no_mangle]
 pub unsafe extern "C" fn udi_usage_res(cb: *mut udi_usage_cb_t)

@@ -6,4 +6,5 @@ use ::udi::ffi::{udi_cb_t, udi_channel_t};
 #[no_mangle]
 unsafe extern "C" fn udi_cb_alloc(callback: udi_cb_alloc_call_t, gcb: *mut udi_cb_t, cb_idx: udi_index_t, default_channel: udi_channel_t)
 {
+    crate::channels::get_driver_module(&(*gcb).channel).get_cb_init(cb_idx);
 }

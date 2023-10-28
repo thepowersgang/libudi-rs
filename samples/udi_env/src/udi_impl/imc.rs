@@ -9,7 +9,7 @@ use ::udi::ffi::udi_status_t;
 
 #[no_mangle]
 unsafe extern "C" fn udi_channel_anchor(
-    cb: udi_channel_anchor_call_t,
+    callback: udi_channel_anchor_call_t,
     gcb: *mut udi_cb_t,
     channel: udi_channel_t,
     ops_idx: udi_index_t,
@@ -17,11 +17,13 @@ unsafe extern "C" fn udi_channel_anchor(
 )
 {
     // Get the driver instance from the gcb
+    crate::channels::get_driver_module(&(*gcb).channel).get_ops_init(ops_idx);
     //crate::channels::bind_channel(channel, channel_context, ops_idx);
+    todo!();
 }
 #[no_mangle]
 unsafe extern "C" fn udi_channel_spawn(
-    cb: udi_channel_spawn_call_t,
+    callback: udi_channel_spawn_call_t,
     gcb: *mut udi_cb_t,
     channel: udi_channel_t,
     spawn_idx: udi_index_t,
@@ -29,6 +31,9 @@ unsafe extern "C" fn udi_channel_spawn(
     channel_context: *mut c_void,
 )
 {
+    // Get the driver instance from the gcb
+    crate::channels::get_driver_module(&(*gcb).channel).get_ops_init(ops_idx);
+
     // TODO: Create the channel, and then call the callback
     //crate::channels::allocate_channel(channel_context, ops, scratch_requirement)
     todo!();

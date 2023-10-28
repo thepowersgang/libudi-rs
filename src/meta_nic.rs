@@ -419,7 +419,7 @@ pub mod ffi {
         pub fn udi_nd_enable_req(cb: *mut udi_nic_cb_t);
         pub fn udi_nsr_enable_ack(cb: *mut udi_nic_cb_t, status: udi_status_t);
         pub fn udi_nd_disable_req(cb: *mut udi_nic_cb_t);
-        pub fn udi_nsr_disable_ack(cb: *mut udi_nic_cb_t, status: udi_status_t);
+        //pub fn udi_nsr_disable_ack(cb: *mut udi_nic_cb_t, status: udi_status_t);
         pub fn udi_nd_ctrl_req(cb: *mut udi_nic_ctrl_cb_t);
         pub fn udi_nsr_ctrl_ack(cb: *mut udi_nic_ctrl_cb_t, status: udi_status_t);
         pub fn udi_nsr_status_ind(cb: *mut udi_nic_status_cb_t);
