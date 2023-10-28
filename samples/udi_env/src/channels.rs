@@ -29,6 +29,7 @@ pub unsafe fn bind_channel_other<O: MetalangOps>(
     scratch_requirement: usize
 )
 {
+    assert!(!ch.is_null(), "Channel is NULL?");
     assert!(ch as usize & 1 == 0);
     let inner = &mut *(ch as *mut ChannelInner);
     let side = &mut inner.sides[1];
@@ -46,6 +47,7 @@ pub unsafe fn prepare_cb_for_call<O: MetalangOps>(cb: &mut ::udi::ffi::udi_cb_t)
 {
     unsafe fn reverse_and_get(src: &mut ::udi::ffi::udi_channel_t) -> &ChannelInnerSide {
         let (ptr,is_b) = ((*src as usize & !1) as *const ChannelInner, *src as usize & 1 != 0);
+        assert!(!ptr.is_null(), "Channel is NULL?");
         *src = (ptr as usize | !is_b as usize) as ::udi::ffi::udi_channel_t;
         &(*ptr).sides[1 - is_b as usize]
     }

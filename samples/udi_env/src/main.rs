@@ -17,53 +17,28 @@ fn main() {
     let driver_module = unsafe { DriverModule::new(&driver::udi_init_info) };
 
     // - Create primary region
-    let mut instance = Box::new(DriverInstance {
+    let instance = Box::new(DriverInstance {
+        //module: &driver_module,
         regions: {
-            let mut v = vec![DriverRegion::new(driver_module.pri_init.rdata_size)];
+            let mut v = vec![DriverRegion::new(0, driver_module.pri_init.rdata_size)];
             for secondary_region in driver_module.sec_init {
-                v.push(DriverRegion::new(secondary_region.rdata_size));
+                v.push(DriverRegion::new(secondary_region.region_idx, secondary_region.rdata_size));
             }
             v
             },
-        management_channel: ::core::ptr::null_mut(),
-        cur_state: DriverState::UsageInd,
     });
-    // - Create the primary mangement channel
-    instance.management_channel = unsafe {
-        unsafe extern "C" fn usage_res(cb: *mut ::udi::ffi::meta_mgmt::udi_usage_cb_t) {
-            // Update state.
-            let i = (*cb).gcb.context as *mut DriverInstance;
-            match (*i).cur_state {
-            DriverState::UsageInd => {},
-            _ => {},
-            }
-        }
-        unsafe extern "C" fn devmgmt_ack(cb: *mut ::udi::ffi::meta_mgmt::udi_mgmt_cb_t, _: u8, _: u32) {
-            todo!();
-        }
-        unsafe extern "C" fn enumerate_ack(cb: *mut ::udi::ffi::meta_mgmt::udi_enumerate_cb_t, _: u8, _: u8) {
-            todo!();
-        }
-        unsafe extern "C" fn final_cleanup_ack(cb: *mut ::udi::ffi::meta_mgmt::udi_mgmt_cb_t) {
-            todo!();
-        }
-        static MA_OPS: udi_impl::meta_mgmt::ManagementAgentOps = udi_impl::meta_mgmt::ManagementAgentOps {
-            usage_res_op: usage_res,
-            devmgmt_ack_op: devmgmt_ack,
-            enumerate_ack_op: enumerate_ack,
-            final_cleanup_ack_op: final_cleanup_ack,
-        };
-        let ch = channels::allocate_channel(instance.as_ref() as *const _ as *mut _, &MA_OPS, 0);
-        channels::bind_channel_other(ch, &driver_module, instance.regions[0].context as *mut _, driver_module.pri_init.mgmt_ops, driver_module.pri_init.mgmt_scratch_requirement);
-        ch
-    };
     // - call `udi_usage_ind`
+    let mut state = InstanceInitState {
+        instance: &instance,
+        state: DriverState::UsageInd
+        };
     let mut cb = ::udi::ffi::meta_mgmt::udi_usage_cb_t {
         gcb: ::udi::ffi::udi_cb_t {
-            channel: instance.management_channel,
-            context: ::core::ptr::null_mut(),
+            channel: ::core::ptr::null_mut(),
+            //channel: channels::allocate_empty_channel(&driver_module),
+            context: instance.regions[0].context,
             scratch: ::core::ptr::null_mut(),
-            initiator_context: instance.as_ref() as *const _ as *mut _,
+            initiator_context: &mut state as *mut _ as *mut ::udi::ffi::c_void,
             origin: ::core::ptr::null_mut(),
         },
         trace_mask: 0,
@@ -71,9 +46,23 @@ fn main() {
     };
     unsafe {
         (driver_module.pri_init.mgmt_ops.usage_ind_op)(&mut cb, 3 /*UDI_RESOURCES_NORMAL*/);
-        //udi_impl::meta_mgmt::udi_usage_ind(&mut cb, 3 /*UDI_RESOURCES_NORMAL*/);
     }
     // - Initialise secondary regions (bind them to the primary region)
+    #[cfg(false_)]
+    for r in driver_module.sec_init {
+        let scratch_requirement = match driver_module.get_cb_init(cb_idx)
+            {
+            None => panic!(""),
+            Some(v) => v.scratch_requirement,
+            };
+        let ops_pri = match driver_module.get_ops_init(pri_ops_idx)
+            {
+            None => panic!(""),
+            Some(v) => v.ops_vector,
+            };
+        channels::allocate_channel(instance.regions[0].context, ops_pri, scratch_requirement);
+    }
+    // - Bind to the parent driver
 }
 
 struct DriverModule<'a> {
@@ -85,7 +74,7 @@ struct DriverModule<'a> {
 impl<'a> DriverModule<'a> {
     unsafe fn new(init: &'a ::udi::ffi::init::udi_init_t) -> Self {
         Self {
-            pri_init: init.primary_init_info.expect(""),
+            pri_init: init.primary_init_info.expect("No primary_init_info for primary module"),
             sec_init: terminated_list(init.secondary_init_list, |si| si.region_idx == 0),
             ops: terminated_list(init.ops_init_list, |v| v.ops_idx == 0),
             cbs: terminated_list(init.cb_init_list, |cbi: &udi::ffi::init::udi_cb_init_t| cbi.cb_idx == 0),
@@ -121,8 +110,23 @@ unsafe fn terminated_list<'a, T: 'a>(input: *const T, cb: impl Fn(&T)->bool) -> 
 struct DriverInstance
 {
     regions: Vec<DriverRegion>,
-    management_channel: ::udi::ffi::udi_channel_t,
-    cur_state: DriverState,
+    //management_channel: ::udi::ffi::udi_channel_t,
+    //cur_state: DriverState,
+}
+struct InstanceInitState<'a> {
+    instance: &'a DriverInstance,
+    state: DriverState,
+}
+impl InstanceInitState<'_> {
+    fn usage_ind(&mut self) {
+        match self.state
+        {
+        DriverState::UsageInd => {
+            self.state = DriverState::SecondaryBind;
+            },
+        _ => {},
+        }
+    }
 }
 enum DriverState {
     UsageInd,
@@ -133,16 +137,18 @@ enum DriverState {
 }
 struct DriverRegion
 {
-    context: *mut ::udi::ffi::init::udi_init_context_t,
+    context: *mut ::udi::ffi::c_void,
 }
 impl DriverRegion
 {
-    fn new(rdata_size: usize) -> DriverRegion {
+    fn new(region_index: ::udi::ffi::udi_index_t, rdata_size: usize) -> DriverRegion {
         DriverRegion {
             context: unsafe {
-                let v = ::libc::malloc(rdata_size) as *mut ::udi::ffi::init::udi_init_context_t;
-                //(*v).
-                v
+                let v: *mut udi::ffi::init::udi_init_context_t = ::libc::malloc(rdata_size) as *mut ::udi::ffi::init::udi_init_context_t;
+                (*v).region_index = region_index;
+                (*v).limits.max_safe_alloc = 0x1000;
+                (*v).limits.max_legal_alloc = 1 << 20;
+                v as *mut ::udi::ffi::c_void
                 },
         }
     }
