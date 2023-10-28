@@ -1,4 +1,10 @@
+//!
+//! 
+//! 
+
+pub use self::parsed::Entry;
 pub mod parsed;
+
 
 /// Load from `udiprops.txt`
 pub fn load_from_file(path: &::std::path::Path) -> ::std::io::Result< Vec<String> >
@@ -50,6 +56,39 @@ pub fn load_from_file(path: &::std::path::Path) -> ::std::io::Result< Vec<String
     Ok( rv )
 }
 
+/// An iterator over a compacted encoding stored in `.udiprops`
+#[derive(Clone)]
+pub struct EncodedIter<'a>(&'a [u8]);
+impl<'a> ::core::iter::Iterator for EncodedIter<'a>
+{
+    type Item = parsed::Entry<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Ignore/consume any blank lines
+        // - They're valid, but unlikely with the encoder in this library.
+        // - Also, the `len..` below doesn't consume the NUL byte
+        while let Some((&0,rest)) = self.0.split_first() {
+            self.0 = rest;
+        }
+
+        // Once the slice is empty, we've reached the end
+        if self.0.is_empty() {
+            None
+        }
+        else {
+            let len = self.0.iter().position(|v| *v == 0).unwrap_or(self.0.len());
+            let bytes = &self.0[..len];
+            self.0 = &self.0[len..];
+            
+            let str = ::core::str::from_utf8(bytes).expect("Invalid UTF-8 in udiprops section?!");
+            Some( parsed::Entry::parse_line(str).expect("Malformed line in udiprops section") )
+        }
+    }
+}
+/// Load from a blob of memory (`.udiprops` section)
+pub fn load_from_raw_section(data: &[u8]) -> EncodedIter {
+    EncodedIter(data)
+}
 
 /// Load `udiprops.txt` and emit `$OUT_DIR/udiprops.rs`
 pub fn build_script()
@@ -92,12 +131,15 @@ pub fn build_script()
     .flat_map(|v| v.as_bytes().iter().copied().chain(::std::iter::once(0)))
     .chain(::std::iter::once(0))
     .collect();
-	writeln!(outfp, "#[allow(non_upper_case_globals)]").unwrap();
+	writeln!(outfp, "#[allow(non_upper_case_globals,dead_code)]").unwrap();
     writeln!(outfp, "#[link_section=\".udiprops\"]").unwrap();
-    writeln!(outfp, "pub static udiprops: [u8; {}] = *b\"{}\";",
-        udiprops_encoded.len(),
-        ByteStrDump(&udiprops_encoded)
-        ).unwrap();
+    writeln!(outfp, "#[export_name=\"libudi_rs_udiprops\"]").unwrap();
+    writeln!(outfp, "pub static udiprops: [u8; {}] = *b\"{}\";", udiprops_encoded.len(), ByteStrDump(&udiprops_encoded)).unwrap();
+    // HACK for testing
+    writeln!(outfp, "#[export_name=\"libudi_rs_udiprops_len\"]").unwrap();
+    writeln!(outfp, "pub static _LEN: usize = {};", udiprops_encoded.len()).unwrap();
+
+
     struct ByteStrDump<'a>(&'a [u8]);
     impl ::core::fmt::Display for ByteStrDump<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

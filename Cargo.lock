@@ -19,6 +19,7 @@ dependencies = [
  "libc",
  "udi",
  "udi-net_ne2000",
+ "udiprops_parse",
 ]
 
 [[package]]

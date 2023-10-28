@@ -10,7 +10,7 @@ struct ChannelInnerSide {
     ops: ::udi::ffi::udi_ops_vector_t,
 }
 
-pub fn allocate_channel<O: MetalangOps>(context: *mut ::udi::ffi::c_void, ops: &'static O, scratch_requirement: usize) -> ::udi::ffi::udi_channel_t
+pub fn allocate_channel<O: ?Sized + MetalangOps>(context: *mut ::udi::ffi::c_void, ops: &'static O, scratch_requirement: usize) -> ::udi::ffi::udi_channel_t
 {
     let handle = Box::new(ChannelInner {
         sides: [
@@ -21,7 +21,7 @@ pub fn allocate_channel<O: MetalangOps>(context: *mut ::udi::ffi::c_void, ops: &
     let handle = Box::into_raw(handle);
     handle as *mut _
 }
-pub unsafe fn bind_channel_other<O: MetalangOps>(
+pub unsafe fn bind_channel_other<O: ?Sized + MetalangOps>(
     ch: ::udi::ffi::udi_channel_t,
     driver_module: *const crate::DriverModule,
     context: *mut ::udi::ffi::c_void,

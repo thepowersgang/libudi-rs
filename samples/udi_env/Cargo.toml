@@ -6,4 +6,5 @@ edition = "2021"
 [dependencies]
 libc = "0.2.149"
 udi = { path = "../../" }
+udiprops_parse = { path = "../../udi_udiprops_parse" }
 udi-net_ne2000 = { path = "../net_ne2000" }
