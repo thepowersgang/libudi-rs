@@ -151,6 +151,7 @@ macro_rules! define_driver
 			_Zero,
 			$($cb_name,)*
 		}
+		#[allow(non_snake_case)]
 		mod Cbs {
 			$(
 				pub struct $cb_name(());

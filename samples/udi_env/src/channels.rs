@@ -1,71 +1,144 @@
 
 
 struct ChannelInner {
-    sides: [ChannelInnerSide; 2],
+    spawns: ::std::sync::Mutex< ::std::collections::HashMap<u8,::udi::ffi::udi_channel_t> >,
+    sides: [::std::cell::OnceCell<ChannelInnerSide>; 2],
 }
 struct ChannelInnerSide {
+    driver_module: *const crate::DriverModule<'static>,
+    ops: &'static dyn MetalangOps,
     context: *mut ::udi::ffi::c_void,
-    scratch_requirement: usize,
-    metalang: ::std::any::TypeId,
-    ops: ::udi::ffi::udi_ops_vector_t,
 }
 
-pub fn allocate_channel<O: ?Sized + MetalangOps>(context: *mut ::udi::ffi::c_void, ops: &'static O, scratch_requirement: usize) -> ::udi::ffi::udi_channel_t
-{
-    let handle = Box::new(ChannelInner {
-        sides: [
-            ChannelInnerSide { context, scratch_requirement, metalang: ::core::any::TypeId::of::<O>(), ops: ops as *const _ as *const _ },
-            ChannelInnerSide { context, scratch_requirement: 0, metalang: ::core::any::TypeId::of::<()>(), ops: ::core::ptr::null() },
-        ]
-    });
-    let handle = Box::into_raw(handle);
-    handle as *mut _
+struct ChannelRef<'a>(&'a ChannelInner, bool);
+impl<'a> ChannelRef<'a> {
+    unsafe fn from_handle(h: ::udi::ffi::udi_channel_t) -> Self {
+        assert!(!h.is_null());
+        let (ptr,is_b) = ((h as usize & !1) as *const ChannelInner, h as usize & 1 != 0);
+        ChannelRef(&*ptr, is_b)
+    }
+    fn get_handle_reversed(&self) -> ::udi::ffi::udi_channel_t {
+        ((self.0 as *const _) as usize | (!self.1 as usize)) as *mut _
+    }
+    fn get_side(&self) -> Option<&ChannelInnerSide> {
+        self.0.sides[self.1 as usize].get()
+    }
 }
-pub unsafe fn bind_channel_other<O: ?Sized + MetalangOps>(
-    ch: ::udi::ffi::udi_channel_t,
-    driver_module: *const crate::DriverModule,
+
+
+pub unsafe fn get_driver_module(ch: &::udi::ffi::udi_channel_t) -> &crate::DriverModule {
+    let cr = ChannelRef::from_handle(*ch);
+    &*cr.get_side().unwrap().driver_module
+}
+
+/// Spawn a channel without needing a source channel
+pub fn spawn_raw() -> (::udi::ffi::udi_channel_t,::udi::ffi::udi_channel_t)
+{
+    let h = Box::into_raw(Box::new(ChannelInner {
+        spawns: Default::default(),
+        sides: Default::default(),
+        })) as ::udi::ffi::udi_channel_t;
+    (h, (h as usize | 1) as ::udi::ffi::udi_channel_t,)
+}
+/// Spawn a new channel end (matching to an existing call from the same base channel)
+pub unsafe fn spawn(
+    base_channel: ::udi::ffi::udi_channel_t,
+    spawn_idx: ::udi::ffi::udi_index_t
+) -> ::udi::ffi::udi_channel_t
+{
+    let cr = ChannelRef::from_handle(base_channel);
+    let mut spawns = cr.0.spawns.lock().unwrap();
+    if let Some(handle) = spawns.remove(&spawn_idx) {
+        handle
+    }
+    else {
+        let (rv, other_end) = spawn_raw();
+        spawns.insert(spawn_idx, other_end);
+        rv
+    }
+}
+/// Anchor a channel end
+pub unsafe fn anchor(
+    channel: ::udi::ffi::udi_channel_t,
+    driver_module: *const crate::DriverModule<'static>,
+    ops: &'static dyn MetalangOps,
     context: *mut ::udi::ffi::c_void,
-    ops: &'static O,
-    scratch_requirement: usize
 )
 {
-    assert!(!ch.is_null(), "Channel is NULL?");
-    assert!(ch as usize & 1 == 0);
-    let inner = &mut *(ch as *mut ChannelInner);
-    let side = &mut inner.sides[1];
-    assert!(side.ops.is_null());
-    side.context = context;
-    side.metalang = ::core::any::TypeId::of::<O>();
-    side.ops = ops as *const _ as *const _;
-    side.scratch_requirement = scratch_requirement;
+    let cr = ChannelRef::from_handle(channel);
+    cr.0.sides[cr.1 as usize].set(ChannelInnerSide { driver_module, context, ops }).ok().expect("Anchoring an anchored end");
 }
+
 
 pub trait MetalangOps: 'static
 {
+    fn type_name(&self) -> &'static str;
+    fn type_id(&self) -> ::core::any::TypeId;
+    fn channel_event_ind_op(&self) -> ::udi::ffi::imc::udi_channel_event_ind_op_t;
+}
+macro_rules! impl_metalang_ops_for {
+    ( $($t:ty),* ) => {
+        $(
+        impl $crate::channels::MetalangOps for $t {
+            fn type_name(&self) -> &'static str {
+                ::core::any::type_name::<Self>()
+            }
+            fn type_id(&self) -> ::core::any::TypeId {
+                ::core::any::TypeId::of::<Self>()
+            }
+            fn channel_event_ind_op(&self) -> ::udi::ffi::imc::udi_channel_event_ind_op_t {
+                self.channel_event_ind_op
+            }
+        }
+        )*
+    };
 }
 pub unsafe fn prepare_cb_for_call<O: MetalangOps>(cb: &mut ::udi::ffi::udi_cb_t) -> &O
 {
-    unsafe fn reverse_and_get(src: &mut ::udi::ffi::udi_channel_t) -> &ChannelInnerSide {
-        let (ptr,is_b) = ((*src as usize & !1) as *const ChannelInner, *src as usize & 1 != 0);
-        assert!(!ptr.is_null(), "Channel is NULL?");
-        *src = (ptr as usize | !is_b as usize) as ::udi::ffi::udi_channel_t;
-        &(*ptr).sides[1 - is_b as usize]
-    }
-
     // Get the channel currently in the cb, and reverse it
-    let ch_side = reverse_and_get(&mut (*cb).channel);
+    let ch = ChannelRef::from_handle((*cb).channel);
+    let ch_side = ch.0.sides[ch.1 as usize].get().unwrap();
+    (*cb).channel = ch.get_handle_reversed();
     // Update context and scratch
     (*cb).context = ch_side.context;
-    (*cb).scratch = ::libc::realloc((*cb).scratch, ch_side.scratch_requirement);
+    //(*cb).scratch = ::libc::realloc((*cb).scratch, ch_side.scratch_requirement);
+
+    // TODO: How is this supposed to get the right CB for the scratch requirement?
+
     // Then check that the metalanguage ops in that side matches the expectation
-    if ch_side.metalang != ::std::any::TypeId::of::<O>() {
-        panic!("Metalang mismatch: Expected {:?}, got {:?}", ch_side.metalang, ::std::any::TypeId::of::<O>());
+    if ch_side.ops.type_id() != ::std::any::TypeId::of::<O>() {
+        panic!("Metalang mismatch: Expected {:?}, got {:?}", ch_side.ops.type_name(), ::std::any::type_name::<O>());
     }
     else {
-        &*(ch_side.ops as *const O)
+        &*(ch_side.ops as *const _ as *const O)
     }
 }
 
-pub unsafe fn get_driver_module(ch: &::udi::ffi::udi_channel_t) -> &crate::DriverModule {
-    todo!()
+pub unsafe fn event_ind_bound_internal(channel: ::udi::ffi::udi_channel_t, bind_cb: *mut ::udi::ffi::udi_cb_t) {
+    event_ind(
+        channel,
+        ::udi::ffi::imc::UDI_CHANNEL_BOUND,
+        ::udi::ffi::imc::udi_channel_event_cb_t_params {
+            internal_bound: ::udi::ffi::imc::udi_channel_event_cb_t_params_internal_bound {
+                bind_cb,
+            },
+        },
+    );
+}
+unsafe fn event_ind(channel: ::udi::ffi::udi_channel_t, event: u8, params: ::udi::ffi::imc::udi_channel_event_cb_t_params) {
+    let ch = ChannelRef::from_handle(channel);
+    let side = ch.get_side().unwrap();
+    let event_ind_op = side.ops.channel_event_ind_op();
+    let mut cb = ::udi::ffi::imc::udi_channel_event_cb_t {
+        gcb: ::udi::ffi::udi_cb_t {
+            channel,
+            context: side.context,
+            scratch: ::core::ptr::null_mut(),   // TODO: How?
+            initiator_context: ::core::ptr::null_mut(),
+            origin: ::core::ptr::null_mut(),
+        },
+        event,
+        params,
+    };
+    event_ind_op(&mut cb);
 }

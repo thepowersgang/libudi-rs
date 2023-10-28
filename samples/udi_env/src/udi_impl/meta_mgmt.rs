@@ -9,9 +9,6 @@ pub struct ManagementAgentOps {
 	pub final_cleanup_ack_op: unsafe extern "C" fn (cb: *mut udi_mgmt_cb_t),
 }
 
-impl crate::channels::MetalangOps for ManagementAgentOps {
-}
-
 #[no_mangle]
 pub unsafe extern "C" fn udi_usage_res(cb: *mut udi_usage_cb_t)
 {

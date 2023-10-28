@@ -12,12 +12,9 @@ use ::udi::meta_nic::ffi::{udi_nd_ctrl_ops_t,udi_nsr_ctrl_ops_t};
 use ::udi::meta_nic::ffi::{udi_nd_tx_ops_t,udi_nsr_tx_ops_t};
 use ::udi::meta_nic::ffi::{udi_nd_rx_ops_t,udi_nsr_rx_ops_t};
 
-impl crate::channels::MetalangOps for udi_nd_ctrl_ops_t {}
-impl crate::channels::MetalangOps for udi_nsr_ctrl_ops_t {}
-impl crate::channels::MetalangOps for udi_nd_tx_ops_t {}
-impl crate::channels::MetalangOps for udi_nsr_tx_ops_t {}
-impl crate::channels::MetalangOps for udi_nd_rx_ops_t {}
-impl crate::channels::MetalangOps for udi_nsr_rx_ops_t {}
+impl_metalang_ops_for!{udi_nd_ctrl_ops_t,udi_nsr_ctrl_ops_t}
+impl_metalang_ops_for!{udi_nd_tx_ops_t, udi_nsr_tx_ops_t}
+impl_metalang_ops_for!{udi_nd_rx_ops_t, udi_nsr_rx_ops_t}
 
 dispatch_call! {
     fn udi_nd_bind_req(cb: *mut udi_nic_bind_cb_t, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)

@@ -1,4 +1,5 @@
 
+#[macro_use]
 mod channels;
 mod udi_impl;
 
@@ -58,7 +59,12 @@ fn main() {
     // - Initialise secondary regions (bind them to the primary region)
     for bind in driver_module.udiprops.clone() {
         if let ::udiprops_parse::Entry::InternalBindOps { meta_idx, region_idx, primary_ops_idx, secondary_ops_idx, bind_cb_idx } = bind {
-            let Some((ri,rgn)) = driver_module.sec_init.iter().enumerate().find(|(_,v)| v.region_idx == region_idx) else {
+            let opt_region = Iterator::zip(
+                driver_module.sec_init.iter(),
+                instance.regions[1..].iter(),
+                )
+                .find(|(v,_)| v.region_idx == region_idx);
+            let Some((_, rgn)) = opt_region else {
                 panic!("Unable to find region {} for secondary bind", region_idx);
             };
             let Some(ops_pri) = driver_module.get_ops_init(primary_ops_idx) else {
@@ -75,26 +81,13 @@ fn main() {
             assert_eq!(cb.meta_idx, meta_idx);
 
             // Spawn the channel
-            fn get_meta_ops<'a>(module: &'a DriverModule, ops: &::udi::ffi::init::udi_ops_init_t) -> &'static dyn channels::MetalangOps {
-                todo!();
+            let (channel_1, channel_2) = channels::spawn_raw();
+            unsafe {
+                channels::anchor(channel_1, &driver_module, driver_module.get_meta_ops(ops_pri), instance.regions[0].context);
+                channels::anchor(channel_2, &driver_module, driver_module.get_meta_ops(ops_sec), rgn.context);
+                channels::event_ind_bound_internal(channel_2, todo!());
             }
-            //let ch = channels::allocate_channel(instance.regions[0].context, get_meta_ops(&driver_module, ops_pri), cb.scratch_requirement);
-            //channels::bind_channel_other(ch, driver_module, instance.regions[ri].context, get_meta_ops(&driver_module, ops_sec), cb.scratch_requirement);
         }
-    }
-    #[cfg(false_)]
-    for r in driver_module.sec_init {
-        let scratch_requirement = match driver_module.get_cb_init(cb_idx)
-            {
-            None => panic!(""),
-            Some(v) => v.scratch_requirement,
-            };
-        let ops_pri = match driver_module.get_ops_init(pri_ops_idx)
-            {
-            None => panic!(""),
-            Some(v) => v.ops_vector,
-            };
-        channels::allocate_channel(instance.regions[0].context, ops_pri, scratch_requirement);
     }
     // - Bind to the parent driver
 }
@@ -124,6 +117,25 @@ impl<'a> DriverModule<'a> {
     fn get_cb_init(&self, cb_idx: ::udi::ffi::udi_index_t) -> Option<&::udi::ffi::init::udi_cb_init_t> {
         self.cbs.iter()
             .find(|v| v.cb_idx == cb_idx)
+    }
+
+    fn get_metalang(&self, des_meta_idx: ::udi::ffi::udi_index_t) -> Option<&str> {
+        for entry in self.udiprops.clone()
+        {
+            if let ::udiprops_parse::Entry::Metalang { meta_idx, interface_name } = entry {
+                if meta_idx == des_meta_idx {
+                    return Some(interface_name);
+                }
+            }
+        }
+        None
+    }
+    fn get_meta_ops(&self, ops: &::udi::ffi::init::udi_ops_init_t) -> &'static dyn channels::MetalangOps {
+        match self.get_metalang(ops.meta_idx)
+        {
+        None => panic!("Unknown meta_idx {}", ops.meta_idx),
+        Some(l) => todo!("Unknown metalang {:?}", l),
+        }
     }
 }
 /// Get a slice from a NUL-terminated list
