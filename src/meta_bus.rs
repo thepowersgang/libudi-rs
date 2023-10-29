@@ -37,6 +37,27 @@ where
     }
 }
 
+pub trait BusBridge: 'static {
+    async_method!(fn bus_bind_req(&'a mut self, cb: CbRefBind<'a>) -> () as Future_bind_req);
+    async_method!(fn bus_unbind_req(&'a mut self, cb: CbRefBind<'a>) -> () as Future_unbind_req);
+    async_method!(fn intr_attach_req(&'a mut self, cb: CbRefIntrAttach<'a>) -> () as Future_intr_attach_req);
+    async_method!(fn intr_detach_req(&'a mut self, cb: CbRefIntrDetach<'a>) -> () as Future_intr_detach_req);
+}
+struct MarkerBusBridge;
+impl<T> crate::imc::ChannelHandler<MarkerBusBridge> for T
+where
+    T: BusBridge
+{
+    fn channel_closed(&mut self) {
+    }
+    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
+        // SAFE: Trusting that this trait is only being used through proper config.
+        //unsafe {
+        //    crate::ffi::meta_bus::udi_bus_bind_req(params.parent_bound.bind_cb as *mut udi_bus_bind_cb_t);
+        //}
+    }
+}
+
 unsafe impl crate::async_trickery::GetCb for udi_bus_bind_cb_t {
     fn get_gcb(&self) -> &crate::ffi::udi_cb_t {
         &self.gcb
