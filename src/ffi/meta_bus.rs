@@ -43,8 +43,7 @@ extern "C" {
 
 impl_metalanguage!{
     static METALANG_SPEC;
-    NAME
-        meta_bridge;
+    NAME udi_bridge;
     OPS
         1 => udi_bus_device_ops_t,
         2 => udi_bus_bridge_ops_t,

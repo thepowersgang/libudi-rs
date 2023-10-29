@@ -93,9 +93,9 @@ impl ::udi::meta_bus::BusDevice for Driver
     fn bus_bind_ack<'a>(
 		&'a mut self,
 		cb: ::udi::meta_bus::CbRefBind<'a>,
-		_dma_constraints: udi::ffi::physio::udi_dma_constraints_t,
-		_preferred_endianness: bool,
-		_status: udi::ffi::udi_status_t
+		_dma_constraints: ::udi::ffi::physio::udi_dma_constraints_t,
+		_preferred_endianness: ::udi::meta_bus::PreferredEndianness,
+		_status: ::udi::ffi::udi_status_t
 	) -> Self::Future_bind_ack<'a> {
 		async move {
 			let pio_map = |trans_list| ::udi::pio::map(cb.gcb(), 0/*UDI_PCI_BAR_0*/, 0x00,0x20, trans_list, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0);

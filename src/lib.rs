@@ -146,8 +146,24 @@ where
 #[macro_export]
 macro_rules! define_driver
 {
+
 	(
 		$driver:path;
+		ops: {
+			$($op_name:ident: Meta=$op_meta:expr, $op_op:path $(: $wrapper:ty)?),*$(,)?
+		},
+		cbs: {
+			$($cb_name:ident: Meta=$cb_meta:expr, $cb_ty:path),*$(,)?
+		}
+	) => {
+		$crate::define_driver!{
+			$driver as udi_init_info;
+			ops: { $($op_name: Meta=$op_meta, $op_op $(: $wrapper)?),* },
+			cbs: { $($cb_name: Meta=$cb_meta, $cb_ty ),* }
+		}
+	};
+	(
+		$driver:path as $symname:ident;
 		ops: {
 			$($op_name:ident: Meta=$op_meta:expr, $op_op:path $(: $wrapper:ty)?),*$(,)?
 		},
@@ -184,7 +200,7 @@ macro_rules! define_driver
 			v
 			};
 		#[no_mangle]
-		pub static udi_init_info: $crate::ffi::init::udi_init_t = $crate::ffi::init::udi_init_t {
+		pub static $symname: $crate::ffi::init::udi_init_t = $crate::ffi::init::udi_init_t {
 			primary_init_info: Some(&$crate::ffi::init::udi_primary_init_t {
 					mgmt_ops: unsafe { &$crate::ffi::meta_mgmt::udi_mgmt_ops_t::for_driver::<Driver>() },
 					mgmt_op_flags: [0,0,0,0].as_ptr(),

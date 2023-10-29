@@ -9,12 +9,18 @@ pub type CbRefBind<'a> = crate::CbRef<'a, udi_bus_bind_cb_t>;
 pub type CbRefIntrAttach<'a> = crate::CbRef<'a, crate::ffi::meta_intr::udi_intr_attach_cb_t>;
 pub type CbRefIntrDetach<'a> = crate::CbRef<'a, crate::ffi::meta_intr::udi_intr_detach_cb_t>;
 
+pub enum PreferredEndianness {
+    Any,
+    Little,
+    Big,
+}
+
 /// Trait for a device on a bus
 pub trait BusDevice: 'static {
     async_method!(fn bus_bind_ack(&'a mut self,
         cb: crate::CbRef<'a, udi_bus_bind_cb_t>,
         dma_constraints: crate::ffi::physio::udi_dma_constraints_t,
-        preferred_endianness: bool,
+        preferred_endianness: PreferredEndianness,
         status: crate::ffi::udi_status_t
         )->crate::Result<()> as Future_bind_ack
     );
@@ -39,9 +45,9 @@ where
 }
 
 pub trait BusBridge: 'static {
-    async_method!(fn bus_bind_req(&'a mut self, cb: CbRefBind<'a>) -> () as Future_bind_req);
+    async_method!(fn bus_bind_req(&'a mut self, cb: CbRefBind<'a>) -> crate::Result<(PreferredEndianness,)> as Future_bind_req);
     async_method!(fn bus_unbind_req(&'a mut self, cb: CbRefBind<'a>) -> () as Future_unbind_req);
-    async_method!(fn intr_attach_req(&'a mut self, cb: CbRefIntrAttach<'a>) -> () as Future_intr_attach_req);
+    async_method!(fn intr_attach_req(&'a mut self, cb: CbRefIntrAttach<'a>) -> crate::Result<()> as Future_intr_attach_req);
     async_method!(fn intr_detach_req(&'a mut self, cb: CbRefIntrDetach<'a>) -> () as Future_intr_detach_req);
 }
 struct MarkerBusBridge;
@@ -65,8 +71,15 @@ future_wrapper!(bus_bind_ack_op => <T as BusDevice>(
     preferred_endianness: u8,
     status: crate::ffi::udi_status_t
     ) val @ {
+    let preferred_endianness = match preferred_endianness
+        {
+        crate::ffi::meta_bus::UDI_DMA_ANY_ENDIAN => PreferredEndianness::Any,
+        crate::ffi::meta_bus::UDI_DMA_BIG_ENDIAN => PreferredEndianness::Big,
+        crate::ffi::meta_bus::UDI_DMA_LITTLE_ENDIAN => PreferredEndianness::Little,
+        _ => PreferredEndianness::Any,
+        };
     crate::async_trickery::with_ack(
-        val.bus_bind_ack(cb, dma_constraints, preferred_endianness != 0, status),
+        val.bus_bind_ack(cb, dma_constraints, preferred_endianness, status),
         |cb,res| unsafe { crate::async_trickery::channel_event_complete::<udi_bus_bind_cb_t>(cb, crate::Error::to_status(res)) }
         )
 });
@@ -109,16 +122,43 @@ impl udi_bus_device_ops_t {
 future_wrapper!(bus_bind_req_op => <T as BusBridge>(
     cb: *mut udi_bus_bind_cb_t
     ) val @ {
-    val.bus_bind_req(cb)
+    crate::async_trickery::with_ack(
+        val.bus_bind_req(cb),
+        |cb,res| unsafe {
+            let (status,dma,endian) = match res
+                {
+                Ok((endian,)) => {
+                    let endian = match endian
+                        {
+                        PreferredEndianness::Any => crate::ffi::meta_bus::UDI_DMA_ANY_ENDIAN,
+                        PreferredEndianness::Big => crate::ffi::meta_bus::UDI_DMA_BIG_ENDIAN,
+                        PreferredEndianness::Little => crate::ffi::meta_bus::UDI_DMA_LITTLE_ENDIAN,
+                        };
+                    (0,crate::ffi::physio::UDI_NULL_DMA_CONSTRAINTS,endian)
+                    },
+                Err(e) => (e.into_inner(),crate::ffi::physio::UDI_NULL_DMA_CONSTRAINTS,0),
+                };
+            crate::ffi::meta_bus::udi_bus_bind_ack(cb, dma, endian, status)
+        }
+        )
 });
 future_wrapper!(bus_unbind_req_op => <T as BusBridge>(cb: *mut udi_bus_bind_cb_t) val @ {
-    val.bus_unbind_req(cb)
+    crate::async_trickery::with_ack(
+        val.bus_unbind_req(cb),
+        |cb,_res| unsafe { crate::ffi::meta_bus::udi_bus_unbind_ack(cb) }
+        )
 });
 future_wrapper!(intr_attach_req_op => <T as BusBridge>(cb: *mut crate::ffi::meta_intr::udi_intr_attach_cb_t) val @ {
-    val.intr_attach_req(cb)
+    crate::async_trickery::with_ack(
+        val.intr_attach_req(cb),
+        |cb,res| unsafe { crate::ffi::meta_intr::udi_intr_attach_ack(cb, crate::Error::to_status(res)) }
+        )
 });
 future_wrapper!(intr_detach_req_op => <T as BusBridge>(cb: *mut crate::ffi::meta_intr::udi_intr_detach_cb_t) val @ {
-    val.intr_detach_req(cb)
+    crate::async_trickery::with_ack(
+        val.intr_detach_req(cb),
+        |cb,_res| unsafe { crate::ffi::meta_intr::udi_intr_detach_ack(cb) }
+        )
 });
 
 impl udi_bus_bridge_ops_t {
