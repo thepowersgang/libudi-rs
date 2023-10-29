@@ -197,12 +197,21 @@ impl<'a> DriverModule<'a> {
         }
         None
     }
+    fn get_metalang_by_name(&self, des_name: &str) -> Option<::udi::ffi::udi_index_t> {
+        self.udiprops.clone()
+            .filter_map(|v| match v {
+                ::udiprops_parse::Entry::Metalang { meta_idx, interface_name } => Some((meta_idx,interface_name)),
+                _ => None
+            })
+            .filter_map(|(idx,name)| if name == des_name { Some(idx) } else { None })
+            .next()
+    }
     fn get_metalang(&self, des_meta_idx: ::udi::ffi::udi_index_t) -> Option<&dyn udi::metalang_trait::Metalanguage> {
         Some(match self.get_metalang_name(des_meta_idx)?
         {
-        "udi_bridge" => /*udi_impl::meta_bus::METALANG_SPEC*/todo!(),
-        "udi_nic" => todo!(),
-        l => todo!("Unknown metalang {:?}", l),
+        "udi_bridge" => &::udi::ffi::meta_bus::METALANG_SPEC,
+        "udi_nic" => &::udi::meta_nic::METALANG_SPEC,
+        name => todo!("Unknown metalang {:?}", name),
         })
     }
     unsafe fn get_meta_ops(&self, ops: &::udi::ffi::init::udi_ops_init_t) -> &'static dyn udi::metalang_trait::MetalangOpsHandler {

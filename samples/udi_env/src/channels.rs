@@ -75,15 +75,29 @@ pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::m
     // Get the channel currently in the cb, and reverse it
     let gcb = cb as *mut ::udi::ffi::udi_cb_t;
     let ch = ChannelRef::from_handle((*gcb).channel);
-    let ch_side = ch.0.sides[ch.1 as usize].get().unwrap();
-    //ch_side.dev
+    let ch_side = ch.0.sides[!ch.1 as usize].get().unwrap();
+
+
+    // Get the scratch as the max of all CB instances for this type
+    let driver_module = &*ch_side.driver_module;
+    //let scratch_requirement = driver_module.cbs.iter()
+    //    .filter(|cb| driver_module.get_cb_spec(cb).type_id() == ::core::any::TypeId::of::<Cb>())
+    //    .map(|cb| cb.scratch_requirement)
+    //    .max();
+    //    ;
+    let meta_idx = driver_module.get_metalang_by_name(<Cb::MetalangSpec as ::udi::metalang_trait::Metalanguage>::name()).unwrap();
+    let scratch_requirement = driver_module.cbs.iter()
+        .filter(|cb| cb.meta_idx == meta_idx)
+        .filter(|cb| cb.meta_cb_num == Cb::META_CB_NUM)
+        .map(|cb| cb.scratch_requirement)
+        .max();
+
     (*gcb).channel = ch.get_handle_reversed();
     // Update context and scratch
     (*gcb).context = ch_side.context;
-    //(*cb).scratch = ::libc::realloc((*cb).scratch, ch_side.scratch_requirement);
-
-    // TODO: How is this supposed to get the right CB for the scratch requirement?
-    // - Ask the metalang ops for the CB index somehow.
+    if let Some(scratch_requirement) = scratch_requirement {
+        (*gcb).scratch = ::libc::realloc((*gcb).scratch, scratch_requirement);
+    }
 
     // Then check that the metalanguage ops in that side matches the expectation
     if ch_side.ops.type_id() != ::std::any::TypeId::of::<O>() {

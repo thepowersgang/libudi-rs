@@ -3,6 +3,7 @@
 /// A trait used to get metalanguage ops and CB structures from numbers
 pub trait Metalanguage
 {
+    fn name() -> &'static str where Self: Sized;
     /// Cast `ops_vector` into a ops structure
     unsafe fn get_ops(&self, ops_idx: u8, ops_vector: crate::ffi::udi_ops_vector_t) -> Option<&'static dyn MetalangOpsHandler>;
     /// Obtain a metalanguage-specific definition of a CB
@@ -38,15 +39,19 @@ pub trait MetalangCbHandler
 /// SAFETY: The underlying type must start with a `udi_cb_t` structure
 pub unsafe trait MetalangCb
 {
+    type MetalangSpec: Metalanguage;
     const META_CB_NUM: u8;
 }
 
 macro_rules! impl_metalanguage
 {
-    (static $name:ident; OPS $( $ops_idx:literal => $ops_ty:ty),* $(,)? ; CBS $( $cb_idx:literal => $cb_ty:ty),* $(,)? ; ) => {
+    (static $spec_name:ident; NAME $name:ident ; OPS $( $ops_idx:literal => $ops_ty:ty),* $(,)? ; CBS $( $cb_idx:literal => $cb_ty:ty),* $(,)? ; ) => {
         pub struct Metalang;
-        pub static $name: Metalang = Metalang;
+        pub static $spec_name: Metalang = Metalang;
         impl $crate::metalang_trait::Metalanguage for Metalang {
+            fn name() -> &'static str {
+                stringify!($name)
+            }
             unsafe fn get_ops(&self, ops_idx: u8, ops_vector: $crate::ffi::udi_ops_vector_t) -> Option<&'static dyn $crate::metalang_trait::MetalangOpsHandler> {
                 match ops_idx
                 {
@@ -88,6 +93,7 @@ macro_rules! impl_metalanguage
         )*
         $(
         unsafe impl $crate::metalang_trait::MetalangCb for $cb_ty {
+            type MetalangSpec = Metalang;
             const META_CB_NUM: u8 = {
                 #[allow(dead_code)]
                 fn assert_cb_field(input: &$cb_ty) {

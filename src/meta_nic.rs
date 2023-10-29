@@ -16,6 +16,7 @@ macro_rules! def_cb {
 
 impl_metalanguage!{
     static METALANG_SPEC;
+    NAME meta_nic;
     OPS
         1 => ffi::udi_nd_ctrl_ops_t,
         2 => ffi::udi_nd_tx_ops_t,
