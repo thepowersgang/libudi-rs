@@ -2,6 +2,7 @@
 //! 
 //! 
 use crate::ffi::meta_bus::udi_bus_device_ops_t;
+use crate::ffi::meta_bus::udi_bus_bridge_ops_t;
 use crate::ffi::meta_bus::udi_bus_bind_cb_t;
 
 pub type CbRefBind<'a> = crate::CbRef<'a, udi_bus_bind_cb_t>;
@@ -100,6 +101,44 @@ impl udi_bus_device_ops_t {
             bus_unbind_ack_op: bus_unbind_ack_op::<T>,
             intr_attach_ack_op: intr_attach_ack_op::<T>,
             intr_detach_ack_op: intr_detach_ack_op::<T>,
+        };
+    }
+}
+
+
+future_wrapper!(bus_bind_req_op => <T as BusBridge>(
+    cb: *mut udi_bus_bind_cb_t
+    ) val @ {
+    val.bus_bind_req(cb)
+});
+future_wrapper!(bus_unbind_req_op => <T as BusBridge>(cb: *mut udi_bus_bind_cb_t) val @ {
+    val.bus_unbind_req(cb)
+});
+future_wrapper!(intr_attach_req_op => <T as BusBridge>(cb: *mut crate::ffi::meta_intr::udi_intr_attach_cb_t) val @ {
+    val.intr_attach_req(cb)
+});
+future_wrapper!(intr_detach_req_op => <T as BusBridge>(cb: *mut crate::ffi::meta_intr::udi_intr_detach_cb_t) val @ {
+    val.intr_detach_req(cb)
+});
+
+impl udi_bus_bridge_ops_t {
+    pub const fn scratch_requirement<T: BusBridge>() -> usize {
+        let rv = crate::imc::task_size::<T,MarkerBusBridge>();
+        let rv = crate::const_max(rv, bus_bind_req_op::task_size::<T>());
+        let rv = crate::const_max(rv, bus_unbind_req_op::task_size::<T>());
+        let rv = crate::const_max(rv, intr_attach_req_op::task_size::<T>());
+        let rv = crate::const_max(rv, intr_detach_req_op::task_size::<T>());
+        rv
+    }
+    /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
+    /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
+    pub const unsafe fn for_driver<T: BusBridge>() -> Self {
+        return udi_bus_bridge_ops_t {
+            channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerBusBridge>,
+            bus_bind_req_op: bus_bind_req_op::<T>,
+            bus_unbind_req_op: bus_unbind_req_op::<T>,
+            intr_attach_req_op: intr_attach_req_op::<T>,
+            intr_detach_req_op: intr_detach_req_op::<T>,
         };
     }
 }
