@@ -10,6 +10,7 @@ extern "C" {
     pub fn udi_intr_attach_ack(cb: *mut udi_intr_attach_cb_t, status: udi_status_t);
     pub fn udi_intr_detach_req(cb: *mut udi_intr_detach_cb_t);
     pub fn udi_intr_detach_ack(cb: *mut udi_intr_detach_cb_t);
+    pub fn udi_intr_event_ind(cb: *mut udi_intr_event_cb_t, flags: u8);
     pub fn udi_intr_event_rdy(cb: *mut udi_intr_event_cb_t);
 }
 
@@ -19,17 +20,11 @@ pub struct udi_intr_handler_ops_t
     pub channel_event_ind_op: imc::udi_channel_event_ind_op_t,
     pub intr_event_ind_op: udi_intr_event_ind_op_t,
 }
-unsafe impl crate::Ops for udi_intr_handler_ops_t {
-    const OPS_NUM: super::udi_index_t = 3;
-}
 #[repr(C)]
 pub struct udi_intr_dispatcher_ops_t
 {
     pub channel_event_ind_op: imc::udi_channel_event_ind_op_t,
     pub intr_event_rdy_op: udi_intr_event_rdy_op_t,
-}
-unsafe impl crate::Ops for udi_intr_dispatcher_ops_t {
-    const OPS_NUM: super::udi_index_t = 4;
 }
 
 #[repr(C)]

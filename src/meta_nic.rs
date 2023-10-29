@@ -208,10 +208,6 @@ impl ffi::udi_nd_ctrl_ops_t
         }
     }
 }
-unsafe impl crate::Ops for ffi::udi_nd_ctrl_ops_t
-{
-    const OPS_NUM: crate::ffi::udi_index_t = OpsNum::NdCtrl as _;
-}
 
 
 pub trait NdTx: 'static {
@@ -253,9 +249,6 @@ impl ffi::udi_nd_tx_ops_t
         }
     }
 }
-unsafe impl crate::Ops for ffi::udi_nd_tx_ops_t {
-    const OPS_NUM: crate::ffi::udi_index_t = OpsNum::NdTx as _;
-}
 
 pub trait NdRx: 'static {
     async_method!(fn rx_rdy(&'a mut self, cb: CbHandleNicRx)->() as Future_rx_rdy);
@@ -288,9 +281,6 @@ impl ffi::udi_nd_rx_ops_t
             nd_rx_rdy_op: nd_rx_rdy_op::<T>,
         }
     }
-}
-unsafe impl crate::Ops for ffi::udi_nd_rx_ops_t {
-    const OPS_NUM: crate::ffi::udi_index_t = OpsNum::NdRx as _;
 }
 
 /// Result type from a bind

@@ -4,8 +4,8 @@
 #![no_std]
 #![feature(waker_getters)]	// For evil with contexts
 #![feature(const_trait_impl)]
-#![feature(concat_idents)]	// Very evil macros
-#![feature(const_mut_refs)]	// Used for getting size of taskss
+#![feature(const_mut_refs)]	// Used for getting size of tasks
+#![feature(extern_types)]	// Handle types
 
 // A "region" is a thread
 // - rdata is the thread's data, i.e. the drive instance
@@ -75,12 +75,6 @@ pub const fn const_max(a: usize, b: usize) -> usize {
 	if a > b { a } else { b }
 }
 
-/// Trait for `udi_*_ops_t` types
-/// 
-/// SAFETY: The pointed-to data must be valid as [ffi::init::udi_ops_init_t]
-pub unsafe trait Ops {
-	const OPS_NUM: ffi::udi_index_t;
-}
 /// Indicates that this type is just a wrapper around `Inner`, and thus it's valid to
 /// pointer cast between the two
 pub unsafe trait Wrapper<Inner> {
@@ -104,11 +98,11 @@ macro_rules! define_wrappers {
 }
 
 #[doc(hidden)]
-pub const fn make_ops_init<T: Ops>(ops_idx: ffi::udi_index_t, meta_idx: ffi::udi_index_t, ops: &'static T) -> crate::ffi::init::udi_ops_init_t {
+pub const fn make_ops_init<T: metalang_trait::MetalangOps>(ops_idx: ffi::udi_index_t, meta_idx: ffi::udi_index_t, ops: &'static T) -> crate::ffi::init::udi_ops_init_t {
 	crate::ffi::init::udi_ops_init_t {
 		ops_idx,
 		meta_idx,
-		meta_ops_num: T::OPS_NUM,
+		meta_ops_num: T::META_OPS_NUM,
 		chan_context_size: 0,
 		ops_vector: ops as *const _ as *const _,
 		op_flags: ::core::ptr::null(),

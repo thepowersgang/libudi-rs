@@ -1,3 +1,6 @@
+//! A common set of traits for metalanguage definitions
+
+/// A trait used to get metalanguage ops and CB structures from numbers
 pub trait Metalanguage
 {
     /// Cast `ops_vector` into a ops structure
@@ -10,19 +13,29 @@ pub trait Metalanguage
 /// To be used by environment implementors to dispatch
 pub trait MetalangOpsHandler: 'static
 {
+    /// Human-readable (debug) type name of the ops type
     fn type_name(&self) -> &'static str;
+    /// Type ID (debug checking)
     fn type_id(&self) -> ::core::any::TypeId;
+    /// Obtain the `channel_event_ind_op` field of the vector
     fn channel_event_ind_op(&self) -> crate::ffi::imc::udi_channel_event_ind_op_t;
 }
-/// A trait to hold the ops_num for an ops structure
-pub trait MetalangOps: MetalangOpsHandler
+/// A trait to hold the `ops_num for an ops structure
+/// 
+/// SAFETY: The pointed data must be valid as [crate::ffi::init::udi_ops_init_t]
+pub unsafe trait MetalangOps: MetalangOpsHandler
 {
     const META_OPS_NUM: u8;
 }
+
+/// Trait used for dynamic dispatch on a CB definition
 pub trait MetalangCbHandler
 {
     fn size(&self) -> usize;
 }
+/// Trait for to hold a CB's metalanguage number
+/// 
+/// SAFETY: The underlying type must start with a `udi_cb_t` structure
 pub unsafe trait MetalangCb
 {
     const META_CB_NUM: u8;
@@ -44,7 +57,15 @@ macro_rules! impl_metalanguage
         
             fn get_cb(&self, cb_idx: u8) -> Option<&dyn $crate::metalang_trait::MetalangCbHandler> {
                 match cb_idx {
-                $( $cb_idx => todo!(), )*
+                $( $cb_idx => {
+                    struct H;
+                    impl $crate::metalang_trait::MetalangCbHandler for H {
+                        fn size(&self) -> usize {
+                            ::core::mem::size_of::<$cb_ty>()
+                        }
+                    }
+                    Some(&H)
+                    }, )*
                 _ => None,
                 }
             }
@@ -61,7 +82,7 @@ macro_rules! impl_metalanguage
                 self.channel_event_ind_op
             }
         }
-        impl $crate::metalang_trait::MetalangOps for $ops_ty {
+        unsafe impl $crate::metalang_trait::MetalangOps for $ops_ty {
             const META_OPS_NUM: u8 = $ops_idx;
         }
         )*
