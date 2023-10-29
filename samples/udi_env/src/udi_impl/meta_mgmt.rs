@@ -2,6 +2,7 @@ use ::udi::ffi::meta_mgmt::{udi_usage_cb_t, udi_enumerate_cb_t, udi_mgmt_cb_t};
 use ::udi::ffi::{udi_index_t, udi_status_t};
 use ::udi::ffi::udi_ubit8_t;
 
+#[cfg(false_)]
 pub struct ManagementAgentOps {
     pub usage_res_op        : unsafe extern "C" fn(cb: *mut ::udi::ffi::meta_mgmt::udi_usage_cb_t),
 	pub enumerate_ack_op    : unsafe extern "C" fn (cb: *mut udi_enumerate_cb_t, enumeration_result: udi_ubit8_t, ops_idx: udi_index_t),

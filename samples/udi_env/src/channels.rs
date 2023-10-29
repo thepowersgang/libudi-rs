@@ -76,6 +76,10 @@ pub trait MetalangOps: 'static
     fn type_id(&self) -> ::core::any::TypeId;
     fn channel_event_ind_op(&self) -> ::udi::ffi::imc::udi_channel_event_ind_op_t;
 }
+pub trait MetalangCb: 'static
+{
+    const META_CB_NUM: u8;
+}
 macro_rules! impl_metalang_ops_for {
     ( $($t:ty),* ) => {
         $(
@@ -93,25 +97,37 @@ macro_rules! impl_metalang_ops_for {
         )*
     };
 }
-pub unsafe fn prepare_cb_for_call<O: MetalangOps>(cb: &mut ::udi::ffi::udi_cb_t) -> &O
+macro_rules! impl_metalang_cbs {
+    ( $($v:literal = $t:ty,)* ) => {
+        $(
+        impl $crate::channels::MetalangCb for $t {
+            const META_CB_NUM: u8 = $v;
+        }
+        )*
+    };
+}
+
+pub unsafe fn remote_call<O: MetalangOps, Cb: MetalangCb>(cb: *mut Cb, call: impl FnOnce(&O, *mut Cb))
 {
     // Get the channel currently in the cb, and reverse it
-    let ch = ChannelRef::from_handle((*cb).channel);
+    let gcb = cb as *mut ::udi::ffi::udi_cb_t;
+    let ch = ChannelRef::from_handle((*gcb).channel);
     let ch_side = ch.0.sides[ch.1 as usize].get().unwrap();
-    (*cb).channel = ch.get_handle_reversed();
+    //ch_side.dev
+    (*gcb).channel = ch.get_handle_reversed();
     // Update context and scratch
-    (*cb).context = ch_side.context;
+    (*gcb).context = ch_side.context;
     //(*cb).scratch = ::libc::realloc((*cb).scratch, ch_side.scratch_requirement);
 
     // TODO: How is this supposed to get the right CB for the scratch requirement?
+    // - Ask the metalang ops for the CB index somehow.
 
     // Then check that the metalanguage ops in that side matches the expectation
     if ch_side.ops.type_id() != ::std::any::TypeId::of::<O>() {
         panic!("Metalang mismatch: Expected {:?}, got {:?}", ch_side.ops.type_name(), ::std::any::type_name::<O>());
     }
-    else {
-        &*(ch_side.ops as *const _ as *const O)
-    }
+    let ops = &*(ch_side.ops as *const _ as *const O);
+    call(ops, cb);
 }
 
 pub unsafe fn event_ind_bound_internal(channel: ::udi::ffi::udi_channel_t, bind_cb: *mut ::udi::ffi::udi_cb_t) {
