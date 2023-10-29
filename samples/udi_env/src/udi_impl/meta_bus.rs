@@ -4,22 +4,6 @@ use ::udi::ffi::meta_bus::udi_bus_bind_cb_t;
 use ::udi::ffi::meta_intr::{udi_intr_attach_cb_t,udi_intr_detach_cb_t};
 use ::udi::ffi::meta_intr::udi_intr_event_cb_t;
 
-impl_metalanguage!{
-    static METALANG_SPEC;
-    OPS
-        1 => udi_bus_device_ops_t,
-        2 => udi_bus_bridge_ops_t,
-        3 => udi_intr_handler_ops_t,
-        4 => udi_intr_dispatcher_ops_t,
-        ;
-    CBS
-        1 => udi_bus_bind_cb_t,
-        2 => udi_intr_attach_cb_t,
-        3 => udi_intr_detach_cb_t,
-        4 => udi_intr_event_cb_t,
-        ;
-}
-
 dispatch_call!{
     fn udi_bus_bind_req(cb: *mut udi_bus_bind_cb_t)
         => udi_bus_bridge_ops_t:bus_bind_req_op;

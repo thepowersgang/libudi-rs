@@ -6,7 +6,7 @@ struct ChannelInner {
 }
 struct ChannelInnerSide {
     driver_module: *const crate::DriverModule<'static>,
-    ops: &'static dyn MetalangOps,
+    ops: &'static dyn udi::metalang_trait::MetalangOpsHandler,
     context: *mut ::udi::ffi::c_void,
 }
 
@@ -61,7 +61,7 @@ pub unsafe fn spawn(
 pub unsafe fn anchor(
     channel: ::udi::ffi::udi_channel_t,
     driver_module: *const crate::DriverModule<'static>,
-    ops: &'static dyn MetalangOps,
+    ops: &'static dyn udi::metalang_trait::MetalangOpsHandler,
     context: *mut ::udi::ffi::c_void,
 )
 {
@@ -70,44 +70,7 @@ pub unsafe fn anchor(
 }
 
 
-pub trait MetalangOps: 'static
-{
-    fn type_name(&self) -> &'static str;
-    fn type_id(&self) -> ::core::any::TypeId;
-    fn channel_event_ind_op(&self) -> ::udi::ffi::imc::udi_channel_event_ind_op_t;
-}
-pub trait MetalangCb: 'static
-{
-    const META_CB_NUM: u8;
-}
-macro_rules! impl_metalang_ops_for {
-    ( $($t:ty),* ) => {
-        $(
-        impl $crate::channels::MetalangOps for $t {
-            fn type_name(&self) -> &'static str {
-                ::core::any::type_name::<Self>()
-            }
-            fn type_id(&self) -> ::core::any::TypeId {
-                ::core::any::TypeId::of::<Self>()
-            }
-            fn channel_event_ind_op(&self) -> ::udi::ffi::imc::udi_channel_event_ind_op_t {
-                self.channel_event_ind_op
-            }
-        }
-        )*
-    };
-}
-macro_rules! impl_metalang_cbs {
-    ( $($v:literal = $t:ty,)* ) => {
-        $(
-        impl $crate::channels::MetalangCb for $t {
-            const META_CB_NUM: u8 = $v;
-        }
-        )*
-    };
-}
-
-pub unsafe fn remote_call<O: MetalangOps, Cb: MetalangCb>(cb: *mut Cb, call: impl FnOnce(&O, *mut Cb))
+pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::metalang_trait::MetalangCb>(cb: *mut Cb, call: impl FnOnce(&O, *mut Cb))
 {
     // Get the channel currently in the cb, and reverse it
     let gcb = cb as *mut ::udi::ffi::udi_cb_t;

@@ -10,6 +10,11 @@ pub trait MetalangCb
         ::core::ptr::write(cb, gcb);
     }
 }
+impl<T: ::udi::metalang_trait::MetalangCb> MetalangCb for T {
+    fn size(&self) -> usize {
+        ::core::mem::size_of::<T>()
+    }
+}
 
 #[no_mangle]
 unsafe extern "C" fn udi_cb_alloc(callback: udi_cb_alloc_call_t, gcb: *mut udi_cb_t, cb_idx: udi_index_t, default_channel: udi_channel_t)
@@ -28,7 +33,7 @@ pub fn alloc_internal(driver_module: &crate::DriverModule, cb_idx: udi_index_t, 
     assert!(size >= ::core::mem::size_of::<udi_cb_t>());
     unsafe {
         let rv = ::libc::calloc(1, size) as *mut udi_cb_t;
-        cb_spec.init(rv, udi_cb_t {
+        ::core::ptr::write(rv, udi_cb_t {
             channel: default_channel,
             context,
             initiator_context: context,

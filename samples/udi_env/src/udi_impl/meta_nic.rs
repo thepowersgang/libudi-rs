@@ -12,19 +12,6 @@ use ::udi::meta_nic::ffi::{udi_nd_ctrl_ops_t,udi_nsr_ctrl_ops_t};
 use ::udi::meta_nic::ffi::{udi_nd_tx_ops_t,udi_nsr_tx_ops_t};
 use ::udi::meta_nic::ffi::{udi_nd_rx_ops_t,udi_nsr_rx_ops_t};
 
-impl_metalang_ops_for!{udi_nd_ctrl_ops_t,udi_nsr_ctrl_ops_t}
-impl_metalang_ops_for!{udi_nd_tx_ops_t, udi_nsr_tx_ops_t}
-impl_metalang_ops_for!{udi_nd_rx_ops_t, udi_nsr_rx_ops_t}
-impl_metalang_cbs!{
-    1 = udi_nic_cb_t,
-    2 = udi_nic_bind_cb_t,
-    3 = udi_nic_ctrl_cb_t,
-    4 = udi_nic_status_cb_t,
-    5 = udi_nic_info_cb_t,
-    6 = udi_nic_tx_cb_t,
-    7 = udi_nic_rx_cb_t,
-}
-
 dispatch_call! {
     fn udi_nd_bind_req(cb: *mut udi_nic_bind_cb_t, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)
         => udi_nd_ctrl_ops_t:nd_bind_req_op;

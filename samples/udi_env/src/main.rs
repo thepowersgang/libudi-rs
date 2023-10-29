@@ -1,43 +1,10 @@
 #![feature(impl_trait_in_assoc_type)]
 
-macro_rules! impl_metalanguage {
-    (static $name:ident; OPS $( $ops_idx:literal => $ops_ty:ty),* $(,)? ; CBS $( $cb_idx:literal => $cb_t:ty),* $(,)? ; ) => {
-        pub struct Metalang;
-        pub static $name: Metalang = Metalang;
-        impl $crate::Metalanguage for Metalang {
-            unsafe fn get_ops(&self, ops_idx: u8, ops_vector: ::udi::ffi::udi_ops_vector_t) -> Option<&'static dyn $crate::channels::MetalangOps> {
-                match ops_idx
-                {
-                $( $ops_idx => Some(&*(ops_vector as *const $ops_ty)), )*
-                _ => None,
-                }
-            }
-        
-            fn get_cb(&self, cb_idx: u8) -> Option<&dyn $crate::udi_impl::cb::MetalangCb> {
-                match cb_idx {
-                $( $cb_idx => todo!(), )*
-                _ => None,
-                }
-            }
-        }
-        impl_metalang_ops_for!{ $($ops_ty),* }
-        impl_metalang_cbs!{
-            $( $cb_idx = $cb_t, )*
-        }
-    };
-}
-
 #[macro_use]
 mod channels;
 mod udi_impl;
 
 mod bridge_pci;
-
-trait Metalanguage
-{
-    unsafe fn get_ops(&self, ops_idx: u8, ops_vector: ::udi::ffi::udi_ops_vector_t) -> Option<&'static dyn channels::MetalangOps>;
-    fn get_cb(&self, cb_idx: u8) -> Option<&dyn udi_impl::cb::MetalangCb>;
-}
 
 extern crate udi_net_ne2000;
 
@@ -230,7 +197,7 @@ impl<'a> DriverModule<'a> {
         }
         None
     }
-    fn get_metalang(&self, des_meta_idx: ::udi::ffi::udi_index_t) -> Option<&dyn Metalanguage> {
+    fn get_metalang(&self, des_meta_idx: ::udi::ffi::udi_index_t) -> Option<&dyn udi::metalang_trait::Metalanguage> {
         Some(match self.get_metalang_name(des_meta_idx)?
         {
         "udi_bridge" => /*udi_impl::meta_bus::METALANG_SPEC*/todo!(),
@@ -238,14 +205,14 @@ impl<'a> DriverModule<'a> {
         l => todo!("Unknown metalang {:?}", l),
         })
     }
-    unsafe fn get_meta_ops(&self, ops: &::udi::ffi::init::udi_ops_init_t) -> &'static dyn channels::MetalangOps {
+    unsafe fn get_meta_ops(&self, ops: &::udi::ffi::init::udi_ops_init_t) -> &'static dyn udi::metalang_trait::MetalangOpsHandler {
         match self.get_metalang(ops.meta_idx)
         {
         None => panic!("Unknown meta_idx {}", ops.meta_idx),
         Some(l) => l.get_ops(ops.meta_ops_num, ops.ops_vector).unwrap(),
         }
     }
-    fn get_cb_spec(&self, cb_init: &::udi::ffi::init::udi_cb_init_t) -> &dyn udi_impl::cb::MetalangCb {
+    fn get_cb_spec(&self, cb_init: &::udi::ffi::init::udi_cb_init_t) -> &dyn udi::metalang_trait::MetalangCbHandler {
         match self.get_metalang(cb_init.meta_idx)
         {
         None => panic!("Unknown meta_idx {}", cb_init.meta_idx),
