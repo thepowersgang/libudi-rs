@@ -58,12 +58,6 @@ where
     }
 }
 
-unsafe impl crate::async_trickery::GetCb for udi_bus_bind_cb_t {
-    fn get_gcb(&self) -> &crate::ffi::udi_cb_t {
-        &self.gcb
-    }
-}
-
 future_wrapper!(bus_bind_ack_op => <T as BusDevice>(
     cb: *mut udi_bus_bind_cb_t,
     dma_constraints: crate::ffi::physio::udi_dma_constraints_t,

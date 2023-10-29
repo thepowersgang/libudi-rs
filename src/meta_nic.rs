@@ -10,16 +10,31 @@ pub fn nsr_tx_rdy(cb: crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>) {
 
 macro_rules! def_cb {
     (unsafe $ref_name:ident => $t:ty : $cb_num:expr) => {
-        // SAFE: Follows the contract, gcb is first field
-        unsafe impl crate::async_trickery::GetCb for $t {
-            fn get_gcb(&self) -> &crate::ffi::udi_cb_t {
-                &self.gcb
-            }
-            //const CB_NUM: u8 = $cb_num;
-        }
         pub type $ref_name<'a> = crate::CbRef<'a, $t>;
     }
 }
+
+impl_metalanguage!{
+    static METALANG_SPEC;
+    OPS
+        1 => ffi::udi_nd_ctrl_ops_t,
+        2 => ffi::udi_nd_tx_ops_t,
+        3 => ffi::udi_nd_rx_ops_t,
+        4 => ffi::udi_nsr_ctrl_ops_t,
+        5 => ffi::udi_nsr_tx_ops_t,
+        6 => ffi::udi_nsr_rx_ops_t,
+        ;
+    CBS
+        1 => ffi::udi_nic_cb_t,
+        2 => ffi::udi_nic_bind_cb_t,
+        3 => ffi::udi_nic_ctrl_cb_t,
+        4 => ffi::udi_nic_status_cb_t,
+        5 => ffi::udi_nic_info_cb_t,
+        6 => ffi::udi_nic_tx_cb_t,
+        7 => ffi::udi_nic_rx_cb_t,
+        ;
+}
+
 // SAFE: Follows the contract, gcb is first field
 def_cb!(unsafe CbRefNic => ffi::udi_nic_cb_t : 1);
 // SAFE: Follows the contract, gcb is first field

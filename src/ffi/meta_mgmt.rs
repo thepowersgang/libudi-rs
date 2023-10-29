@@ -38,7 +38,7 @@ pub struct udi_enumerate_cb_t
 #[repr(C)]
 pub struct udi_mgmt_cb_t
 {
-	pub gcb:	udi_cb_t,
+	pub gcb: udi_cb_t,
 }
 
 #[repr(C)]

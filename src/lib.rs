@@ -18,6 +18,9 @@ mod future_ext;
 #[macro_use]
 mod async_trickery;
 
+#[macro_use]
+pub mod metalang_trait;
+
 pub use cb::CbRef;
 
 pub mod ffi;
@@ -112,6 +115,23 @@ pub const fn make_ops_init<T: Ops>(ops_idx: ffi::udi_index_t, meta_idx: ffi::udi
 	}
 }
 #[doc(hidden)]
+pub const fn make_cb_init<T: cb::CbDefinition>(meta_idx: ffi::udi_index_t, scratch_requirement: ffi::udi_size_t, inline: Option<()>) -> crate::ffi::init::udi_cb_init_t {
+	let (inline_size,inline_layout) = if let Some(_) = inline {
+		todo!()
+	}
+	else {
+		(0, ::core::ptr::null())
+	};
+	crate::ffi::init::udi_cb_init_t {
+		cb_idx: T::INDEX,
+		meta_idx,
+		meta_cb_num: <T::Cb as metalang_trait::MetalangCb>::META_CB_NUM,
+		inline_size,
+		inline_layout,
+		scratch_requirement,
+	}
+}
+#[doc(hidden)]
 pub const fn enforce_is_wrapper_for<T, U>()
 where
 	T: Wrapper<U>
@@ -191,7 +211,7 @@ macro_rules! define_driver
 				$crate::ffi::init::udi_ops_init_t::end_of_list()
 			].as_ptr(),
 			cb_init_list: [
-				//$( $crate::make_cb_init(CbList::$cb_name as _, $cb_meta, Cbs::$cb_name::Cb::META_CB_NUM, _STATE_SIZE, None), )*
+				$( $crate::make_cb_init::<Cbs::$cb_name>($cb_meta, _STATE_SIZE, None), )*
 				$crate::ffi::init::udi_cb_init_t::end_of_list()
 			].as_ptr(),
 			gcb_init_list: ::core::ptr::null(),

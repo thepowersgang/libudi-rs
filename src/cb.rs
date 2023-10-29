@@ -70,7 +70,7 @@ impl<T> ::core::ops::DerefMut for CbHandle<T> {
 /// Trait covering the definition of a Control Block (in [crate::define_driver])
 pub trait CbDefinition {
     const INDEX: u8;
-    type Cb;
+    type Cb: crate::metalang_trait::MetalangCb;
 }
 
 /// Allocate a new control block for the nominated channel

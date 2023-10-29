@@ -5,6 +5,22 @@ extern "C" {
     pub fn udi_bus_unbind_req(cb: *mut udi_bus_bind_cb_t);
 }
 
+impl_metalanguage!{
+    static METALANG_SPEC;
+    OPS
+        1 => udi_bus_device_ops_t,
+        2 => udi_bus_bridge_ops_t,
+        3 => super::meta_intr::udi_intr_handler_ops_t,
+        4 => super::meta_intr::udi_intr_dispatcher_ops_t,
+        ;
+    CBS
+        1 => udi_bus_bind_cb_t,
+        2 => super::meta_intr::udi_intr_attach_cb_t,
+        3 => super::meta_intr::udi_intr_detach_cb_t,
+        4 => super::meta_intr::udi_intr_event_cb_t,
+        ;
+}
+
 pub struct udi_bus_device_ops_t
 {
     pub channel_event_ind_op: imc::udi_channel_event_ind_op_t,

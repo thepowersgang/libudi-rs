@@ -40,21 +40,11 @@ pub struct udi_intr_attach_cb_t
     pub min_event_pend: u8,
     pub preprocessing_handle: pio::udi_pio_handle_t,
 }
-unsafe impl crate::async_trickery::GetCb for udi_intr_attach_cb_t {
-    fn get_gcb(&self) -> &udi_cb_t {
-        &self.gcb
-    }
-}
 #[repr(C)]
 pub struct udi_intr_detach_cb_t
 {
     pub gcb: udi_cb_t,
     pub interrupt_idx: udi_index_t,
-}
-unsafe impl crate::async_trickery::GetCb for udi_intr_detach_cb_t {
-    fn get_gcb(&self) -> &udi_cb_t {
-        &self.gcb
-    }
 }
 
 #[repr(C)]
@@ -63,11 +53,6 @@ pub struct udi_intr_event_cb_t
     pub gcb: udi_cb_t,
     pub event_buf: *mut udi_buf_t,
     pub intr_result: u16,
-}
-unsafe impl crate::async_trickery::GetCb for udi_intr_event_cb_t {
-    fn get_gcb(&self) -> &udi_cb_t {
-        &self.gcb
-    }
 }
 pub const UDI_INTR_UNCLAIMED: u16 = 1 << 0;
 pub const UDI_INTR_NO_EVENT: u16 = 1 << 1;

@@ -323,15 +323,17 @@ pub unsafe trait GetCb: ::core::any::Any + Unpin
 {
 	fn get_gcb(&self) -> &udi_cb_t;
 }
-
 unsafe impl GetCb for udi_cb_t {
 	fn get_gcb(&self) -> &udi_cb_t {
 		self
 	}
 }
-unsafe impl GetCb for crate::ffi::meta_mgmt::udi_usage_cb_t {
+unsafe impl<T: crate::metalang_trait::MetalangCb + ::core::any::Any + Unpin> GetCb for T {
 	fn get_gcb(&self) -> &udi_cb_t {
-		&self.gcb
+		// SAFE: The contract of `MetalangCb` is that the first field is a `udi_cb_t`
+		unsafe {
+			&*(self as *const T as *const udi_cb_t)
+		}
 	}
 }
 
