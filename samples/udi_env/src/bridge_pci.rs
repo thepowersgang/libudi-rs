@@ -42,7 +42,9 @@ impl ::udi::meta_bus::BusBridge for Driver
     type Future_intr_attach_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
     fn intr_attach_req<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefIntrAttach<'a>) -> Self::Future_intr_attach_req<'a> {
         async move {
-            todo!();
+            let channel = ::udi::imc::channel_spawn(cb.gcb(), cb.interrupt_index, OpsList::Interrupt as _).await;
+            //todo!("intr_attach_req");
+            Ok( () )
         }
     }
 
@@ -53,12 +55,21 @@ impl ::udi::meta_bus::BusBridge for Driver
         }
     }
 }
+impl ::udi::meta_intr::IntrDispatcher for Driver
+{
+    type Future_intr_event_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
+    fn intr_event_rdy<'a>(&'a mut self, cb: ::udi::meta_intr::CbRefEvent<'a>) -> Self::Future_intr_event_rdy<'a> {
+        async move {
+        }
+    }
+}
 
 pub const UDIPROPS: &'static str = "properties_version 0x101\0requires udi_bridge 0x101\0meta 1 udi_bridge\0";
 ::udi::define_driver! {
     Driver as INIT_INFO_PCI;
     ops: {
         Bridge: Meta=1, ::udi::ffi::meta_bus::udi_bus_bridge_ops_t,
+        Interrupt: Meta=1, ::udi::ffi::meta_intr::udi_intr_dispatcher_ops_t,
     },
     cbs: {
     }
