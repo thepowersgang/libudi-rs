@@ -19,6 +19,18 @@ mod driver {
 
 
 fn main() {
+    // ----
+    let driver_module_buspci;
+    unsafe {
+        let udiprops = ::udiprops_parse::load_from_raw_section(bridge_pci::UDIPROPS.as_bytes());
+        driver_module_buspci = DriverModule::new(&bridge_pci::INIT_INFO_PCI, udiprops);
+    }
+    let mut inst_buspci = create_driver_instance(&driver_module_buspci, None);
+    if inst_buspci.children.is_empty() {
+        inst_buspci.children.push(DriverChild { meta_idx: 1, ops_idx: 1, region_idx_real: 0 });
+    }
+
+    // ----
     let udiprops = ::udiprops_parse::load_from_raw_section(unsafe {
         let ptr = driver::libudi_rs_udiprops.as_ptr();
         let len = driver::libudi_rs_udiprops_len;
@@ -26,23 +38,45 @@ fn main() {
         });
     let driver_module = unsafe { DriverModule::new(&driver::udi_init_info, udiprops) };
 
+    let mut is_orphan = true;
+    for entry in driver_module.udiprops.clone() {
+        if let ::udiprops_parse::Entry::Device { device_name, meta_idx, attributes } = entry {
+            is_orphan = false;
+            let meta = driver_module.get_metalang_name(meta_idx);
+            // Search all known devices (all children of all loaded instances) for one that matches this attribute list and metalang
+            for parent in [&inst_buspci] {
+                for child in parent.children.iter() {
+                    let meta2 = parent.module.get_metalang_name(child.meta_idx);
+                    if meta != meta2 {
+                        continue ;
+                    }
+                    // TODO: Check attributes
+                    for (attr_name,attr_value) in attributes.clone() {
+                    }
 
-    if false {
-        create_driver_instance(&driver_module, None);
+                    let (channel_parent, channel_child) = channels::spawn_raw();
+                    unsafe {
+                        let ops = parent.module.get_meta_ops(parent.module.get_ops_init(child.ops_idx).unwrap());
+                        channels::anchor(channel_parent, parent.module, ops, parent.regions[child.region_idx_real].context);
+                    }
+                    create_driver_instance(&driver_module, Some(channel_child));
+                }
+            }
+        }
     }
-    else {
-        let (channel_par, channel_child) = channels::spawn_raw();
-        create_driver_instance(&driver_module, Some(channel_child));
+
+    if is_orphan {
+        create_driver_instance(&driver_module, None);
     }
 }
 
-fn create_driver_instance(driver_module: &DriverModule<'static>, channel_to_parent: Option<::udi::ffi::udi_channel_t>)
+fn create_driver_instance<'a>(driver_module: &'a DriverModule<'static>, channel_to_parent: Option<::udi::ffi::udi_channel_t>) -> Box<DriverInstance<'a>>
 {
     // See UDI Spec 10.1.2
 
     // - Create primary region
     let instance = Box::new(DriverInstance {
-        //module: &driver_module,
+        module: &driver_module,
         regions: {
             let mut v = vec![DriverRegion::new(0, driver_module.pri_init.rdata_size)];
             for secondary_region in driver_module.sec_init {
@@ -50,6 +84,7 @@ fn create_driver_instance(driver_module: &DriverModule<'static>, channel_to_pare
             }
             v
             },
+        children: Vec::new(),
     });
     // - call `udi_usage_ind`
     let mut state = InstanceInitState {
@@ -125,6 +160,28 @@ fn create_driver_instance(driver_module: &DriverModule<'static>, channel_to_pare
             }
         }
     }
+    // - Enumerate children
+    #[cfg(false_)]
+    unsafe {
+        let mut cb = ::udi::ffi::meta_mgmt::udi_enumerate_cb_t {
+            gcb: ::udi::ffi::udi_cb_t {
+                channel: ::core::ptr::null_mut(),
+                context: instance.regions[0].context,
+                scratch: ::core::ptr::null_mut(),
+                initiator_context: &mut state as *mut _ as *mut ::udi::ffi::c_void,
+                origin: ::core::ptr::null_mut(),
+            },
+            child_id: todo!(),
+            child_data: todo!(),
+            attr_list: todo!(),
+            attr_valid_length: todo!(),
+            filter_list: todo!(),
+            filter_list_length: todo!(),
+            parent_id: todo!(),
+        };
+        (driver_module.pri_init.mgmt_ops.enumerate_req_op)(&mut cb, 0);
+    }
+    instance
 }
 
 struct DriverModule<'a> {
@@ -247,14 +304,16 @@ unsafe fn terminated_list<'a, T: 'a>(input: *const T, cb: impl Fn(&T)->bool) -> 
     ::std::slice::from_raw_parts(input, count)
 }
 
-struct DriverInstance
+struct DriverInstance<'a>
 {
+    module: &'a DriverModule<'static>,
     regions: Vec<DriverRegion>,
+    children: Vec<DriverChild>,
     //management_channel: ::udi::ffi::udi_channel_t,
     //cur_state: DriverState,
 }
 struct InstanceInitState<'a> {
-    instance: &'a DriverInstance,
+    instance: &'a DriverInstance<'a>,
     state: DriverState,
 }
 impl InstanceInitState<'_> {
@@ -292,4 +351,9 @@ impl DriverRegion
                 },
         }
     }
+}
+struct DriverChild {
+    meta_idx: u8,
+    ops_idx: u8,
+    region_idx_real: usize,
 }

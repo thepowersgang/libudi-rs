@@ -20,7 +20,7 @@ unsafe extern "C" fn udi_pio_map(
     )
 {
     let trans_list = ::core::slice::from_raw_parts(trans_list, list_length as usize);
-    todo!();
+    todo!("udi_pio_map");
 }
 #[no_mangle]
 unsafe extern "C" fn udi_pio_unmap(pio_handle: udi_pio_handle_t)
@@ -47,5 +47,5 @@ unsafe extern "C" fn udi_pio_trans(
     mem_ptr: *mut c_void
     )
 {
-    todo!();
+    todo!("udi_pio_trans");
 }

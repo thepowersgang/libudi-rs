@@ -104,29 +104,38 @@ impl ::core::str::FromStr for MsgNum {
     }
 }
 
-#[derive(Debug)]
+fn parse_int(v: &str) -> Result<u32, ::std::num::ParseIntError> {
+    if v.starts_with("0x") {
+        Ok(u32::from_str_radix(&v[2..], 16)?)
+    }
+    else {
+        Ok(v.parse()?)
+    }
+}
+
+#[derive(Debug,Clone)]
 /// A parser for a space-separated list of attributes `<name> <ty> <value>`
 pub struct AttributeList<'a>(::core::str::SplitWhitespace<'a>);
 impl<'a> AttributeList<'a> {
-    pub fn parse_one(&mut self) -> Result<Option<(&'a str, Attribute<'a>)>,()> {
+    pub fn parse_one(&mut self) -> Result<Option<(&'a str, Attribute<'a>)>,String> {
 
         let Some(name) = self.0.next() else {
             return Ok(None);
             };
-        let ty = self.0.next().ok_or(())?;
-        let val = self.0.next().ok_or(())?;
+        let ty = self.0.next().ok_or("no ty")?;
+        let val = self.0.next().ok_or("no val")?;
         let attr = match ty
             {
             "string" => Attribute::String(EscapedStr(val)),
-            "ubit32" => Attribute::Ubit32(val.parse().map_err(|_| ())?),
+            "ubit32" => Attribute::Ubit32(parse_int(val).map_err(|e| format!("{} {:?}", e, val))?),
             "booleans" => Attribute::Boolean(match val
                 {
                 "T"|"t" => true,
                 "F"|"f" => false,
-                _ => return Err(()),
+                _ => return Err(format!("Unknown value for boolean: {:?}", val)),
                 }),
             "array" => Attribute::Array8(HexStr(val)),
-            _ => return Err(()),
+            _ => return Err(format!("Unknown type {:?}", ty)),
             };
         Ok( Some( (name, attr) ) )
     }

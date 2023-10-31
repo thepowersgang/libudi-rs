@@ -64,7 +64,12 @@ impl ::udi::meta_intr::IntrDispatcher for Driver
     }
 }
 
-pub const UDIPROPS: &'static str = "properties_version 0x101\0requires udi_bridge 0x101\0meta 1 udi_bridge\0";
+pub const UDIPROPS: &'static str = "\
+properties_version 0x101\0\
+requires udi_bridge 0x101\0\
+meta 1 udi_bridge\0\
+child_bind_ops 1 0 1\0\
+";
 ::udi::define_driver! {
     Driver as INIT_INFO_PCI;
     ops: {

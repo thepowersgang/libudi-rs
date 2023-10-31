@@ -85,7 +85,9 @@ pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::m
     //    .map(|cb| cb.scratch_requirement)
     //    .max();
     //    ;
-    let meta_idx = driver_module.get_metalang_by_name(<Cb::MetalangSpec as ::udi::metalang_trait::Metalanguage>::name()).unwrap();
+    let Some(meta_idx) = driver_module.get_metalang_by_name(<Cb::MetalangSpec as ::udi::metalang_trait::Metalanguage>::name()) else {
+        panic!("No metalang `{}` in driver?!", <Cb::MetalangSpec as ::udi::metalang_trait::Metalanguage>::name());
+    };
     let scratch_requirement = driver_module.cbs.iter()
         .filter(|cb| cb.meta_idx == meta_idx)
         .filter(|cb| cb.meta_cb_num == Cb::META_CB_NUM)
