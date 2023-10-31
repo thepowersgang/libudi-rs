@@ -117,7 +117,7 @@ impl ::udi::meta_bus::BusDevice for Driver
 			//::udi::Error::from_status(self.intr_attach_res.wait().await)?;
 
 			for _ in 0 .. 4/*NE2K_NUM_INTR_EVENT_CBS*/ {
-				let intr_event_cb = ::udi::cb::alloc::<Cbs::IntrEvent>(cb.gcb(), ::udi::get_gcb_channel().await).await;
+				let intr_event_cb = ::udi::cb::alloc::<Cbs::IntrEvent>(cb.gcb(), self.intr_channel).await;
 				::udi::meta_intr::event_rdy(intr_event_cb);
 			}
 
