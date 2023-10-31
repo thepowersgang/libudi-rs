@@ -5,6 +5,7 @@ mod channels;
 mod udi_impl;
 
 mod bridge_pci;
+mod management_agent;
 
 extern crate udi_net_ne2000;
 
@@ -20,23 +21,24 @@ mod driver {
 
 fn main() {
     // ----
-    let driver_module_buspci;
-    unsafe {
+    let driver_module_buspci = unsafe {
         let udiprops = ::udiprops_parse::load_from_raw_section(bridge_pci::UDIPROPS.as_bytes());
-        driver_module_buspci = DriverModule::new(&bridge_pci::INIT_INFO_PCI, udiprops);
-    }
-    let mut inst_buspci = create_driver_instance(&driver_module_buspci, None);
+        ::std::sync::Arc::new( DriverModule::new(&bridge_pci::INIT_INFO_PCI, udiprops) )
+    };
+    let mut inst_buspci = create_driver_instance(driver_module_buspci, None);
     if inst_buspci.children.is_empty() {
         inst_buspci.children.push(DriverChild { meta_idx: 1, ops_idx: 1, region_idx_real: 0 });
     }
 
     // ----
-    let udiprops = ::udiprops_parse::load_from_raw_section(unsafe {
-        let ptr = driver::libudi_rs_udiprops.as_ptr();
-        let len = driver::libudi_rs_udiprops_len;
-        ::core::slice::from_raw_parts(ptr, len)
-        });
-    let driver_module = unsafe { DriverModule::new(&driver::udi_init_info, udiprops) };
+    let driver_module = unsafe {
+        let udiprops = ::udiprops_parse::load_from_raw_section({
+            let ptr = driver::libudi_rs_udiprops.as_ptr();
+            let len = driver::libudi_rs_udiprops_len;
+            ::core::slice::from_raw_parts(ptr, len)
+            });
+        ::std::sync::Arc::new(DriverModule::new(&driver::udi_init_info, udiprops))
+    };
 
     let mut is_orphan = true;
     for entry in driver_module.udiprops.clone() {
@@ -57,26 +59,25 @@ fn main() {
                     let (channel_parent, channel_child) = channels::spawn_raw();
                     unsafe {
                         let ops = parent.module.get_meta_ops(parent.module.get_ops_init(child.ops_idx).unwrap());
-                        channels::anchor(channel_parent, parent.module, ops, parent.regions[child.region_idx_real].context);
+                        channels::anchor(channel_parent, parent.module.clone(), ops, parent.regions[child.region_idx_real].context);
                     }
-                    create_driver_instance(&driver_module, Some(channel_child));
+                    create_driver_instance(driver_module.clone(), Some(channel_child));
                 }
             }
         }
     }
 
     if is_orphan {
-        create_driver_instance(&driver_module, None);
+        create_driver_instance(driver_module, None);
     }
 }
 
-fn create_driver_instance<'a>(driver_module: &'a DriverModule<'static>, channel_to_parent: Option<::udi::ffi::udi_channel_t>) -> Box<DriverInstance<'a>>
+fn create_driver_instance<'a>(driver_module: ::std::sync::Arc<DriverModule<'static>>, channel_to_parent: Option<::udi::ffi::udi_channel_t>) -> Box<DriverInstance>
 {
     // See UDI Spec 10.1.2
 
     // - Create primary region
     let instance = Box::new(DriverInstance {
-        module: &driver_module,
         regions: {
             let mut v = vec![DriverRegion::new(0, driver_module.pri_init.rdata_size)];
             for secondary_region in driver_module.sec_init {
@@ -84,104 +85,23 @@ fn create_driver_instance<'a>(driver_module: &'a DriverModule<'static>, channel_
             }
             v
             },
+        module: driver_module,
         children: Vec::new(),
     });
     // - call `udi_usage_ind`
-    let mut state = InstanceInitState {
-        instance: &instance,
-        state: DriverState::UsageInd
-        };
-    let mut cb = ::udi::ffi::meta_mgmt::udi_usage_cb_t {
-        gcb: ::udi::ffi::udi_cb_t {
-            channel: ::core::ptr::null_mut(),
-            context: instance.regions[0].context,
-            scratch: ::core::ptr::null_mut(),
-            initiator_context: &mut state as *mut _ as *mut ::udi::ffi::c_void,
-            origin: ::core::ptr::null_mut(),
-        },
-        trace_mask: 0,
-        meta_idx: 0,
-    };
-    unsafe {
-        cb.gcb.scratch = ::libc::malloc(driver_module.pri_init.mgmt_scratch_requirement);
-        (driver_module.pri_init.mgmt_ops.usage_ind_op)(&mut cb, 3 /*UDI_RESOURCES_NORMAL*/);
-        ::libc::free(cb.gcb.scratch);
-    }
-    // - Initialise secondary regions (bind them to the primary region)
-    for bind in driver_module.udiprops.clone() {
-        if let ::udiprops_parse::Entry::InternalBindOps { meta_idx, region_idx, primary_ops_idx, secondary_ops_idx, bind_cb_idx } = bind {
-            let Some(rgn) = driver_module.get_region(&instance, region_idx) else {
-                panic!("Unable to find region {} for secondary bind", region_idx);
-            };
-            let Some(ops_pri) = driver_module.get_ops_init(primary_ops_idx) else {
-                panic!("Unable to find primary ops {} for internal bind", primary_ops_idx);
-            };
-            let Some(ops_sec) = driver_module.get_ops_init(secondary_ops_idx) else {
-                panic!("Unable to find secondary ops {} for internal bind", secondary_ops_idx);
-            };
-            let Some(cb) = driver_module.get_cb_init(bind_cb_idx) else {
-                panic!("Unable to find CB {} for internal bind", bind_cb_idx);
-            };
-            assert_eq!(ops_pri.meta_idx, meta_idx);
-            assert_eq!(ops_sec.meta_idx, meta_idx);
-            assert_eq!(cb.meta_idx, meta_idx);
+    let mut state = management_agent::InstanceInitState::new(instance, channel_to_parent);
+    
+    while let Some((cb, fcn)) = state.next_op().take()
+    {
+        unsafe {
+            (*cb).initiator_context = &mut state as *mut _ as *mut ::udi::ffi::c_void;
+            fcn(cb);
 
-            // Spawn the channel
-            let (channel_1, channel_2) = channels::spawn_raw();
-            let bind_cb = udi_impl::cb::alloc_internal(driver_module, bind_cb_idx, rgn.context, channel_1);
-            unsafe {
-                channels::anchor(channel_1, driver_module, driver_module.get_meta_ops(ops_pri), instance.regions[0].context);
-                channels::anchor(channel_2, driver_module, driver_module.get_meta_ops(ops_sec), rgn.context);
-                channels::event_ind_bound_internal(channel_1, bind_cb);
-            }
+            let returned_cb = state.returned_cb().unwrap();
+            udi_impl::cb::free_internal(returned_cb);
         }
     }
-    // - Bind to the parent driver
-    if let Some(channel_to_parent) = channel_to_parent {
-        for ent in driver_module.udiprops.clone() {
-            if let ::udiprops_parse::Entry::ParentBindOps { meta_idx, region_idx, ops_idx, bind_cb_idx } = ent {
-                let Some(rgn) = driver_module.get_region(&instance, region_idx) else {
-                    panic!("Unable to find region {} for parent bind", region_idx);
-                };
-                let Some(ops_init) = driver_module.get_ops_init(ops_idx) else {
-                    panic!("Unable to find ops {} for parent bind", ops_idx);
-                };
-                let Some(cb) = driver_module.get_cb_init(bind_cb_idx) else {
-                    panic!("Unable to find CB {} for parent bind", bind_cb_idx);
-                };
-                assert_eq!(ops_init.meta_idx, meta_idx);
-                assert_eq!(cb.meta_idx, meta_idx);
-
-                let bind_cb = udi_impl::cb::alloc_internal(driver_module, bind_cb_idx, rgn.context, channel_to_parent);
-                unsafe {
-                    channels::anchor(channel_to_parent, driver_module, driver_module.get_meta_ops(ops_init), rgn.context);
-                    channels::event_ind_bound_internal(channel_to_parent, bind_cb);
-                }
-            }
-        }
-    }
-    // - Enumerate children
-    #[cfg(false_)]
-    unsafe {
-        let mut cb = ::udi::ffi::meta_mgmt::udi_enumerate_cb_t {
-            gcb: ::udi::ffi::udi_cb_t {
-                channel: ::core::ptr::null_mut(),
-                context: instance.regions[0].context,
-                scratch: ::core::ptr::null_mut(),
-                initiator_context: &mut state as *mut _ as *mut ::udi::ffi::c_void,
-                origin: ::core::ptr::null_mut(),
-            },
-            child_id: todo!(),
-            child_data: todo!(),
-            attr_list: todo!(),
-            attr_valid_length: todo!(),
-            filter_list: todo!(),
-            filter_list_length: todo!(),
-            parent_id: todo!(),
-        };
-        (driver_module.pri_init.mgmt_ops.enumerate_req_op)(&mut cb, 0);
-    }
-    instance
+    state.assert_complete()
 }
 
 struct DriverModule<'a> {
@@ -304,35 +224,13 @@ unsafe fn terminated_list<'a, T: 'a>(input: *const T, cb: impl Fn(&T)->bool) -> 
     ::std::slice::from_raw_parts(input, count)
 }
 
-struct DriverInstance<'a>
+struct DriverInstance
 {
-    module: &'a DriverModule<'static>,
+    module: ::std::sync::Arc<DriverModule<'static>>,
     regions: Vec<DriverRegion>,
     children: Vec<DriverChild>,
     //management_channel: ::udi::ffi::udi_channel_t,
     //cur_state: DriverState,
-}
-struct InstanceInitState<'a> {
-    instance: &'a DriverInstance<'a>,
-    state: DriverState,
-}
-impl InstanceInitState<'_> {
-    fn usage_ind(&mut self) {
-        match self.state
-        {
-        DriverState::UsageInd => {
-            self.state = DriverState::SecondaryBind;
-            },
-        _ => {},
-        }
-    }
-}
-enum DriverState {
-    UsageInd,
-    SecondaryBind,
-    ParentBind,
-    EnumChildren,
-    Active,
 }
 struct DriverRegion
 {

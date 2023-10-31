@@ -62,5 +62,5 @@ unsafe extern "C" fn udi_channel_spawn(
 #[no_mangle]
 unsafe extern "C" fn udi_channel_event_complete(cb: *mut udi_channel_event_cb_t, status: udi_status_t)
 {
-    todo!();
+    todo!("udi_channel_event_complete");
 }

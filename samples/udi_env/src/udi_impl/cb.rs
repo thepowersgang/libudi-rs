@@ -20,7 +20,7 @@ impl<T: ::udi::metalang_trait::MetalangCb> MetalangCb for T {
 unsafe extern "C" fn udi_cb_alloc(callback: udi_cb_alloc_call_t, gcb: *mut udi_cb_t, cb_idx: udi_index_t, default_channel: udi_channel_t)
 {
     let module = crate::channels::get_driver_module(&(*gcb).channel);
-    let rv = alloc_internal(module, cb_idx, (*gcb).context, default_channel);
+    let rv = alloc_internal(&module, cb_idx, (*gcb).context, default_channel);
     callback(gcb, rv);
 }
 
@@ -42,4 +42,11 @@ pub fn alloc_internal(driver_module: &crate::DriverModule, cb_idx: udi_index_t, 
             });
         rv
     }
+}
+pub unsafe fn free_internal(handle: *mut udi_cb_t)
+{
+    if ! (*handle).scratch.is_null() {
+        ::libc::free((*handle).scratch);
+    }
+    ::libc::free(handle as *mut ::libc::c_void);
 }

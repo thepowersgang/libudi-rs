@@ -3,16 +3,36 @@ struct Driver {
 }
 impl ::udi::init::Driver for Driver
 {
-    const MAX_ATTRS: u8 = 0;
+    const MAX_ATTRS: u8 = 3;
     type Future_init<'s> = impl ::core::future::Future<Output=Self>;
     fn usage_ind(_cb: udi::init::CbRefUsage, _resouce_level: u8) -> Self::Future_init<'_> {
         async move { Driver {} }
     }
 
     type Future_enumerate<'s> = impl ::core::future::Future<Output=(udi::init::EnumerateResult,udi::init::AttrSink<'s>)> + 's;
-    fn enumerate_req<'s>(&'s mut self, _cb: udi::init::CbRefEnumerate<'s>, _level: udi::init::EnumerateLevel, attrs_out: udi::init::AttrSink<'s>) -> Self::Future_enumerate<'s> {
+    fn enumerate_req<'s>(
+        &'s mut self,
+        _cb: udi::init::CbRefEnumerate<'s>,
+        level: udi::init::EnumerateLevel,
+        mut attrs_out: udi::init::AttrSink<'s>
+    ) -> Self::Future_enumerate<'s>
+    {
         async move {
-            (udi::init::EnumerateResult::Done, attrs_out)
+			match level
+			{
+			::udi::init::EnumerateLevel::Start
+			|::udi::init::EnumerateLevel::StartRescan => {
+                // bus_type string pci  pci_vendor_id ubit32 0x10ec  pci_device_id ubit32 0x8029
+				attrs_out.push_string("bus_type", "pci");
+				attrs_out.push_u32("pci_vendor_id", 0x10ec);
+				attrs_out.push_u32("pci_device_id", 0x8029);
+				(::udi::init::EnumerateResult::Ok(OpsList::Bridge as _), attrs_out)
+				},
+			udi::init::EnumerateLevel::Next => (::udi::init::EnumerateResult::Done, attrs_out),
+			udi::init::EnumerateLevel::New => todo!(),
+			udi::init::EnumerateLevel::Directed => todo!(),
+			udi::init::EnumerateLevel::Release => todo!(),
+			}
         }
     }
 

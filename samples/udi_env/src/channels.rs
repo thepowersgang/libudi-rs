@@ -5,7 +5,7 @@ struct ChannelInner {
     sides: [::std::cell::OnceCell<ChannelInnerSide>; 2],
 }
 struct ChannelInnerSide {
-    driver_module: *const crate::DriverModule<'static>,
+    driver_module: ::std::sync::Arc< crate::DriverModule<'static> >,
     ops: &'static dyn udi::metalang_trait::MetalangOpsHandler,
     context: *mut ::udi::ffi::c_void,
 }
@@ -26,9 +26,9 @@ impl<'a> ChannelRef<'a> {
 }
 
 
-pub unsafe fn get_driver_module(ch: &::udi::ffi::udi_channel_t) -> &crate::DriverModule {
+pub unsafe fn get_driver_module(ch: &::udi::ffi::udi_channel_t) -> ::std::sync::Arc<crate::DriverModule> {
     let cr = ChannelRef::from_handle(*ch);
-    &*cr.get_side().unwrap().driver_module
+    cr.get_side().unwrap().driver_module.clone()
 }
 
 /// Spawn a channel without needing a source channel
@@ -60,7 +60,7 @@ pub unsafe fn spawn(
 /// Anchor a channel end
 pub unsafe fn anchor(
     channel: ::udi::ffi::udi_channel_t,
-    driver_module: *const crate::DriverModule<'static>,
+    driver_module: ::std::sync::Arc<crate::DriverModule<'static>>,
     ops: &'static dyn udi::metalang_trait::MetalangOpsHandler,
     context: *mut ::udi::ffi::c_void,
 )
