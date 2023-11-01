@@ -148,17 +148,77 @@ impl<'a> Iterator for AttributeList<'a> {
     }
     
 }
-#[derive(Debug)]
+#[derive(Debug,PartialEq)]
 pub enum Attribute<'a> {
     String(EscapedStr<'a>),
     Ubit32(u32),
     Boolean(bool),
     Array8(HexStr<'a>),
 }
-#[derive(Debug)]
+#[derive(Debug,PartialEq)]
 pub struct HexStr<'a>(&'a str);
-#[derive(Debug)]
+impl<'a> HexStr<'a> {
+    pub fn iter(&self) -> impl Iterator<Item=u8> + 'a {
+        self.0.as_bytes().chunks(2)
+            .map(move |v| u8::from_str_radix(::core::str::from_utf8(v).unwrap(), 16))
+            .map(move |v| v.unwrap_or(0))
+    }
+}
+impl<'a> PartialEq<&'a [u8]> for HexStr<'_> {
+    fn eq(&self, other: &&'a [u8]) -> bool {
+        *self == **other
+    }
+}
+impl PartialEq<[u8]> for HexStr<'_> {
+    fn eq(&self, other: &[u8]) -> bool {
+        self.iter().eq(other.iter().copied())
+    }
+}
+#[derive(Debug,PartialEq)]
 pub struct EscapedStr<'a>(&'a str);
+impl<'a> EscapedStr<'a> {
+    pub fn new(v: &str) -> EscapedStr {
+        EscapedStr(v)
+    }
+    pub fn chars(&self) -> impl Iterator<Item=char> + 'a {
+        let mut is_escape = false;
+        self.0.chars()
+            .filter_map(move |c| {
+                if is_escape {
+                    is_escape = false;
+                    Some(match c
+                        {
+                        '_' => ' ',
+                        'H' => '#',
+                        '\\' => '\\',
+                        'p' => 9 as char,   // Paragraph break, use vertical tab
+                        'm' => {
+                            todo!("Message indexes!");
+                            },
+                        _ => '?',
+                        })
+                }
+                else if c == '\\' {
+                    is_escape = true;
+                    None
+                }
+                else {
+                    Some(c)
+                }
+            })
+    }
+}
+impl PartialEq<str> for EscapedStr<'_> {
+    fn eq(&self, other: &str) -> bool {
+        self.chars().eq(other.chars())
+    }
+}
+impl<'a> PartialEq<&'a str> for EscapedStr<'_> {
+    fn eq(&self, other: &&'a str) -> bool {
+        *self == **other
+    }
+}
+
 #[derive(Default,Debug)]
 pub struct RegionAttributes
 {

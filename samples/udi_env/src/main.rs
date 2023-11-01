@@ -25,10 +25,7 @@ fn main() {
         let udiprops = ::udiprops_parse::load_from_raw_section(bridge_pci::UDIPROPS.as_bytes());
         ::std::sync::Arc::new( DriverModule::new(&bridge_pci::INIT_INFO_PCI, udiprops) )
     };
-    let mut inst_buspci = create_driver_instance(driver_module_buspci, None);
-    if inst_buspci.children.is_empty() {
-        inst_buspci.children.push(DriverChild { meta_idx: 1, ops_idx: 1, region_idx_real: 0 });
-    }
+    let inst_buspci = create_driver_instance(driver_module_buspci, None);
 
     // ----
     let driver_module = unsafe {
@@ -42,27 +39,94 @@ fn main() {
 
     let mut is_orphan = true;
     for entry in driver_module.udiprops.clone() {
-        if let ::udiprops_parse::Entry::Device { device_name, meta_idx, attributes } = entry {
-            is_orphan = false;
-            let meta = driver_module.get_metalang_name(meta_idx);
-            // Search all known devices (all children of all loaded instances) for one that matches this attribute list and metalang
-            for parent in [&inst_buspci] {
-                for child in parent.children.iter() {
-                    let meta2 = parent.module.get_metalang_name(child.meta_idx);
-                    if meta != meta2 {
-                        continue ;
-                    }
-                    // TODO: Check attributes
-                    for (attr_name,attr_value) in attributes.clone() {
-                    }
-
-                    let (channel_parent, channel_child) = channels::spawn_raw();
-                    unsafe {
-                        let ops = parent.module.get_meta_ops(parent.module.get_ops_init(child.ops_idx).unwrap());
-                        channels::anchor(channel_parent, parent.module.clone(), ops, parent.regions[child.region_idx_real].context);
-                    }
-                    create_driver_instance(driver_module.clone(), Some(channel_child));
+        let ::udiprops_parse::Entry::Device { device_name, meta_idx, attributes } = entry else {
+            continue
+            };
+        is_orphan = false;
+        let meta = driver_module.get_metalang_name(meta_idx);
+        // Search all known devices (all children of all loaded instances) for one that matches this attribute list and metalang
+        for parent in [&inst_buspci]
+        {
+            'child: for child in parent.children.iter()
+            {
+                if child.is_bound.get() {
+                    continue ;
                 }
+                let meta2 = parent.module.get_metalang_name(child.meta_idx);
+                if meta != meta2 {
+                    continue ;
+                }
+
+                fn find_attr<'a>(des_attr_name: &str, attrs: &'a [::udi::ffi::attr::udi_instance_attr_list_t]) -> Option<&'a ::udi::ffi::attr::udi_instance_attr_list_t> {
+                    for a in attrs.iter()
+                    {
+                        let a_name = {
+                            let name_len = a.attr_name.iter().position(|v| *v == 0).unwrap_or(a.attr_name.len());
+                            let name = &a.attr_name[..name_len];
+                            ::std::str::from_utf8(name).unwrap_or("")
+                            };
+                        if a_name == des_attr_name {
+                            return Some(a);
+                        }
+                    }
+                    None
+                }
+                for (attr_name,attr_value) in attributes.clone() {
+                    if let Some(a) = find_attr(attr_name, &child.attrs) {
+                        let is_match = match a.attr_type
+                            {
+                            ::udi::ffi::attr::UDI_ATTR_STRING => {
+                                let v = &a.attr_value[..a.attr_length as usize];
+                                let v = ::std::str::from_utf8(v).unwrap_or("");
+
+                                match attr_value {
+                                ::udiprops_parse::parsed::Attribute::String(val) => val == v,
+                                _ => false,
+                                }
+                                }
+                            ::udi::ffi::attr::UDI_ATTR_ARRAY8 => {
+                                let v = &a.attr_value[..a.attr_length as usize];
+                                match attr_value {
+                                ::udiprops_parse::parsed::Attribute::Array8(val) => val == v,
+                                _ => false,
+                                }
+                                }
+                            ::udi::ffi::attr::UDI_ATTR_UBIT32 => {
+                                let v = u32::from_le_bytes(a.attr_value[..4].try_into().unwrap());
+                                match attr_value {
+                                ::udiprops_parse::parsed::Attribute::Ubit32(val) => val == v,
+                                _ => false,
+                                }
+                                }
+                            ::udi::ffi::attr::UDI_ATTR_BOOLEAN => {
+                                let v = a.attr_value[0] != 0;
+                                match attr_value {
+                                ::udiprops_parse::parsed::Attribute::Boolean(val) => val == v,
+                                _ => false,
+                                }
+                                }
+                            _ => todo!("Handle attribute type {}", a.attr_type),
+                            };
+                        if !is_match {
+                            continue 'child;
+                        }
+                    }
+                    else {
+                        // Fail if the attribute is missing?
+                        // - The meta matching implies that it should work though
+                        continue 'child;
+                    }
+                }
+
+                // TODO: Flag the child as bound
+                child.is_bound.set(true);
+
+                let (channel_parent, channel_child) = channels::spawn_raw();
+                unsafe {
+                    let ops = parent.module.get_meta_ops(parent.module.get_ops_init(child.ops_idx).unwrap());
+                    channels::anchor(channel_parent, parent.module.clone(), ops, parent.regions[child.region_idx_real].context);
+                }
+                create_driver_instance(driver_module.clone(), Some(channel_child));
             }
         }
     }
@@ -140,17 +204,23 @@ impl<'a> DriverModule<'a> {
         rv
     }
 
-    fn get_region<'o>(&self, instance: &'o DriverInstance, region_idx: u8) -> Option<&'o DriverRegion> {
+    fn get_region_index(&self, region_idx: u8) -> Option<usize> {
         if region_idx == 0 {
-            return Some(&instance.regions[0]);
+            return Some(0);
         }
         else {
-            Iterator::zip(
-                self.sec_init.iter(),
-                instance.regions[1..].iter(),
-                )
-                .find(|(v,_)| v.region_idx == region_idx)
-                .map(|(_,v)| v)
+            self.sec_init.iter()
+                .enumerate()
+                .find(|(_, v)| v.region_idx == region_idx)
+                .map(|(i,_)| i)
+        }
+    }
+    fn get_region<'o>(&self, instance: &'o DriverInstance, region_idx: u8) -> Option<&'o DriverRegion> {
+        if let Some(i) = self.get_region_index(region_idx) {
+            Some(&instance.regions[i])
+        }
+        else {
+            None
         }
     }
 
@@ -251,7 +321,9 @@ impl DriverRegion
     }
 }
 struct DriverChild {
+    is_bound: ::std::cell::Cell<bool>,
     meta_idx: u8,
     ops_idx: u8,
     region_idx_real: usize,
+    attrs: Vec<::udi::ffi::attr::udi_instance_attr_list_t>,
 }

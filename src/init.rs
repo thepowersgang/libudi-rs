@@ -79,7 +79,7 @@ impl<'a> AttrSink<'a>
 			}
 		}
 	}
-	fn set_name_and_type(e: &mut crate::ffi::attr::udi_instance_attr_list_t, name: &str, ty: crate::ffi::attr::_udi_instance_attr_type_t) {
+	fn set_name_and_type(e: &mut crate::ffi::attr::udi_instance_attr_list_t, name: &str, ty: crate::ffi::attr::udi_instance_attr_type_t) {
 		let len = usize::min(name.len(), e.attr_name.len());
 		e.attr_name[..len].copy_from_slice(&name.as_bytes()[..len]);
 		if len < e.attr_name.len() {

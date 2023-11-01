@@ -238,14 +238,43 @@ impl InstanceInitState
         self.returned_cb = cb as *mut _;
         match enumeration_result
         {
-        udi::init::EnumerateResult::Ok(ops_idx) => {
+        udi::init::EnumerateResult::Ok(child_ops_idx) => {
+            // The driver now owns this pointer
+            unsafe { (*cb).child_data = ::core::ptr::null_mut(); }
             // TODO: Pull the info out of the cb and populate the child information in the instance
+            // - `child_ID` should be valid, but binding doesn't set it
+            let attrs = unsafe { ::core::slice::from_raw_parts((*cb).attr_list, (*cb).attr_valid_length as usize) };
+            for a in attrs {
+                println!("attr = {:?} {} {:?}", a.attr_name, a.attr_type, &a.attr_value[..a.attr_length as usize]);
+            }
+
+            let mut child_bind_ops = None;
+            for entry in self.instance.module.udiprops.clone() {
+                if let ::udiprops_parse::Entry::ChildBindOps { meta_idx, region_idx, ops_idx } = entry {
+                    if ops_idx == child_ops_idx {
+                        child_bind_ops = Some((meta_idx, region_idx));
+                    }
+                }
+            }
+            if let Some((meta_idx, region_idx)) = child_bind_ops {
+                let region_idx_real = self.instance.module.get_region_index(region_idx).unwrap();
+                self.instance.children.push(crate::DriverChild {
+                    is_bound: Default::default(),
+                    meta_idx,
+                    ops_idx: child_ops_idx,
+                    region_idx_real,
+                    attrs: attrs.to_vec()
+                });
+            }
         },
         udi::init::EnumerateResult::Leaf => { *flagged_complete = true; },
         udi::init::EnumerateResult::Done => { *flagged_complete = true; },
         udi::init::EnumerateResult::Failed => { *flagged_complete = true; },
         }
         unsafe {
+            if ! (*cb).child_data.is_null() {
+                ::libc::free((*cb).child_data as _);
+            }
             ::libc::free((*cb).attr_list as _);
         }
     }
