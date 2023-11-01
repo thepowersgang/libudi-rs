@@ -413,15 +413,24 @@ macro_rules! define_pio_ops
 		$crate::ffi::pio::UDI_PIO_MEM as u16
 		|($crate::pio::vals::regs::$mem_reg as u16)
 		$(| $crate::pio::vals::stride::$mem_stride << 5)?
+		|($crate::pio::vals::regs::$pio_reg as u16) << 7
+		$(| $crate::pio::vals::stride::$pio_stride << 10)?
+		|($crate::pio::vals::regs::$count_reg as u16) << 7
 	};
 	(@rep_args buf $mem_reg:ident $($mem_stride:ident)?, $pio_reg:ident $($pio_stride:ident)?, $count_reg:ident) => {
 		$crate::ffi::pio::UDI_PIO_BUF as u16
 		|($crate::pio::vals::regs::$mem_reg as u16)
 		$(| $crate::pio::vals::stride::$mem_stride << 5)?
+		|($crate::pio::vals::regs::$pio_reg as u16) << 7
+		$(| $crate::pio::vals::stride::$pio_stride << 10)?
+		|($crate::pio::vals::regs::$count_reg as u16) << 7
 	};
 	(@rep_args scratch $mem_reg:ident $($mem_stride:ident)?, $pio_reg:ident $($pio_stride:ident)?, $count_reg:ident) => {
 		$crate::ffi::pio::UDI_PIO_SCRATCH as u16
 		|($crate::pio::vals::regs::$mem_reg as u16)
 		$(| $crate::pio::vals::stride::$mem_stride << 5)?
+		|($crate::pio::vals::regs::$pio_reg as u16) << 7
+		$(| $crate::pio::vals::stride::$pio_stride << 10)?
+		|($crate::pio::vals::regs::$count_reg as u16) << 7
 	};
 }

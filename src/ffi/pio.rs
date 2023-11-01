@@ -26,6 +26,7 @@ extern "C" {
 pub struct udi_pio_handle_s([u8;0]);
 
 #[repr(C)]
+#[derive(Copy,Clone)]
 pub struct udi_pio_trans_t
 {
 	pub pio_op: u8,
