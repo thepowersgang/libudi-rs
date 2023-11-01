@@ -66,7 +66,19 @@ unsafe extern "C" fn udi_pio_trans(
     )
 {
     let pio_handle = &*(pio_handle as *const PioTransReal);
-    let (status, retval) = match pio_trans_inner(&mut buf, mem_ptr, (*gcb).scratch, &pio_handle.trans_list, start_label)
+    let mut state = PioMemState {
+        buf: &mut buf,
+        mem_ptr,
+        scratch: (*gcb).scratch,
+        registers: Default::default()
+    };
+    let mut io_state = PioDevState {
+        regset_idx: pio_handle.regset_idx,
+        base_offset: pio_handle.base_offset,
+        length: pio_handle.length,
+        pace: pio_handle.pace,
+    };
+    let (status, retval) = match pio_trans_inner(&mut state, &mut io_state, &pio_handle.trans_list, start_label)
         {
         Err(e) => {
             (e.into_inner(), 0)
@@ -209,28 +221,35 @@ impl PioMemState<'_> {
     }
 }
 struct PioDevState {
+    regset_idx: u32,
+    base_offset: u32,
+    length: u32,
+    pace: u32,
 }
 impl PioDevState {
     // PILE OF HACK:
     // - This is set up to semi-emulate a NE2000
     fn read(&self, reg: u32, size: u8) -> RegVal {
-        println!("PIO Read {:#x}+{}", reg, 1<<size);
-        match reg {
-        0x1F => RegVal::from_u8(0),
-        0x07 => RegVal::from_u8(0x80),
-        0x00 => RegVal::from_u8(0x99),
+        println!("PIO Read {:#x}+{:#x},l={}", self.base_offset, reg, 1<<size);
+        assert!(self.base_offset + reg + 1 << size <= self.length);
+        match (self.regset_idx, self.base_offset + reg) {
+        (0, 0x1F) => RegVal::from_u8(0),
+        (0, 0x07) => RegVal::from_u8(0x80),
+        (0, 0x00) => RegVal::from_u8(0x99),
         _ => todo!("Handle reg {:#X}", reg),
         }
     }
     fn write(&mut self, reg: u32, val: RegVal, size: u8) {
+        assert!(size <= 5);
         println!("PIO Write {:#x}+{} = {:?}", reg, 1<<size, &val.bytes[..1<<size]);
-        match reg {
+        assert!(self.base_offset + reg + 1 << size <= self.length);
+        match (self.regset_idx, self.base_offset + reg) {
         _ => {},
         }
     }
 }
 
-fn pio_trans_inner(buf: &mut *mut udi_buf_t, mem_ptr: *mut c_void, scratch: *mut c_void, trans_list: &[udi_pio_trans_t], start_label: u8) -> Result<u16,::udi::Error>
+fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_list: &[udi_pio_trans_t], start_label: u8) -> Result<u16,::udi::Error>
 {
     fn find_label(trans_list: &[udi_pio_trans_t], label: u8) -> Result<usize,::udi::Error> {
         if label == 0 {
@@ -246,8 +265,6 @@ fn pio_trans_inner(buf: &mut *mut udi_buf_t, mem_ptr: *mut c_void, scratch: *mut
             },
         }
     }
-    let mut state = PioMemState { buf, mem_ptr, scratch, registers: Default::default() };
-    let mut io_state = PioDevState { };
     let mut ofs = find_label(trans_list, start_label)?;
     for _ in 0 .. 1000 {
         let op = &trans_list[ofs];
