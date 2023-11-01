@@ -322,8 +322,9 @@ impl DriverRegion
 }
 struct DriverChild {
     is_bound: ::std::cell::Cell<bool>,
-    meta_idx: u8,
-    ops_idx: u8,
+    child_id: ::udi::ffi::udi_ubit32_t,
+    meta_idx: ::udi::ffi::udi_index_t,
+    ops_idx: ::udi::ffi::udi_index_t,
     region_idx_real: usize,
     attrs: Vec<::udi::ffi::attr::udi_instance_attr_list_t>,
 }

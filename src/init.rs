@@ -50,10 +50,16 @@ pub enum EnumerateLevel
 }
 pub enum EnumerateResult
 {
-	Ok(crate::ffi::udi_index_t),
+	Ok {
+		ops_idx: crate::ffi::udi_index_t,
+		child_id: crate::ffi::udi_ubit32_t,
+	},
 	Leaf,
 	Done,
-	// ...
+    Rescan,
+    Removed,
+    RemovedSelf,
+    Released,
 	Failed,
 }
 /// A place to store attributes, limited to [Driver::MAX_ATTRS]
@@ -232,13 +238,16 @@ future_wrapper!{enumerate_req_op => <T as Driver>(cb: *mut udi_enumerate_cb_t, e
 		|cb: *mut udi_enumerate_cb_t,(res,attrs)| unsafe {
 			let (res,ops_idx) = match res
 				{
-				EnumerateResult::Ok(ops_idx) => (0,ops_idx),
+				EnumerateResult::Ok { ops_idx, child_id } => {
+					(*cb).child_id = child_id;
+					(0,ops_idx)
+					},
 				EnumerateResult::Leaf => (1,0),
 				EnumerateResult::Done => (2,0),
-				//EnumerateResult::Rescan => (3,0),
-				//EnumerateResult::Removed => (4,0),
-				//EnumerateResult::RemovedSelf => (5,0),
-				//EnumerateResult::Released => (6,0),
+				EnumerateResult::Rescan => (3,0),
+				EnumerateResult::Removed => (4,0),
+				EnumerateResult::RemovedSelf => (5,0),
+				EnumerateResult::Released => (6,0),
 				EnumerateResult::Failed => (255,0),
 				};
 			(*cb).attr_valid_length = attrs.dst.offset_from((*cb).attr_list).try_into().expect("BUG: Attr list too long");

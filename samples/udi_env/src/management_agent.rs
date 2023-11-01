@@ -238,11 +238,9 @@ impl InstanceInitState
         self.returned_cb = cb as *mut _;
         match enumeration_result
         {
-        udi::init::EnumerateResult::Ok(child_ops_idx) => {
+        udi::init::EnumerateResult::Ok { ops_idx: child_ops_idx, child_id } => {
             // The driver now owns this pointer
             unsafe { (*cb).child_data = ::core::ptr::null_mut(); }
-            // TODO: Pull the info out of the cb and populate the child information in the instance
-            // - `child_ID` should be valid, but binding doesn't set it
             let attrs = unsafe { ::core::slice::from_raw_parts((*cb).attr_list, (*cb).attr_valid_length as usize) };
             for a in attrs {
                 println!("attr = {:?} {} {:?}", a.attr_name, a.attr_type, &a.attr_value[..a.attr_length as usize]);
@@ -260,6 +258,7 @@ impl InstanceInitState
                 let region_idx_real = self.instance.module.get_region_index(region_idx).unwrap();
                 self.instance.children.push(crate::DriverChild {
                     is_bound: Default::default(),
+                    child_id,
                     meta_idx,
                     ops_idx: child_ops_idx,
                     region_idx_real,
@@ -269,6 +268,10 @@ impl InstanceInitState
         },
         udi::init::EnumerateResult::Leaf => { *flagged_complete = true; },
         udi::init::EnumerateResult::Done => { *flagged_complete = true; },
+        udi::init::EnumerateResult::Rescan => todo!(),
+        udi::init::EnumerateResult::Removed => todo!(),
+        udi::init::EnumerateResult::RemovedSelf => todo!(),
+        udi::init::EnumerateResult::Released => todo!(),
         udi::init::EnumerateResult::Failed => { *flagged_complete = true; },
         }
         unsafe {

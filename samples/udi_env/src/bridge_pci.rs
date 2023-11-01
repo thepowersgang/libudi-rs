@@ -26,7 +26,7 @@ impl ::udi::init::Driver for Driver
 				attrs_out.push_string("bus_type", "pci");
 				attrs_out.push_u32("pci_vendor_id", 0x10ec);
 				attrs_out.push_u32("pci_device_id", 0x8029);
-				(::udi::init::EnumerateResult::Ok(OpsList::Bridge as _), attrs_out)
+				(::udi::init::EnumerateResult::Ok { ops_idx: OpsList::Bridge as _, child_id: 0 }, attrs_out)
 				},
 			udi::init::EnumerateLevel::Next => (::udi::init::EnumerateResult::Done, attrs_out),
 			udi::init::EnumerateLevel::New => todo!(),

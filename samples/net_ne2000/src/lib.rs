@@ -61,7 +61,7 @@ impl ::udi::init::Driver for Driver
 					self.mac_addr[0], self.mac_addr[1], self.mac_addr[2],
 					self.mac_addr[3], self.mac_addr[4], self.mac_addr[5],
 					));
-				(::udi::init::EnumerateResult::Ok(OpsList::Ctrl as _), attrs_out)
+				(::udi::init::EnumerateResult::Ok { ops_idx: OpsList::Ctrl as _, child_id: 0 }, attrs_out)
 				},
 			udi::init::EnumerateLevel::Next => (::udi::init::EnumerateResult::Done, attrs_out),
 			udi::init::EnumerateLevel::New => todo!(),
