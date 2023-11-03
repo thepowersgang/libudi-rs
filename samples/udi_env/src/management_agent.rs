@@ -152,7 +152,8 @@ impl InstanceInitState
             crate::channels::anchor(channel_1, self.instance.module.clone(), driver_module.get_meta_ops(ops_pri), self.instance.regions[0].context);
             crate::channels::anchor(channel_2, self.instance.module.clone(), driver_module.get_meta_ops(ops_sec), rgn.context);
 
-            (bind_cb, Box::new(move |bind_cb| crate::channels::event_ind_bound_internal(channel_1, bind_cb as *mut _)))
+            let (op, cb) = crate::channels::event_ind_bound_internal(channel_1, bind_cb as *mut _);
+            (cb as *mut _, Box::new(move |cb| op(cb as *mut _)))
         }
     }
     fn next_op_parentbind(&mut self, channel_to_parent: ::udi::ffi::udi_channel_t) -> Op
@@ -176,7 +177,8 @@ impl InstanceInitState
                 let bind_cb = crate::udi_impl::cb::alloc_internal(&driver_module, bind_cb_idx, rgn.context, channel_to_parent);
                 unsafe {
                     crate::channels::anchor(channel_to_parent, self.instance.module.clone(), driver_module.get_meta_ops(ops_init), rgn.context);
-                    return (bind_cb, Box::new(move |bind_cb| crate::channels::event_ind_bound_internal(channel_to_parent, bind_cb as *mut _)));
+                    let (op, cb) = crate::channels::event_ind_bound_internal(channel_to_parent, bind_cb as *mut _);
+                    return (cb as *mut _, Box::new(move |cb| op(cb as *mut _)));
                 }
             }
         }
@@ -243,7 +245,12 @@ impl InstanceInitState
             unsafe { (*cb).child_data = ::core::ptr::null_mut(); }
             let attrs = unsafe { ::core::slice::from_raw_parts((*cb).attr_list, (*cb).attr_valid_length as usize) };
             for a in attrs {
-                println!("attr = {:?} {} {:?}", a.attr_name, a.attr_type, &a.attr_value[..a.attr_length as usize]);
+                let a_name = {
+                    let name_len = a.attr_name.iter().position(|v| *v == 0).unwrap_or(a.attr_name.len());
+                    let name = &a.attr_name[..name_len];
+                    ::std::str::from_utf8(name).unwrap_or("")
+                    };
+                println!("attr = {:?} {} {:?}", a_name, a.attr_type, &a.attr_value[..a.attr_length as usize]);
             }
 
             let mut child_bind_ops = None;
@@ -279,6 +286,22 @@ impl InstanceInitState
                 ::libc::free((*cb).child_data as _);
             }
             ::libc::free((*cb).attr_list as _);
+        }
+    }
+
+    pub fn bind_complete(&mut self, cb: *mut ::udi::ffi::imc::udi_channel_event_cb_t, result: ::udi::Result<()>) {
+        self.returned_cb = cb as *mut _;
+        unsafe {
+            ::libc::free((*cb).params.parent_bound.bind_cb as _);
+        }
+        match self.state {
+        DriverState::ParentBind => {
+            self.state = DriverState::EnumChildrenStart;
+            }
+        _ => todo!(),
+        }
+        if let Err(e) = result {
+            todo!("bind_complete error {:?}", e);
         }
     }
 }

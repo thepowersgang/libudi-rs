@@ -62,5 +62,18 @@ unsafe extern "C" fn udi_channel_spawn(
 #[no_mangle]
 unsafe extern "C" fn udi_channel_event_complete(cb: *mut udi_channel_event_cb_t, status: udi_status_t)
 {
-    todo!("udi_channel_event_complete");
+    match (*cb).event
+    {
+    ::udi::ffi::imc::UDI_CHANNEL_BOUND => {
+        // TODO: Check the initiator context to know who to signal
+        if !(*cb).gcb.initiator_context.is_null() {
+            let is = &mut *( (*cb).gcb.initiator_context as *mut crate::management_agent::InstanceInitState);
+            is.bind_complete(cb, ::udi::Error::from_status(status));
+        }
+        else {
+            todo!("udi_channel_event_complete({}) null", (*cb).event);
+        }
+        },
+    _ => todo!("udi_channel_event_complete({})", (*cb).event),
+    }
 }

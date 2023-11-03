@@ -109,7 +109,8 @@ pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::m
     call(ops, cb);
 }
 
-pub unsafe fn event_ind_bound_internal(channel: ::udi::ffi::udi_channel_t, bind_cb: *mut ::udi::ffi::udi_cb_t) {
+pub unsafe fn event_ind_bound_internal(channel: ::udi::ffi::udi_channel_t, bind_cb: *mut ::udi::ffi::udi_cb_t)
+    -> (::udi::ffi::imc::udi_channel_event_ind_op_t, *mut ::udi::ffi::imc::udi_channel_event_cb_t) {
     event_ind(
         channel,
         ::udi::ffi::imc::UDI_CHANNEL_BOUND,
@@ -118,22 +119,26 @@ pub unsafe fn event_ind_bound_internal(channel: ::udi::ffi::udi_channel_t, bind_
                 bind_cb,
             },
         },
-    );
+    )
 }
-unsafe fn event_ind(channel: ::udi::ffi::udi_channel_t, event: u8, params: ::udi::ffi::imc::udi_channel_event_cb_t_params) {
+unsafe fn event_ind(channel: ::udi::ffi::udi_channel_t, event: u8, params: ::udi::ffi::imc::udi_channel_event_cb_t_params)
+    -> (::udi::ffi::imc::udi_channel_event_ind_op_t, *mut ::udi::ffi::imc::udi_channel_event_cb_t)
+{
     let ch = ChannelRef::from_handle(channel);
     let side = ch.get_side().unwrap();
     let event_ind_op = side.ops.channel_event_ind_op();
-    let mut cb = ::udi::ffi::imc::udi_channel_event_cb_t {
+    let cb = ::libc::malloc( ::core::mem::size_of::<::udi::ffi::imc::udi_channel_event_cb_t>() ) as *mut ::udi::ffi::imc::udi_channel_event_cb_t;
+    ::core::ptr::write(cb, ::udi::ffi::imc::udi_channel_event_cb_t {
         gcb: ::udi::ffi::udi_cb_t {
             channel,
             context: side.context,
             scratch: ::core::ptr::null_mut(),   // TODO: How?
+            // TODO: Set `initiator_context` to something that allows `udi_channel_event_complete` to communicated back
             initiator_context: ::core::ptr::null_mut(),
             origin: ::core::ptr::null_mut(),
         },
         event,
         params,
-    };
-    event_ind_op(&mut cb);
+    });
+    (event_ind_op, cb)
 }

@@ -114,7 +114,7 @@ impl<'a> AttrSink<'a>
 			struct Buf<'a>(&'a mut [u8]);
 			impl<'a> ::core::fmt::Write for Buf<'a> {
 				fn write_str(&mut self, s: &str) -> core::fmt::Result {
-					let len = usize::max(s.len(), self.0.len());
+					let len = usize::min(s.len(), self.0.len());
 					let (d, t) = ::core::mem::replace(&mut self.0, &mut []).split_at_mut(len);
 					d.copy_from_slice(&s.as_bytes()[..len]);
 					self.0 = t;

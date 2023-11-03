@@ -152,7 +152,6 @@ fn create_driver_instance<'a>(driver_module: ::std::sync::Arc<DriverModule<'stat
         module: driver_module,
         children: Vec::new(),
     });
-    // - call `udi_usage_ind`
     let mut state = management_agent::InstanceInitState::new(instance, channel_to_parent);
     
     while let Some((cb, fcn)) = state.next_op().take()
