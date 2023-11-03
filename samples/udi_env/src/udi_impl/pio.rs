@@ -9,13 +9,35 @@ use ::udi::ffi::udi_index_t;
 use ::udi::ffi::c_void;
 
 struct PioTransReal {
+    // TODO: Get a handle/reference to the device too
+
     regset_idx: u32,
     base_offset: u32,
     length: u32,
     trans_list: Vec<udi_pio_trans_t>,
-    pio_attributes: u16,
-    pace: u32,
+    data_translation: DataTranslation,
+    data_ordering: DataOrdering,
+    unaligned: bool,
     serialization_domain: udi_index_t
+}
+/// Translation applied to values sent to the device
+#[derive(Copy,Clone)]
+enum DataTranslation {
+    /// Never swap, only byte IO accesses allowed
+    NeverSwap,
+    /// Use big-endian ordering
+    BigEndian,
+    /// Use little-endian ordering
+    LittleEndian,
+}
+#[derive(Copy,Clone)]
+enum DataOrdering {
+    Paced(u32),
+    StrictOrder,
+    UnorderedOk,
+    MergingOk,
+    LoadCaching,
+    StoreCaching,
 }
 
 #[no_mangle]
@@ -28,13 +50,46 @@ unsafe extern "C" fn udi_pio_map(
     )
 {
     let trans_list = ::core::slice::from_raw_parts(trans_list, list_length as usize);
+    let data_translation = match pio_attributes & (7 << 5)
+        {
+        ::udi::ffi::pio::UDI_PIO_BIG_ENDIAN => DataTranslation::BigEndian,
+        ::udi::ffi::pio::UDI_PIO_LITTLE_ENDIAN => DataTranslation::LittleEndian,
+        0|::udi::ffi::pio::UDI_PIO_NEVERSWAP => DataTranslation::NeverSwap,
+        v => {
+            println!("Error: Multiple data translation attributes provided : {:#x}", v);
+            DataTranslation::NeverSwap
+        },
+        };
+    let data_ordering = if pace != 0 {
+            if (pio_attributes & 0x1F) != ::udi::ffi::pio::UDI_PIO_STRICTORDER {
+                // Not allowed, must have StrictOrder when pace is non-zero
+            }
+            DataOrdering::Paced(pace)
+        } else if pio_attributes & ::udi::ffi::pio::UDI_PIO_STORECACHING_OK != 0 {
+            DataOrdering::StoreCaching
+        }
+        else  if pio_attributes & ::udi::ffi::pio::UDI_PIO_LOADCACHING_OK != 0 {
+            DataOrdering::LoadCaching
+        }
+        else if pio_attributes & ::udi::ffi::pio::UDI_PIO_MERGING_OK != 0 {
+            DataOrdering::MergingOk
+        }
+        else if pio_attributes & ::udi::ffi::pio::UDI_PIO_UNORDERED_OK != 0 {
+            DataOrdering::UnorderedOk
+        }
+        else {
+            DataOrdering::StrictOrder
+        };
+    let unaligned = pio_attributes & ::udi::ffi::pio::UDI_PIO_UNALIGNED != 0;
+
     let rv = Box::new(PioTransReal {
         regset_idx,
         base_offset,
         length,
         trans_list: trans_list.to_vec(),
-        pio_attributes,
-        pace,
+        data_translation,
+        data_ordering,
+        unaligned,
         serialization_domain,
     });
     let rv = Box::into_raw(rv) as udi_pio_handle_t;
@@ -46,9 +101,9 @@ unsafe extern "C" fn udi_pio_unmap(pio_handle: udi_pio_handle_t)
     drop(Box::from_raw(pio_handle as *mut PioTransReal));
 }
 #[no_mangle]
-unsafe extern "C" fn udi_pio_atmic_sizes(pio_handle: udi_pio_handle_t) -> u32
+unsafe extern "C" fn udi_pio_atmic_sizes(_pio_handle: udi_pio_handle_t) -> u32
 {
-    todo!("udi_pio_atmic_sizes");
+    4
 }
 #[no_mangle]
 unsafe extern "C" fn udi_pio_abort_sequence(pio_handle: udi_pio_handle_t, scratch_requirement: udi_size_t)
@@ -76,7 +131,8 @@ unsafe extern "C" fn udi_pio_trans(
         regset_idx: pio_handle.regset_idx,
         base_offset: pio_handle.base_offset,
         length: pio_handle.length,
-        pace: pio_handle.pace,
+        data_translation: pio_handle.data_translation,
+        data_ordering: pio_handle.data_ordering,
     };
     let (status, retval) = match pio_trans_inner(&mut state, &mut io_state, &pio_handle.trans_list, start_label)
         {
@@ -224,7 +280,9 @@ struct PioDevState {
     regset_idx: u32,
     base_offset: u32,
     length: u32,
-    pace: u32,
+
+    data_translation: DataTranslation,
+    data_ordering: DataOrdering,
 }
 impl PioDevState {
     // PILE OF HACK:
