@@ -49,6 +49,7 @@ unsafe extern "C" fn udi_pio_map(
     pio_attributes: u16, pace: u32, serialization_domain: udi_index_t
     )
 {
+    //crate::channels::get_driver_module( &(*gcb).channel );
     let trans_list = ::core::slice::from_raw_parts(trans_list, list_length as usize);
     let data_translation = match pio_attributes & (7 << 5)
         {
@@ -105,6 +106,7 @@ unsafe extern "C" fn udi_pio_atmic_sizes(_pio_handle: udi_pio_handle_t) -> u32
 {
     4
 }
+// Register a handle as used to abort the device
 #[no_mangle]
 unsafe extern "C" fn udi_pio_abort_sequence(pio_handle: udi_pio_handle_t, scratch_requirement: udi_size_t)
 {
@@ -161,10 +163,10 @@ impl RegVal {
         Self::from_bytes(&[v])
     }
     fn from_u16(v: u16) -> RegVal {
-        Self::from_bytes(&v.to_le_bytes())
+        Self::from_bytes(&v.to_ne_bytes())
     }
     fn to_u32(&self) -> u32 {
-        u32::from_le_bytes(self.bytes[..4].try_into().unwrap())
+        u32::from_ne_bytes(self.bytes[..4].try_into().unwrap())
     }
     fn masked(&self, size: u8) -> RegVal {
         assert!(size <= 5);
