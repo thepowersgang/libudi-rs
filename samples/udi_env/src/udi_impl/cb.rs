@@ -49,7 +49,23 @@ unsafe extern "C" fn udi_cb_alloc_batch(
     path_handle: udi_buf_path_t
 )
 {
-    todo!("udi_cb_alloc_batch");
+    let module = crate::channels::get_driver_module(&(*gcb).channel);
+    let mut prev_cb = ::core::ptr::null_mut();
+    for _i in 0..count {
+        let rv = alloc_internal(&module, cb_idx, (*gcb).context, ::core::ptr::null_mut());
+        if with_buf != 0 {
+            todo!("udi_cb_alloc_batch - with_buf");
+        }
+
+        if false {
+            // If there's a chaining field, use that
+        }
+        else {
+            (*rv).initiator_context = prev_cb as _;
+        }
+        prev_cb = rv;
+    }
+    callback(gcb, prev_cb);
 }
 
 // --------------------------------------------------------------------
@@ -58,6 +74,11 @@ pub fn alloc_internal(driver_module: &crate::DriverModule, cb_idx: udi_index_t, 
 {
     let cb_init = driver_module.get_cb_init(cb_idx).unwrap();
     let cb_spec = driver_module.get_cb_spec(cb_init);
+
+    // TODO: inline allocation
+    if !cb_init.inline_layout.is_null() {
+        todo!("Handle inline layout");
+    }
 
     let size = cb_spec.size();
     assert!(size >= ::core::mem::size_of::<udi_cb_t>());
