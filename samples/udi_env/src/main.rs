@@ -46,7 +46,33 @@ fn main() {
     };
 
     register_driver_module(&mut state, driver_module_buspci);
-    register_driver_module(&mut state, driver_module_ne2000);
+    //register_driver_module(&mut state, driver_module_ne2000);
+
+    for a in ::std::env::args_os().skip(1)
+    {
+        let path = ::std::ffi::CString::new(a.as_encoded_bytes()).unwrap();
+        let driver_module_uart = unsafe {
+            let h = ::libc::dlopen(path.as_ptr() as _, ::libc::RTLD_NOW);
+            if h.is_null() {
+                panic!("Load failed: {:?}", ::std::ffi::CStr::from_ptr(::libc::dlerror()));
+            }
+            let udi_init_info = ::libc::dlsym(h, "udi_init_info\0".as_ptr() as _);
+            let udiprops_start = ::libc::dlsym(h, "UDIPROPS_start\0".as_ptr() as _);
+            let udiprops_end = ::libc::dlsym(h, "UDIPROPS_end\0".as_ptr() as _);
+            assert!(!udi_init_info.is_null());
+            assert!(!udiprops_start.is_null());
+            assert!(!udiprops_end.is_null());
+
+            let udi_init_info = &*(udi_init_info as *const ::udi::ffi::init::udi_init_t);
+            let udiprops = ::core::slice::from_raw_parts(udiprops_start as _, udiprops_end as usize - udiprops_start as usize);
+
+            let udiprops = ::udiprops_parse::load_from_raw_section(udiprops);
+            ::std::sync::Arc::new(DriverModule::new(udi_init_info, udiprops))
+        };
+        
+        register_driver_module(&mut state, driver_module_uart);
+    }
+
 }
 
 /// Create an instance for all matching parent instances
