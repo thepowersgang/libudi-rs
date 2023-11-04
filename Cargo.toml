@@ -4,4 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = [".", "udi_udiprops_parse", "samples/net_ne2000", "samples/udi_env"]
+members = [
+    ".",
+    "udi_udiprops_parse",
+    "tools/fix_elf",
+    "samples/net_ne2000",
+    "samples/udi_env"
+    ]

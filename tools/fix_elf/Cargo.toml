@@ -1,0 +1,8 @@
+[package]
+name = "fix_elf"
+version = "0.0.0"
+edition = "2021"
+
+[[bin]]
+name="fix_elf"
+path="main.rs"

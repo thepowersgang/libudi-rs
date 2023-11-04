@@ -1,0 +1,3 @@
+[build]
+# Needed for udi_env to export the bindings to loaded libraries
+rustflags = ["-C", "link-args=-rdynamic"]
