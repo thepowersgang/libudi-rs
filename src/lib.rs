@@ -123,6 +123,8 @@ pub const fn const_max(a: usize, b: usize) -> usize {
 /// pointer cast between the two
 pub unsafe trait Wrapper<Inner> {
 }
+pub trait HasCb<T: metalang_trait::MetalangCb> {
+}
 
 /// Define a set of wrapper types for another type, to separate trait impls
 /// 
@@ -175,6 +177,12 @@ where
 	T: Wrapper<U>
 {
 }
+/*
+struct CbList;
+impl HasCb<foo_cb_t> for CbList {}
+trait HasCb<T> {}
+*/
+
 
 /// Define a UDI driver
 /// 
@@ -234,6 +242,8 @@ macro_rules! define_driver
 					type Cb = $cb_ty;
 				}
 			)*
+			pub struct List {}
+			$(impl $crate::HasCb<$cb_ty> for List {})*
 		}
 		const _STATE_SIZE: usize = {
 			let v = $crate::ffi::meta_mgmt::udi_mgmt_ops_t::scratch_requirement::<$driver>();
@@ -259,6 +269,7 @@ macro_rules! define_driver
 				$(
 				{
 					$( $crate::enforce_is_wrapper_for::<$wrapper, $driver>(); )?
+					<$op_op>::check_cbs::<Cbs::List>();
 					$crate::make_ops_init(OpsList::$op_name as _, $op_meta, unsafe { &<$op_op>::for_driver::<$crate::define_driver!(@get_wrapper $driver $(: $wrapper)?)>() })
 				},
 				)*
@@ -266,6 +277,7 @@ macro_rules! define_driver
 			].as_ptr(),
 			cb_init_list: [
 				$( $crate::make_cb_init::<Cbs::$cb_name>($cb_meta, _STATE_SIZE, None), )*
+				// TODO: How to ensure that all CBs needed by all ops are mentioned here?
 				$crate::ffi::init::udi_cb_init_t::end_of_list()
 			].as_ptr(),
 			gcb_init_list: ::core::ptr::null(),

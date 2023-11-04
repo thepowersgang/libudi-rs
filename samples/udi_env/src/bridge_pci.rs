@@ -127,5 +127,8 @@ child_bind_ops 1 0 1\0\
     },
     cbs: {
         BusBind  : Meta=1, ::udi::ffi::meta_bus::udi_bus_bind_cb_t,
+		_IntrAttach: Meta=1, ::udi::ffi::meta_intr::udi_intr_attach_cb_t,
+		_IntrDetach: Meta=1, ::udi::ffi::meta_intr::udi_intr_detach_cb_t,
+		_IntrEvent : Meta=1, ::udi::ffi::meta_intr::udi_intr_event_cb_t,
     }
 }

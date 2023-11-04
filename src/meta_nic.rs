@@ -195,6 +195,13 @@ impl ffi::udi_nd_ctrl_ops_t
         let v = crate::const_max(v, nd_info_req_op::task_size::<T>());
         v
     }
+    pub const fn check_cbs<T>()
+    where
+        T: crate::HasCb<ffi::udi_nic_cb_t>,
+        T: crate::HasCb<ffi::udi_nic_bind_cb_t>,
+        T: crate::HasCb<ffi::udi_nic_ctrl_cb_t>,
+        T: crate::HasCb<ffi::udi_nic_info_cb_t>,
+    {}
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
     /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
     pub const unsafe fn for_driver<T: Control>() -> Self {
@@ -240,6 +247,10 @@ impl ffi::udi_nd_tx_ops_t
         let v = crate::const_max(v, nd_exp_tx_req_op::task_size::<T>());
         v
     }
+    pub const fn check_cbs<T>()
+    where
+        T: crate::HasCb<ffi::udi_nic_tx_cb_t>,
+    {}
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
     /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
     pub const unsafe fn for_driver<T: NdTx>() -> Self {
@@ -274,6 +285,10 @@ impl ffi::udi_nd_rx_ops_t
         let v = crate::const_max(v, nd_rx_rdy_op::task_size::<T>());
         v
     }
+    pub const fn check_cbs<T>()
+    where
+        T: crate::HasCb<ffi::udi_nic_rx_cb_t>,
+    {}
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
     /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
     pub const unsafe fn for_driver<T: NdRx>() -> Self {

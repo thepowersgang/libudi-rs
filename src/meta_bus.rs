@@ -105,6 +105,12 @@ impl udi_bus_device_ops_t {
         let rv = crate::const_max(rv, intr_detach_ack_op::task_size::<T>());
         rv
     }
+    pub const fn check_cbs<T>()
+    where
+        T: crate::HasCb<udi_bus_bind_cb_t>,
+        T: crate::HasCb<crate::ffi::meta_intr::udi_intr_attach_cb_t>,
+        T: crate::HasCb<crate::ffi::meta_intr::udi_intr_detach_cb_t>,
+    {}
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
     /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
     pub const unsafe fn for_driver<T: BusDevice>() -> Self {
@@ -170,6 +176,12 @@ impl udi_bus_bridge_ops_t {
         let rv = crate::const_max(rv, intr_detach_req_op::task_size::<T>());
         rv
     }
+    pub const fn check_cbs<T>()
+    where
+        T: crate::HasCb<udi_bus_bind_cb_t>,
+        T: crate::HasCb<crate::ffi::meta_intr::udi_intr_attach_cb_t>,
+        T: crate::HasCb<crate::ffi::meta_intr::udi_intr_detach_cb_t>,
+    {}
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
     /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
     pub const unsafe fn for_driver<T: BusBridge>() -> Self {

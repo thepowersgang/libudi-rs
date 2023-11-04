@@ -46,6 +46,7 @@ fn main() {
     };
 
     register_driver_module(&mut state, driver_module_buspci);
+    let _ = driver_module_ne2000;
     //register_driver_module(&mut state, driver_module_ne2000);
 
     for a in ::std::env::args_os().skip(1)

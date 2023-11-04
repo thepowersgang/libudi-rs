@@ -407,5 +407,14 @@ mod udiprops {
 		BusBind  : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bus::udi_bus_bind_cb_t,
 		Intr     : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_intr::udi_intr_attach_cb_t,
 		IntrEvent: Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_intr::udi_intr_event_cb_t,
+
+		_IntrDetach: Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_intr::udi_intr_detach_cb_t,
+
+		Nic    : Meta=udiprops::meta::udi_nic, ::udi::meta_nic::ffi::udi_nic_cb_t,
+		NicBind: Meta=udiprops::meta::udi_nic, ::udi::meta_nic::ffi::udi_nic_bind_cb_t,
+		NicCtrl: Meta=udiprops::meta::udi_nic, ::udi::meta_nic::ffi::udi_nic_ctrl_cb_t,
+		NicInfo: Meta=udiprops::meta::udi_nic, ::udi::meta_nic::ffi::udi_nic_info_cb_t,
+		NicTx  : Meta=udiprops::meta::udi_nic, ::udi::meta_nic::ffi::udi_nic_tx_cb_t,
+		NicRx  : Meta=udiprops::meta::udi_nic, ::udi::meta_nic::ffi::udi_nic_rx_cb_t,
 		}
 }
