@@ -15,6 +15,7 @@ pub mod meta_bus;
 pub mod meta_intr;
 pub mod meta_gio;
 pub mod libc;
+pub mod layout;
 
 pub use ::core::ffi::c_void;
 
@@ -35,8 +36,7 @@ pub type udi_sbit8_t  = i8;
 pub type udi_sbit16_t = i16;
 pub type udi_sbit32_t = i32;
 
-pub type udi_layout_t = u8;
-
+pub use layout::udi_layout_t;
 pub use cb::udi_cb_t;
 
 pub type udi_ops_vector_t = *const extern "C" fn();

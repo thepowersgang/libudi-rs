@@ -6,6 +6,7 @@ pub mod imc;
 pub mod pio;
 pub mod buf;
 pub mod libc;
+pub mod layout;
 
 macro_rules! dispatch_call {
     ( $($vis:vis fn $name:ident(cb: *mut $cb_ty:ty $(, $a_name:ident: $a_ty:ty)*) => $ops_ty:ty : $ops_name:ident;)+) => {
