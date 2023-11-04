@@ -1,12 +1,24 @@
 struct Driver {
-
+    enum_dev_idx: usize,
 }
+
+struct EmulatedDevice {
+    vendor_id: u16,
+    device_id: u16,
+    class_word: u32,
+}
+static DEVICES: &[EmulatedDevice] = &[
+    EmulatedDevice { vendor_id: 0x10ec, device_id: 0x8029, class_word: 0 },
+    // A "Generic XT-Compatible Serial Controller"
+    EmulatedDevice { vendor_id: 0x8086, device_id: 0xFFFF, class_word: 0x07_00_00 },
+];
+
 impl ::udi::init::Driver for Driver
 {
-    const MAX_ATTRS: u8 = 3;
+    const MAX_ATTRS: u8 = 6;
     type Future_init<'s> = impl ::core::future::Future<Output=Self>;
     fn usage_ind(_cb: udi::init::CbRefUsage, _resouce_level: u8) -> Self::Future_init<'_> {
-        async move { Driver {} }
+        async move { Driver { enum_dev_idx: 0 } }
     }
 
     type Future_enumerate<'s> = impl ::core::future::Future<Output=(udi::init::EnumerateResult,udi::init::AttrSink<'s>)> + 's;
@@ -17,18 +29,35 @@ impl ::udi::init::Driver for Driver
         mut attrs_out: udi::init::AttrSink<'s>
     ) -> Self::Future_enumerate<'s>
     {
+        fn enumerate_dev(this: &mut Driver, attrs_out: &mut udi::init::AttrSink<'_>) -> ::udi::init::EnumerateResult {
+            let child_idx = this.enum_dev_idx;
+            if let Some(c) = DEVICES.get(child_idx) {
+                this.enum_dev_idx += 1;
+				attrs_out.push_string("bus_type", "pci");
+				attrs_out.push_u32("pci_vendor_id", c.vendor_id as _);
+				attrs_out.push_u32("pci_device_id", c.device_id as _);
+				attrs_out.push_u32("pci_base_class", ((c.class_word >> 16) & 0xFF) as _);
+				attrs_out.push_u32("pci_sub_class", ((c.class_word >> 8) & 0xFF) as _);
+				attrs_out.push_u32("pci_prog_if", ((c.class_word >> 0) & 0xFF) as _);
+                ::udi::init::EnumerateResult::Ok { ops_idx: OpsList::Bridge as _, child_id: child_idx as _ }
+            }
+            else {
+                ::udi::init::EnumerateResult::Done
+            }
+        }
         async move {
 			match level
 			{
 			::udi::init::EnumerateLevel::Start
 			|::udi::init::EnumerateLevel::StartRescan => {
-                // bus_type string pci  pci_vendor_id ubit32 0x10ec  pci_device_id ubit32 0x8029
-				attrs_out.push_string("bus_type", "pci");
-				attrs_out.push_u32("pci_vendor_id", 0x10ec);
-				attrs_out.push_u32("pci_device_id", 0x8029);
-				(::udi::init::EnumerateResult::Ok { ops_idx: OpsList::Bridge as _, child_id: 0 }, attrs_out)
+                self.enum_dev_idx = 0;
+                let rv = enumerate_dev(self, &mut attrs_out);
+                (rv, attrs_out)
 				},
-			udi::init::EnumerateLevel::Next => (::udi::init::EnumerateResult::Done, attrs_out),
+			udi::init::EnumerateLevel::Next => {
+                let rv = enumerate_dev(self, &mut attrs_out);
+                (rv, attrs_out)
+                },
 			udi::init::EnumerateLevel::New => todo!(),
 			udi::init::EnumerateLevel::Directed => todo!(),
 			udi::init::EnumerateLevel::Release => todo!(),
@@ -93,9 +122,10 @@ child_bind_ops 1 0 1\0\
 ::udi::define_driver! {
     Driver as INIT_INFO_PCI;
     ops: {
-        Bridge: Meta=1, ::udi::ffi::meta_bus::udi_bus_bridge_ops_t,
+        Bridge   : Meta=1, ::udi::ffi::meta_bus::udi_bus_bridge_ops_t,
         Interrupt: Meta=1, ::udi::ffi::meta_intr::udi_intr_dispatcher_ops_t,
     },
     cbs: {
+        BusBind  : Meta=1, ::udi::ffi::meta_bus::udi_bus_bind_cb_t,
     }
 }

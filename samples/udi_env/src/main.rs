@@ -51,6 +51,7 @@ fn main() {
     for a in ::std::env::args_os().skip(1)
     {
         let path = ::std::ffi::CString::new(a.as_encoded_bytes()).unwrap();
+        println!("LOADING {:?}", path);
         let driver_module_uart = unsafe {
             let h = ::libc::dlopen(path.as_ptr() as _, ::libc::RTLD_NOW);
             if h.is_null() {
@@ -69,7 +70,7 @@ fn main() {
             let udiprops = ::udiprops_parse::load_from_raw_section(udiprops);
             ::std::sync::Arc::new(DriverModule::new(udi_init_info, udiprops))
         };
-        
+
         register_driver_module(&mut state, driver_module_uart);
     }
 
@@ -82,11 +83,12 @@ fn register_driver_module(state: &mut GlobalState, driver_module: ::std::sync::A
 
     let mut new_instances = vec![];
     for entry in driver_module.udiprops.clone() {
-        let ::udiprops_parse::Entry::Device { device_name: _, meta_idx, attributes } = entry else {
+        let ::udiprops_parse::Entry::Device { device_name, meta_idx, attributes } = entry else {
             continue
             };
         is_orphan = false;
         let meta = driver_module.get_metalang_name(meta_idx);
+        println!("meta {:?} Device {:?}", meta, driver_module.get_message(device_name));
         // Search all known devices (all children of all loaded instances) for one that matches this attribute list and metalang
         for parent in state.instances.iter_mut()
         {
@@ -96,22 +98,11 @@ fn register_driver_module(state: &mut GlobalState, driver_module: ::std::sync::A
                     continue ;
                 }
                 let meta2 = parent.module.get_metalang_name(child.meta_idx);
-                if meta != meta2 {
-                    continue ;
-                }
 
-                if !check_attributes(attributes.clone(), &child.attrs) {
-                    continue;
+                if let Some(i) = maybe_child_bind(&driver_module, meta, attributes.clone(), parent, meta2, child)
+                {
+                    new_instances.push(i);
                 }
-
-                child.is_bound.set(true);
-
-                let (channel_parent, channel_child) = channels::spawn_raw();
-                unsafe {
-                    let ops = parent.module.get_meta_ops(parent.module.get_ops_init(child.ops_idx).unwrap());
-                    channels::anchor(channel_parent, parent.module.clone(), ops, parent.regions[child.region_idx_real].context);
-                }
-                new_instances.push( create_driver_instance(driver_module.clone(), Some(channel_child)) );
             }
         }
     }
@@ -144,22 +135,10 @@ fn register_driver_module(state: &mut GlobalState, driver_module: ::std::sync::A
                         };
                     let meta = driver_module.get_metalang_name(meta_idx);
 
-                    if meta != meta2 {
-                        continue ;
+                    if let Some(i) = maybe_child_bind(&driver_module, meta, attributes, parent, meta2, child)
+                    {
+                        new_instances.push(i);
                     }
-
-                    if !check_attributes(attributes.clone(), &child.attrs) {
-                        continue;
-                    }
-
-                    child.is_bound.set(true);
-
-                    let (channel_parent, channel_child) = channels::spawn_raw();
-                    unsafe {
-                        let ops = parent.module.get_meta_ops(parent.module.get_ops_init(child.ops_idx).unwrap());
-                        channels::anchor(channel_parent, parent.module.clone(), ops, parent.regions[child.region_idx_real].context);
-                    }
-                    new_instances.push( create_driver_instance(driver_module.clone(), Some(channel_child)) );
                 }
             }
         }
@@ -193,6 +172,7 @@ fn check_attributes(filter_attributes: ::udiprops_parse::parsed::AttributeList, 
                 ::udi::ffi::attr::UDI_ATTR_STRING => {
                     let v = &a.attr_value[..a.attr_length as usize];
                     let v = ::std::str::from_utf8(v).unwrap_or("");
+                    println!("{} {:?} == {:?}", attr_name, attr_value, v);
 
                     match attr_value {
                     ::udiprops_parse::parsed::Attribute::String(val) => val == v,
@@ -201,6 +181,7 @@ fn check_attributes(filter_attributes: ::udiprops_parse::parsed::AttributeList, 
                     }
                 ::udi::ffi::attr::UDI_ATTR_ARRAY8 => {
                     let v = &a.attr_value[..a.attr_length as usize];
+                    println!("{} {:?} == {:?}", attr_name, attr_value, v);
                     match attr_value {
                     ::udiprops_parse::parsed::Attribute::Array8(val) => val == v,
                     _ => false,
@@ -208,6 +189,7 @@ fn check_attributes(filter_attributes: ::udiprops_parse::parsed::AttributeList, 
                     }
                 ::udi::ffi::attr::UDI_ATTR_UBIT32 => {
                     let v = u32::from_le_bytes(a.attr_value[..4].try_into().unwrap());
+                    println!("{} {:?} == {:?}", attr_name, attr_value, v);
                     match attr_value {
                     ::udiprops_parse::parsed::Attribute::Ubit32(val) => val == v,
                     _ => false,
@@ -215,6 +197,7 @@ fn check_attributes(filter_attributes: ::udiprops_parse::parsed::AttributeList, 
                     }
                 ::udi::ffi::attr::UDI_ATTR_BOOLEAN => {
                     let v = a.attr_value[0] != 0;
+                    println!("{} {:?} == {:?}", attr_name, attr_value, v);
                     match attr_value {
                     ::udiprops_parse::parsed::Attribute::Boolean(val) => val == v,
                     _ => false,
@@ -234,6 +217,35 @@ fn check_attributes(filter_attributes: ::udiprops_parse::parsed::AttributeList, 
     }
 
     true
+}
+
+
+fn maybe_child_bind(
+    driver_module: &::std::sync::Arc<DriverModule<'static>>,
+    meta: Option<&str>,
+    attributes: ::udiprops_parse::parsed::AttributeList,
+    parent: &DriverInstance,
+    meta2: Option<&str>,
+    child: &DriverChild
+) -> Option<Box<DriverInstance>>
+{
+    if meta != meta2 {
+        return None;
+    }
+
+    if !check_attributes(attributes.clone(), &child.attrs) {
+        return None;
+    }
+
+    child.is_bound.set(true);
+
+    let (channel_parent, channel_child) = channels::spawn_raw();
+    unsafe {
+        let ops = parent.module.get_meta_ops(parent.module.get_ops_init(child.ops_idx).unwrap());
+        channels::anchor(channel_parent, parent.module.clone(), ops, parent.regions[child.region_idx_real].context);
+    }
+
+    Some( create_driver_instance(driver_module.clone(), Some(channel_child)) )
 }
 
 fn create_driver_instance<'a>(driver_module: ::std::sync::Arc<DriverModule<'static>>, channel_to_parent: Option<::udi::ffi::udi_channel_t>) -> Box<DriverInstance>
@@ -278,6 +290,7 @@ struct DriverModule<'a> {
 }
 impl<'a> DriverModule<'a> {
     unsafe fn new(init: &'a ::udi::ffi::init::udi_init_t, udiprops: ::udiprops_parse::EncodedIter<'a>) -> Self {
+
         let rv = Self {
             pri_init: init.primary_init_info.expect("No primary_init_info for primary module"),
             sec_init: terminated_list(init.secondary_init_list, |si| si.region_idx == 0),
@@ -285,6 +298,16 @@ impl<'a> DriverModule<'a> {
             cbs: terminated_list(init.cb_init_list, |cbi: &udi::ffi::init::udi_cb_init_t| cbi.cb_idx == 0),
             udiprops: udiprops.clone(),
         };
+        if true {
+            if let Some(pi) = init.primary_init_info {
+                dbg!(pi.mgmt_ops.devmgmt_req_op);
+            }
+            dbg!(rv.ops.len());
+            for o in rv.ops {
+                dbg!(*o.ops_vector);
+            }
+        }
+
         #[cfg(false_)]
         for ent in udiprops.clone()
         {
@@ -332,6 +355,17 @@ impl<'a> DriverModule<'a> {
             .find(|v| v.cb_idx == cb_idx)
     }
 
+    fn get_message(&self, message_idx: ::udiprops_parse::parsed::MsgNum) -> Option<&str> {
+        for entry in self.udiprops.clone()
+        {
+            if let ::udiprops_parse::Entry::Message(idx, value) = entry {
+                if message_idx == idx {
+                    return Some(value);
+                }
+            }
+        }
+        None
+    }
     fn get_metalang_name(&self, des_meta_idx: ::udi::ffi::udi_index_t) -> Option<&str> {
         for entry in self.udiprops.clone()
         {
@@ -411,9 +445,18 @@ impl DriverRegion
         DriverRegion {
             context: unsafe {
                 let v: *mut udi::ffi::init::udi_init_context_t = ::libc::malloc(rdata_size) as *mut ::udi::ffi::init::udi_init_context_t;
-                (*v).region_index = region_index;
-                (*v).limits.max_safe_alloc = 0x1000;
-                (*v).limits.max_legal_alloc = 1 << 20;
+                if rdata_size == 0 {
+                }
+                else if rdata_size < ::core::mem::size_of::<::udi::ffi::init::udi_init_context_t>() {
+                    eprintln!("WARNING: rdata size is too small! ({} < {})", 
+                        rdata_size, ::core::mem::size_of::<::udi::ffi::init::udi_init_context_t>()
+                        )
+                }
+                else {
+                    (*v).region_index = region_index;
+                    (*v).limits.max_safe_alloc = 0x1000;
+                    (*v).limits.max_legal_alloc = 1 << 20;
+                }
                 v as *mut ::udi::ffi::c_void
                 },
         }

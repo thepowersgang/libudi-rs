@@ -69,7 +69,7 @@ pub unsafe fn anchor(
     cr.0.sides[cr.1 as usize].set(ChannelInnerSide { driver_module, context, ops }).ok().expect("Anchoring an anchored end");
 }
 
-
+/// Call through a channel
 pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::metalang_trait::MetalangCb>(cb: *mut Cb, call: impl FnOnce(&O, *mut Cb))
 {
     // Get the channel currently in the cb, and reverse it
@@ -80,11 +80,6 @@ pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::m
 
     // Get the scratch as the max of all CB instances for this type
     let driver_module = &*ch_side.driver_module;
-    //let scratch_requirement = driver_module.cbs.iter()
-    //    .filter(|cb| driver_module.get_cb_spec(cb).type_id() == ::core::any::TypeId::of::<Cb>())
-    //    .map(|cb| cb.scratch_requirement)
-    //    .max();
-    //    ;
     let Some(meta_idx) = driver_module.get_metalang_by_name(<Cb::MetalangSpec as ::udi::metalang_trait::Metalanguage>::name()) else {
         panic!("No metalang `{}` in driver?!", <Cb::MetalangSpec as ::udi::metalang_trait::Metalanguage>::name());
     };
@@ -93,6 +88,7 @@ pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::m
         .filter(|cb| cb.meta_cb_num == Cb::META_CB_NUM)
         .map(|cb| cb.scratch_requirement)
         .max();
+    println!("Context = {:p}, scratch_requirement = {:?}", ch_side.context, scratch_requirement);
 
     (*gcb).channel = ch.get_handle_reversed();
     // Update context and scratch
