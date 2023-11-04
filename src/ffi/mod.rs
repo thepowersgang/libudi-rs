@@ -13,6 +13,8 @@ pub mod pio;
 pub mod physio;
 pub mod meta_bus;
 pub mod meta_intr;
+pub mod meta_gio;
+pub mod libc;
 
 pub use ::core::ffi::c_void;
 
@@ -24,9 +26,14 @@ pub type udi_channel_t = _udi_handle_t;
 pub type udi_origin_t = _udi_handle_t;
 
 pub type udi_boolean_t = u8;
-pub type udi_ubit8_t = u8;
+pub type udi_ubit8_t  = u8;
 pub type udi_ubit16_t = u16;
 pub type udi_ubit32_t = u32;
+//pub type udi_ubit64_t = u64;
+
+pub type udi_sbit8_t  = i8;
+pub type udi_sbit16_t = i16;
+pub type udi_sbit32_t = i32;
 
 pub type udi_layout_t = u8;
 
