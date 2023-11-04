@@ -101,14 +101,14 @@ fn alloc_internal(
             origin: ::core::ptr::null_mut(),
             });
         
-        use crate::udi_impl::layout::LayoutItem;
+        use ::udi::layout::LayoutItem;
 
         let mut buf = rv as _;
 
         // Buffer allocation
         if let Some((buf_size, buf_path)) = buf_info {
             assert!(!layout.is_null(), "Layout is required when allocating a buffer");
-            for fld in crate::udi_impl::layout::iter_with_layout(&layout, &mut buf) {
+            for fld in ::udi::layout::iter_with_layout(&layout, &mut buf) {
                 match fld {
                 LayoutItem::Buf(dst, _) => {
                     *dst = crate::udi_impl::buf::allocate(buf_size, buf_path);
@@ -121,7 +121,7 @@ fn alloc_internal(
         // Inline data allocation
         if let Some((alloc_size, _alloc_layout)) = inline_info {
             assert!(!layout.is_null(), "Layout is required when allocating a buffer");
-            for fld in crate::udi_impl::layout::iter_with_layout(&layout, &mut buf) {
+            for fld in ::udi::layout::iter_with_layout(&layout, &mut buf) {
                 match fld {
                 LayoutItem::InlineDriverTyped(dst) => {
                     *dst = ::libc::calloc(1, alloc_size);
@@ -135,7 +135,7 @@ fn alloc_internal(
         if let Some(chain_cb) = chain {
             let mut set = false;
             if !layout.is_null() {
-                for fld in crate::udi_impl::layout::iter_with_layout(&layout, &mut buf) {
+                for fld in ::udi::layout::iter_with_layout(&layout, &mut buf) {
                     if let LayoutItem::Cb(dst) = fld {
                         *dst = chain_cb as _;
                         set = false;

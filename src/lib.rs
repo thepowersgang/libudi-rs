@@ -28,6 +28,7 @@ pub mod ffi;
 pub mod buf;
 pub mod init;
 pub mod cb;
+pub mod layout;
 #[macro_use]
 pub mod imc;
 pub mod pio;
