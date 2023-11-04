@@ -22,7 +22,7 @@ esac
 rm .udiprops.bin
 
 ld -shared -o $(dirname $0)/libudi.so $(dirname $0)/libudi.ld
-ld -shared -o $shortname.so .primodule $(dirname $0)/libudi.so -T $(dirname $0)/link.ld --retain-symbols-file=$(dirname $0)/create_so_retain.txt --no-undefined
+ld -shared -o $shortname.so .primodule $(dirname $0)/libudi.so -g -T $(dirname $0)/link.ld --retain-symbols-file=$(dirname $0)/create_so_retain.txt --no-undefined
 rm .primodule 
 
 OUTFILE=$(realpath $shortname.so)
