@@ -144,5 +144,9 @@ unsafe extern "C" fn udi_buf_write(
 #[no_mangle]
 unsafe extern "C" fn udi_buf_free(buf: *mut udi_buf_t)
 {
-    todo!()
+    if buf.is_null() {
+    }
+    else {
+        drop(Box::from_raw(buf as *mut RealUdiBuf));
+    }
 }
