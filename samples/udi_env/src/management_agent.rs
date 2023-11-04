@@ -146,7 +146,7 @@ impl InstanceInitState
 
         // Spawn the channel
         let (channel_1, channel_2) = crate::channels::spawn_raw();
-        let bind_cb = crate::udi_impl::cb::alloc_internal(&driver_module, bind_cb_idx, rgn.context, channel_1);
+        let bind_cb = crate::udi_impl::cb::alloc(&driver_module, bind_cb_idx, rgn.context, channel_1);
         unsafe {
             crate::channels::anchor(channel_1, self.instance.module.clone(), driver_module.get_meta_ops(ops_pri), self.instance.regions[0].context);
             crate::channels::anchor(channel_2, self.instance.module.clone(), driver_module.get_meta_ops(ops_sec), rgn.context);
@@ -173,7 +173,7 @@ impl InstanceInitState
                 assert_eq!(ops_init.meta_idx, meta_idx);
                 assert_eq!(cb.meta_idx, meta_idx);
 
-                let bind_cb = crate::udi_impl::cb::alloc_internal(&driver_module, bind_cb_idx, rgn.context, channel_to_parent);
+                let bind_cb = crate::udi_impl::cb::alloc(&driver_module, bind_cb_idx, rgn.context, channel_to_parent);
                 unsafe {
                     crate::channels::anchor(channel_to_parent, self.instance.module.clone(), driver_module.get_meta_ops(ops_init), rgn.context);
                     let (op, cb) = crate::channels::event_ind_bound_internal(channel_to_parent, bind_cb as *mut _);

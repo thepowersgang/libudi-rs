@@ -21,7 +21,7 @@ impl<T: ::udi::metalang_trait::MetalangCb> MetalangCb for T {
 unsafe extern "C" fn udi_cb_alloc(callback: udi_cb_alloc_call_t, gcb: *mut udi_cb_t, cb_idx: udi_index_t, default_channel: udi_channel_t)
 {
     let module = crate::channels::get_driver_module(&(*gcb).channel);
-    let rv = alloc_internal(&module, cb_idx, (*gcb).context, default_channel);
+    let rv = alloc(&module, cb_idx, (*gcb).context, default_channel);
     callback(gcb, rv);
 }
 
@@ -35,7 +35,9 @@ unsafe extern "C" fn udi_cb_alloc_dynamic(
     inline_layout: *const udi_layout_t
 )
 {
-    todo!("udi_cb_alloc_dynamic");
+    let module = crate::channels::get_driver_module(&(*gcb).channel);
+    let rv = alloc_internal(&module, cb_idx, (*gcb).context, default_channel, None, None, Some((inline_size, inline_layout)));
+    callback(gcb, rv);
 }
 
 #[no_mangle]
@@ -52,33 +54,40 @@ unsafe extern "C" fn udi_cb_alloc_batch(
     let module = crate::channels::get_driver_module(&(*gcb).channel);
     let mut prev_cb = ::core::ptr::null_mut();
     for _i in 0..count {
-        let rv = alloc_internal(&module, cb_idx, (*gcb).context, ::core::ptr::null_mut());
-        if with_buf != 0 {
-            todo!("udi_cb_alloc_batch - with_buf");
-        }
-
-        if false {
-            // If there's a chaining field, use that
-        }
-        else {
-            (*rv).initiator_context = prev_cb as _;
-        }
-        prev_cb = rv;
+        prev_cb = alloc_internal(
+            &module, cb_idx, (*gcb).context, ::core::ptr::null_mut(), 
+            Some(prev_cb), if with_buf != 0 { Some((buf_size, path_handle)) } else { None }, None
+        );
     }
     callback(gcb, prev_cb);
 }
 
 // --------------------------------------------------------------------
 
-pub fn alloc_internal(driver_module: &crate::DriverModule, cb_idx: udi_index_t, context: *mut ::udi::ffi::c_void, default_channel: udi_channel_t) -> *mut udi_cb_t
+pub fn alloc(driver_module: &crate::DriverModule, cb_idx: udi_index_t, context: *mut ::udi::ffi::c_void, default_channel: udi_channel_t) -> *mut udi_cb_t
+{
+    alloc_internal(driver_module, cb_idx, context, default_channel, None, None, None)
+}
+
+fn alloc_internal(
+    driver_module: &crate::DriverModule,
+    cb_idx: udi_index_t,
+    context: *mut ::udi::ffi::c_void,
+    default_channel: udi_channel_t,
+    chain: Option<*mut udi_cb_t>,
+    buf_info: Option<(udi_size_t, udi_buf_path_t)>,
+    inline_info: Option<(udi_size_t, *const udi_layout_t )>,
+) -> *mut udi_cb_t
 {
     let cb_init = driver_module.get_cb_init(cb_idx).unwrap();
     let cb_spec = driver_module.get_cb_spec(cb_init);
 
-    // TODO: inline allocation
-    if !cb_init.inline_layout.is_null() {
-        todo!("Handle inline layout");
-    }
+    let layout = if !cb_init.inline_layout.is_null() {
+            cb_init.inline_layout
+        }
+        else {
+            ::core::ptr::null()
+        };
 
     let size = cb_spec.size();
     assert!(size >= ::core::mem::size_of::<udi_cb_t>());
@@ -91,6 +100,55 @@ pub fn alloc_internal(driver_module: &crate::DriverModule, cb_idx: udi_index_t, 
             scratch: ::libc::malloc(cb_init.scratch_requirement),
             origin: ::core::ptr::null_mut(),
             });
+        
+        use crate::udi_impl::layout::LayoutItem;
+
+        let mut buf = rv as _;
+
+        // Buffer allocation
+        if let Some((buf_size, buf_path)) = buf_info {
+            assert!(!layout.is_null(), "Layout is required when allocating a buffer");
+            for fld in crate::udi_impl::layout::iter_with_layout(&layout, &mut buf) {
+                match fld {
+                LayoutItem::Buf(dst, _) => {
+                    *dst = crate::udi_impl::buf::allocate(buf_size, buf_path);
+                    },
+                _ => {},
+                }
+            }
+        }
+        
+        // Inline data allocation
+        if let Some((alloc_size, _alloc_layout)) = inline_info {
+            assert!(!layout.is_null(), "Layout is required when allocating a buffer");
+            for fld in crate::udi_impl::layout::iter_with_layout(&layout, &mut buf) {
+                match fld {
+                LayoutItem::InlineDriverTyped(dst) => {
+                    *dst = ::libc::calloc(1, alloc_size);
+                    },
+                _ => {},
+                }
+            }
+        }
+
+        // Chained CBs, handles a null layout
+        if let Some(chain_cb) = chain {
+            let mut set = false;
+            if !layout.is_null() {
+                for fld in crate::udi_impl::layout::iter_with_layout(&layout, &mut buf) {
+                    if let LayoutItem::Cb(dst) = fld {
+                        *dst = chain_cb as _;
+                        set = false;
+                        break;
+                    }
+                }
+            }
+
+            if !set {
+                (*rv).initiator_context = chain_cb as _;
+            }
+        }
+
         rv
     }
 }

@@ -61,6 +61,16 @@ unsafe fn get_buf(ptr: &*mut udi_buf_t) -> Option<&RealUdiBuf> {
     }
 }
 
+/// Allocate a buffer for internal use
+pub fn allocate(size: udi_size_t, _path_handle: udi_buf_path_t) -> *mut udi_buf_t {
+    let mut rv: *mut udi_buf_t = ::core::ptr::null_mut();
+    // SAFE: It's null, so valid
+    unsafe {
+        get_buf_mut(&mut rv).reserve_at(0, size);
+    }
+    rv
+}
+
 #[no_mangle]
 unsafe extern "C" fn udi_buf_copy(
     callback: udi_buf_copy_call_t,
