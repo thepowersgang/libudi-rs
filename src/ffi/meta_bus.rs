@@ -54,7 +54,7 @@ impl_metalanguage!{
         1 => udi_bus_bind_cb_t,
         2 => super::meta_intr::udi_intr_attach_cb_t,
         3 => super::meta_intr::udi_intr_detach_cb_t,
-        4 => super::meta_intr::udi_intr_event_cb_t,
+        4 => super::meta_intr::udi_intr_event_cb_t : BUF event_buf,
         ;
 }
 

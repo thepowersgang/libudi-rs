@@ -82,13 +82,6 @@ fn alloc_internal(
     let cb_init = driver_module.get_cb_init(cb_idx).unwrap();
     let cb_spec = driver_module.get_cb_spec(cb_init);
 
-    let layout = if !cb_init.inline_layout.is_null() {
-            cb_init.inline_layout
-        }
-        else {
-            ::core::ptr::null()
-        };
-
     let size = cb_spec.size();
     assert!(size >= ::core::mem::size_of::<udi_cb_t>());
     unsafe {
@@ -100,51 +93,25 @@ fn alloc_internal(
             scratch: ::libc::malloc(cb_init.scratch_requirement),
             origin: ::core::ptr::null_mut(),
             });
-        
-        use ::udi::layout::LayoutItem;
-
-        let mut buf = rv as _;
 
         // Buffer allocation
         if let Some((buf_size, buf_path)) = buf_info {
-            assert!(!layout.is_null(), "Layout is required when allocating a buffer");
-            for fld in ::udi::layout::iter_with_layout(&layout, &mut buf) {
-                match fld {
-                LayoutItem::Buf(dst, _) => {
-                    *dst = crate::udi_impl::buf::allocate(buf_size, buf_path);
-                    },
-                _ => {},
-                }
-            }
+            let dst = cb_spec.get_buffer(&mut *rv).expect("No buffer");
+            *dst = crate::udi_impl::buf::allocate(buf_size, buf_path);
         }
         
         // Inline data allocation
         if let Some((alloc_size, _alloc_layout)) = inline_info {
-            assert!(!layout.is_null(), "Layout is required when allocating a buffer");
-            for fld in ::udi::layout::iter_with_layout(&layout, &mut buf) {
-                match fld {
-                LayoutItem::InlineDriverTyped(dst) => {
-                    *dst = ::libc::calloc(1, alloc_size);
-                    },
-                _ => {},
-                }
-            }
+            let dst = cb_spec.get_inline_data(&mut *rv).expect("No inline data present");
+            *dst = ::libc::calloc(1, alloc_size);
         }
 
         // Chained CBs, handles a null layout
         if let Some(chain_cb) = chain {
-            let mut set = false;
-            if !layout.is_null() {
-                for fld in ::udi::layout::iter_with_layout(&layout, &mut buf) {
-                    if let LayoutItem::Cb(dst) = fld {
-                        *dst = chain_cb as _;
-                        set = false;
-                        break;
-                    }
-                }
+            if let Some(dst) = cb_spec.get_chain(&mut *rv) {
+                *dst = chain_cb as _;
             }
-
-            if !set {
+            else {
                 (*rv).initiator_context = chain_cb as _;
             }
         }

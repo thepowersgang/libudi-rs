@@ -33,6 +33,10 @@ pub unsafe trait MetalangOps: MetalangOpsHandler
 pub trait MetalangCbHandler
 {
     fn size(&self) -> usize;
+
+    unsafe fn get_buffer<'a>(&self, cb: &'a mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::udi_buf_t> { let _ = cb; None }
+    unsafe fn get_inline_data<'a>(&self, cb: &'a mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::c_void> { let _ = cb; None }
+    unsafe fn get_chain<'a>(&self, cb: &'a mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::udi_cb_t> { let _ = cb; None }
 }
 /// Trait for to hold a CB's metalanguage number
 /// 
@@ -45,7 +49,12 @@ pub unsafe trait MetalangCb
 
 macro_rules! impl_metalanguage
 {
-    (static $spec_name:ident; NAME $name:ident ; OPS $( $ops_idx:literal => $ops_ty:ty),* $(,)? ; CBS $( $cb_idx:literal => $cb_ty:ty),* $(,)? ; ) => {
+    (
+        static $spec_name:ident;
+        NAME $name:ident ;
+        OPS $( $ops_idx:literal => $ops_ty:ty),* $(,)? ;
+        CBS $( $cb_idx:literal => $cb_ty:ty $(: BUF $buf_fld:ident)? $(: INLINE_DATA $inline_data_fld:ident)? $(: CHAIN $chain_fld:ident)? ),* $(,)? ;
+    ) => {
         pub struct Metalang;
         pub static $spec_name: Metalang = Metalang;
         impl $crate::metalang_trait::Metalanguage for Metalang {
@@ -68,6 +77,24 @@ macro_rules! impl_metalanguage
                         fn size(&self) -> usize {
                             ::core::mem::size_of::<$cb_ty>()
                         }
+                        $(
+                        unsafe fn get_buffer<'a>(&self, cb: &'a mut $crate::ffi::udi_cb_t) -> Option<&'a mut *mut $crate::ffi::udi_buf_t> {
+                            let cb = &mut *(cb as *mut $crate::ffi::udi_cb_t as *mut $cb_ty);
+                            Some(&mut cb.$buf_fld)
+                        }
+                        )?
+                        $(
+                        unsafe fn get_inline_data<'a>(&self, cb: &'a mut $crate::ffi::udi_cb_t) -> Option<&'a mut *mut $crate::ffi::c_void> {
+                            let cb = &mut *(cb as *mut $crate::ffi::udi_cb_t as *mut $cb_ty);
+                            Some(&mut cb.$inline_data_fld)
+                        }
+                        )?
+                        $(
+                        unsafe fn get_chain<'a>(&self, cb: &'a mut $crate::ffi::udi_cb_t) -> Option<&'a mut *mut $crate::ffi::udi_cb_t> {
+                            let cb = &mut *(cb as *mut $crate::ffi::udi_cb_t as *mut $cb_ty);
+                            Some(&mut cb.$chain_fld)
+                        }
+                        )?
                     }
                     Some(&H)
                     }, )*
