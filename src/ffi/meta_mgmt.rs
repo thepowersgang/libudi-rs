@@ -52,3 +52,12 @@ pub struct udi_filter_element_t
 	pub attr_type: super::attr::udi_instance_attr_type_t,
 	pub attr_stride: udi_ubit32_t,
 }
+
+// Values for `enumeration_level`
+pub const UDI_ENUMERATE_START       : u8 = 1;
+pub const UDI_ENUMERATE_START_RESCAN: u8 = 2;
+pub const UDI_ENUMERATE_NEXT        : u8 = 3;
+pub const UDI_ENUMERATE_NEW         : u8 = 4;
+pub const UDI_ENUMERATE_DIRECTED    : u8 = 5;
+pub const UDI_ENUMERATE_RELEASE     : u8 = 6;
+

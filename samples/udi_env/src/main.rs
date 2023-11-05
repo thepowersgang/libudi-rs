@@ -273,7 +273,7 @@ fn create_driver_instance<'a>(driver_module: ::std::sync::Arc<DriverModule<'stat
             (*cb).initiator_context = &mut state as *mut _ as *mut ::udi::ffi::c_void;
             fcn(cb);
 
-            let returned_cb = state.returned_cb().unwrap();
+            let returned_cb = state.returned_cb().expect("No returned CB?");
             udi_impl::cb::free_internal(returned_cb);
         }
     }

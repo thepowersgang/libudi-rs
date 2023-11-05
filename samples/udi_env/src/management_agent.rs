@@ -189,10 +189,10 @@ impl InstanceInitState
         println!("next_op_enumerate");
         let pri_init = self.instance.module.pri_init;
         let level = if is_first {
-            0 /* EnumerateLevel::Start */
+            ::udi::ffi::meta_mgmt::UDI_ENUMERATE_START
         }
         else {
-            2 /* EnumerateLevel::Next */
+            ::udi::ffi::meta_mgmt::UDI_ENUMERATE_NEXT
         };
         unsafe {
             let cb: *mut ::udi::ffi::meta_mgmt::udi_enumerate_cb_t = self.alloc_cb_raw();

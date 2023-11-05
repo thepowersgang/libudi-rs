@@ -224,12 +224,12 @@ future_wrapper!{enumerate_req_op => <T as Driver>(cb: *mut udi_enumerate_cb_t, e
 		};
 	let enumeration_level = match enumeration_level
 		{
-		0 => EnumerateLevel::Start,
-		1 => EnumerateLevel::StartRescan,
-		2 => EnumerateLevel::Next,
-		3 => EnumerateLevel::New,
-		4 => EnumerateLevel::Directed,
-		5 => EnumerateLevel::Release,
+		crate::ffi::meta_mgmt::UDI_ENUMERATE_START => EnumerateLevel::Start,
+		crate::ffi::meta_mgmt::UDI_ENUMERATE_START_RESCAN => EnumerateLevel::StartRescan,
+		crate::ffi::meta_mgmt::UDI_ENUMERATE_NEXT => EnumerateLevel::Next,
+		crate::ffi::meta_mgmt::UDI_ENUMERATE_NEW => EnumerateLevel::New,
+		crate::ffi::meta_mgmt::UDI_ENUMERATE_DIRECTED => EnumerateLevel::Directed,
+		crate::ffi::meta_mgmt::UDI_ENUMERATE_RELEASE => EnumerateLevel::Release,
 		_ => todo!(),
 		};
 	crate::async_trickery::with_ack(
