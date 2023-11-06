@@ -23,7 +23,7 @@ pub mod metalang_trait;
 
 pub use cb::CbRef;
 
-pub mod ffi;
+pub use ::udi_sys as ffi;
 
 pub mod buf;
 pub mod init;
@@ -36,6 +36,7 @@ pub mod log;
 pub mod meta_mgmt;
 pub mod meta_bus;
 pub mod meta_intr;
+pub mod meta_gio;
 pub mod meta_nic;
 
 pub type Result<T> = ::core::result::Result<T,Error>;
@@ -177,12 +178,11 @@ where
 	T: Wrapper<U>
 {
 }
-/*
-struct CbList;
-impl HasCb<foo_cb_t> for CbList {}
-trait HasCb<T> {}
-*/
 
+pub struct OpsStructure<Ops, T, CbList>
+{
+	pd: ::core::marker::PhantomData<(Ops,T,CbList)>,
+}
 
 /// Define a UDI driver
 /// 
@@ -224,9 +224,15 @@ macro_rules! define_driver
 		}
 	) => {
 		#[repr(u8)]
-		enum OpsList {
+		enum RawOpsList {
 			_Zero,
 			$($op_name,)*
+		}
+		#[allow(non_snake_case)]
+		mod OpsList {
+			$(
+				pub const $op_name: $crate::ffi::udi_index_t = $crate::ffi::udi_index_t(super::RawOpsList::$op_name as _);
+			)*
 		}
 		#[repr(u8)]
 		enum CbList {
@@ -238,7 +244,7 @@ macro_rules! define_driver
 			$(
 				pub struct $cb_name(());
 				impl $crate::cb::CbDefinition for $cb_name {
-					const INDEX: u8 = super::CbList::$cb_name as _;
+					const INDEX: $crate::ffi::udi_index_t = $crate::ffi::udi_index_t(super::CbList::$cb_name as _);
 					type Cb = $cb_ty;
 				}
 			)*
@@ -246,9 +252,9 @@ macro_rules! define_driver
 			$(impl $crate::HasCb<$cb_ty> for List {})*
 		}
 		const _STATE_SIZE: usize = {
-			let v = $crate::ffi::meta_mgmt::udi_mgmt_ops_t::scratch_requirement::<$driver>();
+			let v = <$crate::OpsStructure<$crate::ffi::meta_mgmt::udi_mgmt_ops_t,Driver,Cbs::List>>::scratch_requirement();
 			$(
-				let a = <$op_op>::scratch_requirement::<$crate::define_driver!(@get_wrapper $driver $(: $wrapper)?)>();
+				let a = <$crate::OpsStructure<$op_op,$crate::define_driver!(@get_wrapper $driver $(: $wrapper)?),Cbs::List>>::scratch_requirement();
 				let v = if v > a { v } else { a };
 			)*
 			v
@@ -256,7 +262,10 @@ macro_rules! define_driver
 		#[no_mangle]
 		pub static $symname: $crate::ffi::init::udi_init_t = $crate::ffi::init::udi_init_t {
 			primary_init_info: Some(&$crate::ffi::init::udi_primary_init_t {
-					mgmt_ops: unsafe { &$crate::ffi::meta_mgmt::udi_mgmt_ops_t::for_driver::<Driver>() },
+					mgmt_ops: {
+						static OPS: $crate::ffi::meta_mgmt::udi_mgmt_ops_t = unsafe { <$crate::OpsStructure<$crate::ffi::meta_mgmt::udi_mgmt_ops_t,Driver,Cbs::List>>::for_driver() };
+						&OPS
+						},
 					mgmt_op_flags: [0,0,0,0].as_ptr(),
 					mgmt_scratch_requirement: _STATE_SIZE,
 					rdata_size: ::core::mem::size_of::<$crate::init::RData<Driver>>(),
@@ -269,8 +278,8 @@ macro_rules! define_driver
 				$(
 				{
 					$( $crate::enforce_is_wrapper_for::<$wrapper, $driver>(); )?
-					<$op_op>::check_cbs::<Cbs::List>();
-					$crate::make_ops_init(OpsList::$op_name as _, $op_meta, unsafe { &<$op_op>::for_driver::<$crate::define_driver!(@get_wrapper $driver $(: $wrapper)?)>() })
+					//<$op_op>::check_cbs::<Cbs::List>();
+					$crate::make_ops_init(OpsList::$op_name as _, $op_meta, unsafe { &<$crate::OpsStructure<$op_op,$crate::define_driver!(@get_wrapper $driver $(: $wrapper)?),Cbs::List>>::for_driver() })
 				},
 				)*
 				$crate::ffi::init::udi_ops_init_t::end_of_list()

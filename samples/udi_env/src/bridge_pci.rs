@@ -66,7 +66,7 @@ impl ::udi::init::Driver for Driver
     }
 
     type Future_devmgmt<'s> = impl ::core::future::Future<Output=::udi::Result<u8>> + 's;
-    fn devmgmt_req<'s>(&'s mut self, cb: udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, parent_id: udi::ffi::udi_index_t) -> Self::Future_devmgmt<'s> {
+    fn devmgmt_req<'s>(&'s mut self, cb: udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, parent_id: udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
         async move {
             todo!("devmgmt_req");
         }
@@ -119,16 +119,17 @@ requires udi_bridge 0x101\0\
 meta 1 udi_bridge\0\
 child_bind_ops 1 0 1\0\
 ";
+const META_BIRDGE: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t(1);
 ::udi::define_driver! {
     Driver as INIT_INFO_PCI;
     ops: {
-        Bridge   : Meta=1, ::udi::ffi::meta_bus::udi_bus_bridge_ops_t,
-        Interrupt: Meta=1, ::udi::ffi::meta_intr::udi_intr_dispatcher_ops_t,
+        Bridge   : Meta=META_BIRDGE, ::udi::ffi::meta_bus::udi_bus_bridge_ops_t,
+        Interrupt: Meta=META_BIRDGE, ::udi::ffi::meta_intr::udi_intr_dispatcher_ops_t,
     },
     cbs: {
-        BusBind  : Meta=1, ::udi::ffi::meta_bus::udi_bus_bind_cb_t,
-		_IntrAttach: Meta=1, ::udi::ffi::meta_intr::udi_intr_attach_cb_t,
-		_IntrDetach: Meta=1, ::udi::ffi::meta_intr::udi_intr_detach_cb_t,
-		_IntrEvent : Meta=1, ::udi::ffi::meta_intr::udi_intr_event_cb_t,
+        BusBind  : Meta=META_BIRDGE, ::udi::ffi::meta_bus::udi_bus_bind_cb_t,
+		_IntrAttach: Meta=META_BIRDGE, ::udi::ffi::meta_intr::udi_intr_attach_cb_t,
+		_IntrDetach: Meta=META_BIRDGE, ::udi::ffi::meta_intr::udi_intr_detach_cb_t,
+		_IntrEvent : Meta=META_BIRDGE, ::udi::ffi::meta_intr::udi_intr_event_cb_t,
     }
 }

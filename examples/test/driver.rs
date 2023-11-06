@@ -10,9 +10,9 @@ impl ::udi::init::Driver for Driver
 	fn usage_ind(cb: ::udi::CbRef<::udi::ffi::meta_mgmt::udi_usage_cb_t>, _resouce_level: u8) -> Self::Future_init<'_> {
 		async move {
 			println!("Entry");
-			let h1 = ::udi::pio::map(cb.gcb(), 0,0x1000,4, &[], 0, 0, 0).await;
+			let h1 = ::udi::pio::map(cb.gcb(), 0,0x1000,4, &[], 0, 0, ::udi::ffi::udi_index_t(0)).await;
 			println!("h1 = {:?}", h1);
-			let h2 = ::udi::pio::map(cb.gcb(), 0,0x1004,4, &[], 0, 0, 0).await;
+			let h2 = ::udi::pio::map(cb.gcb(), 0,0x1004,4, &[], 0, 0, ::udi::ffi::udi_index_t(0)).await;
 			println!("h2 = {:?}", h2);
 			Driver {}
 		}
@@ -39,7 +39,7 @@ impl ::udi::init::Driver for Driver
     }
 
     type Future_devmgmt<'s> = impl ::core::future::Future<Output=::udi::Result<u8>> + 's;
-    fn devmgmt_req<'s>(&'s mut self, _cb: ::udi::init::CbRefMgmt<'s>, _mgmt_op: udi::init::MgmtOp, _parent_id: ::udi::ffi::udi_index_t) -> Self::Future_devmgmt<'s> {
+    fn devmgmt_req<'s>(&'s mut self, _cb: ::udi::init::CbRefMgmt<'s>, _mgmt_op: udi::init::MgmtOp, _parent_id: ::udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
         async move {
 			todo!()
 		}

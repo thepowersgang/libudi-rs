@@ -35,20 +35,20 @@ future_wrapper!(intr_event_ind_op => <T as IntrHandler>(cb: *mut udi_intr_event_
         )
 });
 
-impl crate::ffi::meta_intr::udi_intr_handler_ops_t {
-    pub const fn scratch_requirement<T: IntrHandler>() -> usize {
+impl<T,CbList> crate::OpsStructure<::udi_sys::meta_intr::udi_intr_handler_ops_t, T,CbList>
+where
+	T: IntrHandler,
+    CbList: crate::HasCb<udi_intr_event_cb_t>,
+{
+    pub const fn scratch_requirement() -> usize {
         let v = crate::imc::task_size::<T, MarkerIntrHandler>();
         let v = crate::const_max(v, intr_event_ind_op::task_size::<T>());
         v
     }
-    pub const fn check_cbs<T>()
-    where
-        T: crate::HasCb<udi_intr_event_cb_t>,
-    {}
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
     /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
-    pub const unsafe fn for_driver<T: IntrHandler>() -> Self {
-        Self {
+    pub const unsafe fn for_driver() -> ::udi_sys::meta_intr::udi_intr_handler_ops_t {
+        ::udi_sys::meta_intr::udi_intr_handler_ops_t {
             channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerIntrHandler>,
             intr_event_ind_op: intr_event_ind_op::<T>,
         }
@@ -76,20 +76,20 @@ future_wrapper!(intr_event_rdy_op => <T as IntrDispatcher>(cb: *mut udi_intr_eve
     val.intr_event_rdy(cb)
 });
 
-impl crate::ffi::meta_intr::udi_intr_dispatcher_ops_t {
-    pub const fn scratch_requirement<T: IntrDispatcher>() -> usize {
+impl<T,CbList> crate::OpsStructure<::udi_sys::meta_intr::udi_intr_dispatcher_ops_t, T,CbList>
+where
+	T: IntrDispatcher,
+    CbList: crate::HasCb<udi_intr_event_cb_t>,
+{
+    pub const fn scratch_requirement() -> usize {
         let v = crate::imc::task_size::<T, MarkerIntrDispatcher>();
         let v = crate::const_max(v, intr_event_rdy_op::task_size::<T>());
         v
     }
-    pub const fn check_cbs<T>()
-    where
-        T: crate::HasCb<udi_intr_event_cb_t>,
-    {}
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
     /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
-    pub const unsafe fn for_driver<T: IntrDispatcher>() -> Self {
-        Self {
+    pub const unsafe fn for_driver() -> ::udi_sys::meta_intr::udi_intr_dispatcher_ops_t {
+        ::udi_sys::meta_intr::udi_intr_dispatcher_ops_t {
             channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerIntrDispatcher>,
             intr_event_rdy_op: intr_event_rdy_op::<T>,
         }

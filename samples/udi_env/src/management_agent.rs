@@ -113,7 +113,7 @@ impl InstanceInitState
             let cb: *mut ::udi::ffi::meta_mgmt::udi_usage_cb_t = self.alloc_cb_raw();
             (*cb).gcb.scratch = ::libc::malloc(pri_init.mgmt_scratch_requirement);
             (*cb).trace_mask = 0;
-            (*cb).meta_idx = 0;
+            (*cb).meta_idx = Default::default();
             (
                 cb as *mut ::udi::ffi::udi_cb_t,
                 Box::new(move |cb| { (usage_ind_op)(cb as *mut _, 3 /*UDI_RESOURCES_NORMAL*/) })

@@ -81,7 +81,7 @@ fn main()
 			initiator_context: &mut inner_ctxt as *mut _ as *mut _,
 			origin: ::core::ptr::null_mut(),
 			},
-		meta_idx: 0,
+		meta_idx: ::udi::ffi::udi_index_t(0),
 		trace_mask: 0,
 		};
 	unsafe {

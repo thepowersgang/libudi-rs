@@ -2,3 +2,6 @@
 name = "udiprops_parse"
 version = "0.0.1"
 edition = "2018"
+
+[dependencies]
+udi-sys = { path = "../udi-sys" }

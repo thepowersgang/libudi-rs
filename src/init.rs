@@ -37,7 +37,7 @@ pub trait Driver: 'static {
 	fn enumerate_req<'s>(&'s mut self, cb: CbRefEnumerate<'s>, level: EnumerateLevel, attrs_out: AttrSink<'s>) -> Self::Future_enumerate<'s>;
 
 	type Future_devmgmt<'s>: Future<Output=crate::Result<u8>> + 's;
-	fn devmgmt_req<'s>(&'s mut self, cb: CbRefMgmt<'s>, mgmt_op: MgmtOp, parent_id: crate::ffi::udi_index_t) -> Self::Future_devmgmt<'s>;
+	fn devmgmt_req<'s>(&'s mut self, cb: CbRefMgmt<'s>, mgmt_op: MgmtOp, parent_id: crate::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s>;
 }
 pub enum EnumerateLevel
 {
@@ -236,19 +236,20 @@ future_wrapper!{enumerate_req_op => <T as Driver>(cb: *mut udi_enumerate_cb_t, e
 		val.enumerate_req(cb, enumeration_level, attrs),
 		// Return this CB to the pool on completion
 		|cb: *mut udi_enumerate_cb_t,(res,attrs)| unsafe {
+			use ffi::udi_index_t;
 			let (res,ops_idx) = match res
 				{
 				EnumerateResult::Ok { ops_idx, child_id } => {
 					(*cb).child_id = child_id;
 					(0,ops_idx)
 					},
-				EnumerateResult::Leaf => (1,0),
-				EnumerateResult::Done => (2,0),
-				EnumerateResult::Rescan => (3,0),
-				EnumerateResult::Removed => (4,0),
-				EnumerateResult::RemovedSelf => (5,0),
-				EnumerateResult::Released => (6,0),
-				EnumerateResult::Failed => (255,0),
+				EnumerateResult::Leaf => (1,udi_index_t(0)),
+				EnumerateResult::Done => (2,udi_index_t(0)),
+				EnumerateResult::Rescan => (3,udi_index_t(0)),
+				EnumerateResult::Removed => (4,udi_index_t(0)),
+				EnumerateResult::RemovedSelf => (5,udi_index_t(0)),
+				EnumerateResult::Released => (6,udi_index_t(0)),
+				EnumerateResult::Failed => (255,udi_index_t(0)),
 				};
 			(*cb).attr_valid_length = attrs.dst.offset_from((*cb).attr_list).try_into().expect("BUG: Attr list too long");
 			crate::ffi::meta_mgmt::udi_enumerate_ack(cb, res, ops_idx)
@@ -291,8 +292,11 @@ future_wrapper!{final_cleanup_req_op => <T as Driver>(cb: *mut udi_mgmt_cb_t) va
 	)
 }}
 
-impl ffi::meta_mgmt::udi_mgmt_ops_t {
-    pub const fn scratch_requirement<T: Driver>() -> usize {
+impl<T,CbList> crate::OpsStructure<::udi_sys::meta_mgmt::udi_mgmt_ops_t, T,CbList>
+where
+	T: Driver,
+{
+    pub const fn scratch_requirement() -> usize {
         let rv = 0;
 		let rv = crate::const_max(rv, async_trickery::task_size::<MgmtState<T>>());
 		let rv = crate::const_max(rv, enumerate_req_op::task_size::<T>());
@@ -300,7 +304,7 @@ impl ffi::meta_mgmt::udi_mgmt_ops_t {
 		let rv = crate::const_max(rv, final_cleanup_req_op::task_size::<T>());
 		rv
     }
-    pub const unsafe fn for_driver<T: Driver>() -> Self {
+    pub const unsafe fn for_driver() -> ffi::meta_mgmt::udi_mgmt_ops_t {
         // ENTRYPOINT: mgmt_ops.usage_ind
         unsafe extern "C" fn usage_ind<T: Driver>(cb: *mut udi_usage_cb_t, resource_level: u8)
         {

@@ -136,7 +136,7 @@ unsafe extern "C" fn udi_pio_trans(
         data_translation: pio_handle.data_translation,
         data_ordering: pio_handle.data_ordering,
     };
-    let (status, retval) = match pio_trans_inner(&mut state, &mut io_state, &pio_handle.trans_list, start_label)
+    let (status, retval) = match pio_trans_inner(&mut state, &mut io_state, &pio_handle.trans_list, start_label.0)
         {
         Err(e) => {
             (e.into_inner(), 0)

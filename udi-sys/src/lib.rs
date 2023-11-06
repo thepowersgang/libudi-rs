@@ -1,4 +1,8 @@
 //! Raw UDI C API definitions
+//! 
+#![feature(extern_types)]	// For opaque handle types
+#![no_std]
+
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 
@@ -19,19 +23,39 @@ pub mod layout;
 
 pub use ::core::ffi::c_void;
 
-pub type udi_index_t = u8;
+#[repr(transparent)]
+#[derive(Copy,Clone,Debug,PartialEq,Eq,PartialOrd,Ord,Hash,Default)]
+pub struct udi_index_t(pub u8);
+impl udi_index_t {
+	pub fn to_usize(&self) -> usize { self.0 as usize }
+}
+impl From<u8> for udi_index_t {
+	fn from(v: u8) -> udi_index_t { udi_index_t(v) }
+}
+impl ::core::fmt::Display for udi_index_t {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 pub type udi_size_t = usize;
 pub type udi_status_t = u32;
 pub type _udi_handle_t = *mut c_void;
-pub type udi_channel_t = _udi_handle_t;
-pub type udi_origin_t = _udi_handle_t;
+#[doc(hidden)] #[repr(C)] pub struct _udi_channel_s { inner: () }
+pub type udi_channel_t = *mut _udi_channel_s;
+#[doc(hidden)] #[repr(C)] pub struct _udi_origin_s { inner: () }
+pub type udi_origin_t = *mut _udi_origin_s;
 
-pub type udi_boolean_t = u8;
+#[repr(transparent)]
+#[derive(Copy,Clone,Debug,PartialEq,Eq,PartialOrd,Ord)]
+pub struct udi_boolean_t(pub u8);
+impl udi_boolean_t {
+	pub fn to_bool(&self) -> bool { self.0 != 0 }
+}
 pub type udi_ubit8_t  = u8;
 pub type udi_ubit16_t = u16;
 pub type udi_ubit32_t = u32;
-//pub type udi_ubit64_t = u64;
-
+// NOTE: No 64-bit, by design
 pub type udi_sbit8_t  = i8;
 pub type udi_sbit16_t = i16;
 pub type udi_sbit32_t = i32;

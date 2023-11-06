@@ -72,7 +72,7 @@ impl ::udi::init::Driver for Driver
     }
 
     type Future_devmgmt<'s> = impl ::core::future::Future<Output=::udi::Result<u8>> + 's;
-    fn devmgmt_req<'s>(&'s mut self, _cb: ::udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, _parent_id: ::udi::ffi::udi_index_t) -> Self::Future_devmgmt<'s> {
+    fn devmgmt_req<'s>(&'s mut self, _cb: ::udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, _parent_id: ::udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
         async move {
 			use ::udi::init::MgmtOp;
 			match mgmt_op
@@ -98,7 +98,7 @@ impl ::udi::meta_bus::BusDevice for Driver
 		_status: ::udi::ffi::udi_status_t
 	) -> Self::Future_bind_ack<'a> {
 		async move {
-			let pio_map = |trans_list| ::udi::pio::map(cb.gcb(), 0/*UDI_PCI_BAR_0*/, 0x00,0x20, trans_list, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0);
+			let pio_map = |trans_list| ::udi::pio::map(cb.gcb(), 0/*UDI_PCI_BAR_0*/, 0x00,0x20, trans_list, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0.into());
 			self.pio_handles.reset   = pio_map(&pio_ops::RESET).await;
 			self.pio_handles.enable  = pio_map(&pio_ops::ENABLE).await;
 			self.pio_handles.rx      = pio_map(&pio_ops::RX).await;
@@ -106,9 +106,9 @@ impl ::udi::meta_bus::BusDevice for Driver
 			self.pio_handles.irq_ack = pio_map(&pio_ops::IRQACK).await;
 
 			// Spawn channel
-			self.intr_channel = ::udi::imc::channel_spawn(cb.gcb(), /*interrupt number*/0, OpsList::Irq as _).await;
+			self.intr_channel = ::udi::imc::channel_spawn(cb.gcb(), /*interrupt number*/0.into(), OpsList::Irq as _).await;
 			let mut intr_cb = ::udi::cb::alloc::<Cbs::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
-			intr_cb.interrupt_index = 0;
+			intr_cb.interrupt_index = 0.into();
 			intr_cb.min_event_pend = 2;
 			intr_cb.preprocessing_handle = self.pio_handles.irq_ack.as_raw();	// NOTE: This transfers ownership
 			::udi::meta_intr::attach_req(intr_cb);
@@ -122,7 +122,7 @@ impl ::udi::meta_bus::BusDevice for Driver
 			}
 
 			// Reset the hardware, and get the MAC address
-			::udi::pio::trans(cb.gcb(), &self.pio_handles.reset, 0, None, Some(unsafe { ::udi::pio::MemPtr::new(&mut self.mac_addr) })).await?;
+			::udi::pio::trans(cb.gcb(), &self.pio_handles.reset, 0.into(), None, Some(unsafe { ::udi::pio::MemPtr::new(&mut self.mac_addr) })).await?;
 
 			// Binding is complete!
 			Ok( () )
@@ -168,7 +168,7 @@ impl ::udi::meta_intr::IntrHandler for DriverIrq
 					buf.ensure_size(cb.gcb(), 1520).await;
 					// Pull the packet off the device
 					match ::udi::pio::trans(
-						cb.gcb(), &self.0.pio_handles.rx, 0, 
+						cb.gcb(), &self.0.pio_handles.rx, 0.into(),
 						Some(&mut buf), Some(unsafe { ::udi::pio::MemPtr::new(::core::slice::from_mut(&mut self.0.rx_next_page)) })
 					).await
 					{
@@ -250,7 +250,7 @@ impl ::udi::meta_nic::Control for DriverNicCtrl
 	type Future_enable_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
     fn enable_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_enable_req<'a> {
         async move {
-			::udi::pio::trans(cb.gcb(), &self.0.pio_handles.enable, 0, None, None).await?;
+			::udi::pio::trans(cb.gcb(), &self.0.pio_handles.enable, ::udi::ffi::udi_index_t(0), None, None).await?;
 			Ok( () )
 		}
     }
@@ -290,7 +290,7 @@ impl ::udi::meta_nic::NdTx for DriverNicCtrl
 				if self.0.tx_next_page > mem::TX_LAST {
 					self.0.tx_next_page -= mem::TX_BUF_SIZE;
 				}
-				match ::udi::pio::trans(cb.gcb(), &self.0.pio_handles.tx, 0, Some(&mut buf), Some(mem_ptr)).await
+				match ::udi::pio::trans(cb.gcb(), &self.0.pio_handles.tx, ::udi::ffi::udi_index_t(0), Some(&mut buf), Some(mem_ptr)).await
 				{
 				Ok(_) => {},
 				Err(_) => {},

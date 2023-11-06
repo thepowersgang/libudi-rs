@@ -143,3 +143,35 @@ impl BufPreserveFlag {
     //pub unsafe fn test(cb: *const udi_cb_t) -> bool {
     //}
 }
+
+
+pub unsafe trait GetLayout
+{
+    const LEN: usize;
+    const LAYOUT: &'static [u8];
+}
+macro_rules! impl_layout_simple {
+    ( $( $t:ty => $flag:ident, )+ ) => {
+        $(
+        unsafe impl GetLayout for $t {
+            const LEN: usize = 1;
+            const LAYOUT: &'static [u8] = &[crate::ffi::layout::$flag];
+        }
+        )+
+    };
+}
+impl_layout_simple!{
+    crate::ffi::udi_ubit8_t => UDI_DL_UBIT8_T,
+    crate::ffi::udi_sbit8_t => UDI_DL_SBIT8_T,
+    crate::ffi::udi_ubit16_t => UDI_DL_UBIT16_T,
+    crate::ffi::udi_sbit16_t => UDI_DL_SBIT16_T,
+    crate::ffi::udi_ubit32_t => UDI_DL_UBIT32_T,
+    crate::ffi::udi_sbit32_t => UDI_DL_SBIT32_T,
+    crate::ffi::udi_boolean_t => UDI_DL_BOOLEAN_T,
+
+    crate::ffi::udi_index_t => UDI_DL_INDEX_T,    // Conflicts as index is a u8
+    crate::ffi::udi_channel_t => UDI_DL_CHANNEL_T,
+    crate::ffi::udi_origin_t => UDI_DL_ORIGIN_T,
+    // The rest are more complex, so are handled in the derive
+}
+

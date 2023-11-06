@@ -5,9 +5,9 @@ pub trait Metalanguage
 {
     fn name() -> &'static str where Self: Sized;
     /// Cast `ops_vector` into a ops structure
-    unsafe fn get_ops(&self, ops_idx: u8, ops_vector: crate::ffi::udi_ops_vector_t) -> Option<&'static dyn MetalangOpsHandler>;
+    unsafe fn get_ops(&self, ops_idx: ::udi_sys::udi_index_t, ops_vector: crate::ffi::udi_ops_vector_t) -> Option<&'static dyn MetalangOpsHandler>;
     /// Obtain a metalanguage-specific definition of a CB
-    fn get_cb(&self, cb_idx: u8) -> Option<&dyn MetalangCbHandler>;
+    fn get_cb(&self, cb_idx: ::udi_sys::udi_index_t) -> Option<&dyn MetalangCbHandler>;
 }
 /// Trait used for dynamic dispatch of an `ops` structure
 /// 
@@ -26,7 +26,7 @@ pub trait MetalangOpsHandler: 'static
 /// SAFETY: The pointed data must be valid as [crate::ffi::init::udi_ops_init_t]
 pub unsafe trait MetalangOps: MetalangOpsHandler
 {
-    const META_OPS_NUM: u8;
+    const META_OPS_NUM: crate::ffi::udi_index_t;
 }
 
 /// Trait used for dynamic dispatch on a CB definition
@@ -44,7 +44,7 @@ pub trait MetalangCbHandler
 pub unsafe trait MetalangCb
 {
     type MetalangSpec: Metalanguage;
-    const META_CB_NUM: u8;
+    const META_CB_NUM: crate::ffi::udi_index_t;
 }
 
 macro_rules! impl_metalanguage
@@ -61,16 +61,16 @@ macro_rules! impl_metalanguage
             fn name() -> &'static str {
                 stringify!($name)
             }
-            unsafe fn get_ops(&self, ops_idx: u8, ops_vector: $crate::ffi::udi_ops_vector_t) -> Option<&'static dyn $crate::metalang_trait::MetalangOpsHandler> {
-                match ops_idx
+            unsafe fn get_ops(&self, ops_idx: $crate::ffi::udi_index_t, ops_vector: $crate::ffi::udi_ops_vector_t) -> Option<&'static dyn $crate::metalang_trait::MetalangOpsHandler> {
+                match ops_idx.0
                 {
                 $( $ops_idx => Some(&*(ops_vector as *const $ops_ty)), )*
                 _ => None,
                 }
             }
         
-            fn get_cb(&self, cb_idx: u8) -> Option<&dyn $crate::metalang_trait::MetalangCbHandler> {
-                match cb_idx {
+            fn get_cb(&self, cb_idx: $crate::ffi::udi_index_t) -> Option<&dyn $crate::metalang_trait::MetalangCbHandler> {
+                match cb_idx.0 {
                 $( $cb_idx => {
                     struct H;
                     impl $crate::metalang_trait::MetalangCbHandler for H {
@@ -115,13 +115,13 @@ macro_rules! impl_metalanguage
             }
         }
         unsafe impl $crate::metalang_trait::MetalangOps for $ops_ty {
-            const META_OPS_NUM: u8 = $ops_idx;
+            const META_OPS_NUM: $crate::ffi::udi_index_t = $crate::ffi::udi_index_t($ops_idx);
         }
         )*
         $(
         unsafe impl $crate::metalang_trait::MetalangCb for $cb_ty {
             type MetalangSpec = Metalang;
-            const META_CB_NUM: u8 = {
+            const META_CB_NUM: $crate::ffi::udi_index_t = {
                 #[allow(dead_code)]
                 fn assert_cb_field(input: &$cb_ty) {
                     let _ = input.gcb;
@@ -130,7 +130,7 @@ macro_rules! impl_metalanguage
                     //    if ::core::ptr::addr_of!((*p).gcb) == p as *mut crate::ffi::udi_cb_t { 0 } else { panic!() }
                     //    }];
                 }
-                $cb_idx
+                $crate::ffi::udi_index_t($cb_idx)
                 };
         }
         )*

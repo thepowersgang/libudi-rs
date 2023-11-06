@@ -1,4 +1,4 @@
-use crate::ffi::*;
+use crate::*;
 
 extern "C" {
     pub fn udi_bus_bind_req(cb: *mut udi_bus_bind_cb_t);
@@ -39,23 +39,6 @@ extern "C" {
     );
     pub fn udi_bus_unbind_req(cb: *mut udi_bus_bind_cb_t);
     pub fn udi_bus_unbind_ack(cb: *mut udi_bus_bind_cb_t);
-}
-
-impl_metalanguage!{
-    static METALANG_SPEC;
-    NAME udi_bridge;
-    OPS
-        1 => udi_bus_device_ops_t,
-        2 => udi_bus_bridge_ops_t,
-        3 => super::meta_intr::udi_intr_handler_ops_t,
-        4 => super::meta_intr::udi_intr_dispatcher_ops_t,
-        ;
-    CBS
-        1 => udi_bus_bind_cb_t,
-        2 => super::meta_intr::udi_intr_attach_cb_t,
-        3 => super::meta_intr::udi_intr_detach_cb_t,
-        4 => super::meta_intr::udi_intr_event_cb_t : BUF event_buf,
-        ;
 }
 
 pub struct udi_bus_device_ops_t

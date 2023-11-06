@@ -18,11 +18,6 @@ pub struct udi_channel_event_cb_t
     pub event: u8,
     pub params: udi_channel_event_cb_t_params,
 }
-unsafe impl crate::async_trickery::GetCb for udi_channel_event_cb_t {
-    fn get_gcb(&self) -> &super::udi_cb_t {
-        &self.gcb
-    }
-}
 
 #[repr(C)]
 pub union udi_channel_event_cb_t_params

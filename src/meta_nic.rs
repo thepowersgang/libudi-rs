@@ -181,11 +181,18 @@ future_wrapper!(nd_ctrl_req_op => <T as Control>(cb: *mut ffi::udi_nic_ctrl_cb_t
     val.ctrl_req(cb)
 });
 future_wrapper!(nd_info_req_op => <T as Control>(cb: *mut ffi::udi_nic_info_cb_t, reset_statistics: crate::ffi::udi_boolean_t) val @ {
-    val.info_req(cb, reset_statistics != 0)
+    val.info_req(cb, reset_statistics.to_bool())
 });
-impl ffi::udi_nd_ctrl_ops_t
+
+impl<T,CbList> crate::OpsStructure<ffi::udi_nd_ctrl_ops_t, T,CbList>
+where
+	T: Control,
+    CbList: crate::HasCb<ffi::udi_nic_cb_t>,
+    CbList: crate::HasCb<ffi::udi_nic_bind_cb_t>,
+    CbList: crate::HasCb<ffi::udi_nic_ctrl_cb_t>,
+    CbList: crate::HasCb<ffi::udi_nic_info_cb_t>,
 {
-    pub const fn scratch_requirement<T: Control>() -> usize {
+    pub const fn scratch_requirement() -> usize {
         let v = crate::imc::task_size::<T, MarkerControl>();
         let v = crate::const_max(v, nd_bind_req_op::task_size::<T>());
         let v = crate::const_max(v, nd_unbind_req_op::task_size::<T>());
@@ -195,17 +202,10 @@ impl ffi::udi_nd_ctrl_ops_t
         let v = crate::const_max(v, nd_info_req_op::task_size::<T>());
         v
     }
-    pub const fn check_cbs<T>()
-    where
-        T: crate::HasCb<ffi::udi_nic_cb_t>,
-        T: crate::HasCb<ffi::udi_nic_bind_cb_t>,
-        T: crate::HasCb<ffi::udi_nic_ctrl_cb_t>,
-        T: crate::HasCb<ffi::udi_nic_info_cb_t>,
-    {}
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
     /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
-    pub const unsafe fn for_driver<T: Control>() -> Self {
-        Self {
+    pub const unsafe fn for_driver() -> ffi::udi_nd_ctrl_ops_t {
+        ffi::udi_nd_ctrl_ops_t {
             channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerControl>,
             nd_bind_req_op: nd_bind_req_op::<T>,
             nd_unbind_req_op: nd_unbind_req_op::<T>,
@@ -239,22 +239,22 @@ future_wrapper!(nd_tx_req_op => <T as NdTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @
 future_wrapper!(nd_exp_tx_req_op => <T as NdTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
     val.exp_tx_req(unsafe { cb.into_owned() })
 });
-impl ffi::udi_nd_tx_ops_t
+
+impl<T,CbList> crate::OpsStructure<ffi::udi_nd_tx_ops_t, T,CbList>
+where
+	T: NdTx,
+    CbList: crate::HasCb<ffi::udi_nic_tx_cb_t>,
 {
-    pub const fn scratch_requirement<T: NdTx>() -> usize {
+    pub const fn scratch_requirement() -> usize {
         let v = crate::imc::task_size::<T, MarkerNdTx>();
         let v = crate::const_max(v, nd_tx_req_op::task_size::<T>());
         let v = crate::const_max(v, nd_exp_tx_req_op::task_size::<T>());
         v
     }
-    pub const fn check_cbs<T>()
-    where
-        T: crate::HasCb<ffi::udi_nic_tx_cb_t>,
-    {}
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
     /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
-    pub const unsafe fn for_driver<T: NdTx>() -> Self {
-        Self {
+    pub const unsafe fn for_driver() -> ffi::udi_nd_tx_ops_t {
+        ffi::udi_nd_tx_ops_t {
             channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerNdTx>,
             nd_tx_req_op: nd_tx_req_op::<T>,
             nd_exp_tx_req_op: nd_exp_tx_req_op::<T>,
@@ -278,21 +278,21 @@ where
 future_wrapper!(nd_rx_rdy_op => <T as NdRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
     val.rx_rdy(unsafe { cb.into_owned() })
 });
-impl ffi::udi_nd_rx_ops_t
+
+impl<T,CbList> crate::OpsStructure<ffi::udi_nd_rx_ops_t, T,CbList>
+where
+	T: NdRx,
+    CbList: crate::HasCb<ffi::udi_nic_rx_cb_t>,
 {
-    pub const fn scratch_requirement<T: NdRx>() -> usize {
+    pub const fn scratch_requirement() -> usize {
         let v = crate::imc::task_size::<T, MarkerNdRx>();
         let v = crate::const_max(v, nd_rx_rdy_op::task_size::<T>());
         v
     }
-    pub const fn check_cbs<T>()
-    where
-        T: crate::HasCb<ffi::udi_nic_rx_cb_t>,
-    {}
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
     /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
-    pub const unsafe fn for_driver<T: NdRx>() -> Self {
-        Self {
+    pub const unsafe fn for_driver() -> ffi::udi_nd_rx_ops_t {
+        ffi::udi_nd_rx_ops_t {
             channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerNdRx>,
             nd_rx_rdy_op: nd_rx_rdy_op::<T>,
         }

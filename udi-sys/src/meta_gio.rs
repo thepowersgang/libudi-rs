@@ -1,6 +1,6 @@
 //! Generic IO metalanguage
 
-use crate::ffi::*;
+use crate::*;
 use super::imc::udi_channel_event_ind_op_t;
 
 macro_rules! a {
@@ -35,20 +35,6 @@ extern "C" {
     fn udi_gio_event_res_unused(cb: *mut udi_gio_event_cb_t);
 }
 
-impl_metalanguage!{
-    static METALANG_SPEC;
-    NAME udi_gio;
-    OPS
-        1 => udi_gio_provider_ops_t,
-        2 => udi_gio_client_ops_t,
-        ;
-    CBS
-        1 => udi_gio_bind_cb_t,
-        2 => udi_gio_xfer_cb_t,
-        3 => udi_gio_event_cb_t,
-        ;
-}
-
 #[repr(C)]
 pub struct udi_gio_provider_ops_t
 {
@@ -73,7 +59,7 @@ pub struct udi_gio_client_ops_t
 pub struct udi_gio_bind_cb_t
 {
     pub gcb: udi_cb_t,
-    pub xfer_constraints: crate::ffi::buf::udi_xfer_constraints_t,
+    pub xfer_constraints: crate::buf::udi_xfer_constraints_t,
 }
 #[repr(C)]
 pub struct udi_gio_xfer_cb_t

@@ -53,10 +53,10 @@ unsafe extern "C" fn udi_cb_alloc_batch(
 {
     let module = crate::channels::get_driver_module(&(*gcb).channel);
     let mut prev_cb = ::core::ptr::null_mut();
-    for _i in 0..count {
+    for _i in 0..count.0 {
         prev_cb = alloc_internal(
             &module, cb_idx, (*gcb).context, ::core::ptr::null_mut(), 
-            Some(prev_cb), if with_buf != 0 { Some((buf_size, path_handle)) } else { None }, None
+            Some(prev_cb), if with_buf.to_bool() { Some((buf_size, path_handle)) } else { None }, None
         );
     }
     callback(gcb, prev_cb);

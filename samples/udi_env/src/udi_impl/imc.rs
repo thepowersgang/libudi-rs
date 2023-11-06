@@ -47,7 +47,7 @@ unsafe extern "C" fn udi_channel_spawn(
     // Create an unanchored channel either fresh or in `channel` with `spawn_idx`
     let new_channel = crate::channels::spawn(channel, spawn_idx);
 
-    if ops_idx == 0 {
+    if ops_idx == 0.into() {
         // Loose end requested
     }
     else {

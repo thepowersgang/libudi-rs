@@ -3,10 +3,16 @@ name = "udi"
 version = "0.1.0"
 edition = "2021"
 
+[dependencies]
+udi-sys = { path = "udi-sys" }
+#udi_layout_derive = { path = "udi_layout_derive" }
+
 [workspace]
 members = [
     ".",
+    "udi-sys",
     "udi_udiprops_parse",
+    "udi_layout_derive",
     "tools/fix_elf",
     "samples/net_ne2000",
     "samples/udi_env"

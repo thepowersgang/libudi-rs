@@ -1,7 +1,7 @@
 
 
 struct ChannelInner {
-    spawns: ::std::sync::Mutex< ::std::collections::HashMap<u8,::udi::ffi::udi_channel_t> >,
+    spawns: ::std::sync::Mutex< ::std::collections::HashMap<::udi::ffi::udi_index_t,::udi::ffi::udi_channel_t> >,
     sides: [::std::cell::OnceCell<ChannelInnerSide>; 2],
 }
 struct ChannelInnerSide {

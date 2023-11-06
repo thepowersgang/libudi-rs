@@ -53,9 +53,9 @@ pub struct udi_ops_init_t
 impl udi_ops_init_t {
 	pub const fn end_of_list() -> Self {
 		Self {
-			ops_idx: 0,	// All that matters.
-			meta_idx: 0,
-			meta_ops_num: 0,
+			ops_idx: udi_index_t(0),	// All that matters.
+			meta_idx: udi_index_t(0),
+			meta_ops_num: udi_index_t(0),
 			chan_context_size: 0,
 			ops_vector: ::core::ptr::null(),
 			op_flags: ::core::ptr::null(),
@@ -75,9 +75,9 @@ pub struct udi_cb_init_t
 impl udi_cb_init_t {
 	pub const fn end_of_list() -> Self {
 		Self {
-			cb_idx: 0,	// All that matters.
-			meta_idx: 0,
-			meta_cb_num: 0,
+			cb_idx: udi_index_t(0),	// All that matters.
+			meta_idx: udi_index_t(0),
+			meta_cb_num: udi_index_t(0),
 			scratch_requirement: 0,
 			inline_size: 0,
 			inline_layout: ::core::ptr::null(),

@@ -256,7 +256,7 @@ fn create_driver_instance<'a>(driver_module: ::std::sync::Arc<DriverModule<'stat
     // - Create primary region
     let instance = Box::new(DriverInstance {
         regions: {
-            let mut v = vec![DriverRegion::new(0, driver_module.pri_init.rdata_size)];
+            let mut v = vec![DriverRegion::new(0.into(), driver_module.pri_init.rdata_size)];
             for secondary_region in driver_module.sec_init {
                 v.push(DriverRegion::new(secondary_region.region_idx, secondary_region.rdata_size));
             }
@@ -294,9 +294,9 @@ impl<'a> DriverModule<'a> {
 
         let rv = Self {
             pri_init: init.primary_init_info.expect("No primary_init_info for primary module"),
-            sec_init: terminated_list(init.secondary_init_list, |si| si.region_idx == 0),
-            ops: terminated_list(init.ops_init_list, |v| v.ops_idx == 0),
-            cbs: terminated_list(init.cb_init_list, |cbi: &udi::ffi::init::udi_cb_init_t| cbi.cb_idx == 0),
+            sec_init: terminated_list(init.secondary_init_list, |si| si.region_idx.0 == 0),
+            ops: terminated_list(init.ops_init_list, |v| v.ops_idx.0 == 0),
+            cbs: terminated_list(init.cb_init_list, |cbi: &udi::ffi::init::udi_cb_init_t| cbi.cb_idx.0 == 0),
             udiprops: udiprops.clone(),
         };
         if true {
@@ -327,8 +327,8 @@ impl<'a> DriverModule<'a> {
         rv
     }
 
-    fn get_region_index(&self, region_idx: u8) -> Option<usize> {
-        if region_idx == 0 {
+    fn get_region_index(&self, region_idx: ::udi::ffi::udi_index_t) -> Option<usize> {
+        if region_idx.0 == 0 {
             return Some(0);
         }
         else {
@@ -338,7 +338,7 @@ impl<'a> DriverModule<'a> {
                 .map(|(i,_)| i)
         }
     }
-    fn get_region<'o>(&self, instance: &'o DriverInstance, region_idx: u8) -> Option<&'o DriverRegion> {
+    fn get_region<'o>(&self, instance: &'o DriverInstance, region_idx: ::udi::ffi::udi_index_t) -> Option<&'o DriverRegion> {
         if let Some(i) = self.get_region_index(region_idx) {
             Some(&instance.regions[i])
         }
@@ -390,7 +390,7 @@ impl<'a> DriverModule<'a> {
     fn get_metalang(&self, des_meta_idx: ::udi::ffi::udi_index_t) -> Option<&dyn udi::metalang_trait::Metalanguage> {
         Some(match self.get_metalang_name(des_meta_idx)?
         {
-        "udi_bridge" => &::udi::ffi::meta_bus::METALANG_SPEC,
+        "udi_bridge" => &::udi::meta_bus::METALANG_SPEC,
         "udi_nic" => &::udi::meta_nic::METALANG_SPEC,
         name => todo!("Unknown metalang {:?}", name),
         })

@@ -122,7 +122,7 @@ pub fn build_script()
 	writeln!(outfp, "#[allow(non_upper_case_globals)]").unwrap();
 	writeln!(outfp, "pub mod meta {{").unwrap();
 	for (idx,name) in meta_bindings {
-		writeln!(outfp, "pub const {}: ::udi::ffi::udi_index_t = {};", name, idx).unwrap();
+		writeln!(outfp, "pub const {}: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t({});", name, idx.0).unwrap();
 	}
 	writeln!(outfp, "}}").unwrap();
 

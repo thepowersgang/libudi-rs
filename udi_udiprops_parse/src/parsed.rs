@@ -1,3 +1,4 @@
+use ::udi_sys::udi_index_t;
 
 /// A parsed entry in a udiprops
 #[derive(Debug)]
@@ -32,45 +33,45 @@ pub enum Entry<'a> {
 
     // ----
     Metalang {
-        meta_idx: u8,
+        meta_idx: udi_index_t,
         interface_name: &'a str,    // Must match a `requires`
     },
     ChildBindOps {
-        meta_idx: u8,
-        region_idx: u8,
-        ops_idx: u8,
+        meta_idx: udi_index_t,
+        region_idx: udi_index_t,
+        ops_idx: udi_index_t,
     },
     ParentBindOps {
-        meta_idx: u8,
-        region_idx: u8,
-        ops_idx: u8,
-        bind_cb_idx: u8,
+        meta_idx: udi_index_t,
+        region_idx: udi_index_t,
+        ops_idx: udi_index_t,
+        bind_cb_idx: udi_index_t,
     },
     InternalBindOps {
-        meta_idx: u8,
-        region_idx: u8,
-        primary_ops_idx: u8,
-        secondary_ops_idx: u8,
-        bind_cb_idx: u8,
+        meta_idx: udi_index_t,
+        region_idx: udi_index_t,
+        primary_ops_idx: udi_index_t,
+        secondary_ops_idx: udi_index_t,
+        bind_cb_idx: udi_index_t,
     },
 
     Device {
         device_name: MsgNum,
-        meta_idx: u8,
+        meta_idx: udi_index_t,
         attributes: AttributeList<'a>,
     },
-    /// A hint to the environemnt as to what child drivers might be enumerated
+    /// A hint to the environment as to what child drivers might be enumerated
     Enumerates {
         device_name: MsgNum,
         min_num: u32,
         max_num: u32,
-        meta_idx: u8,
+        meta_idx: udi_index_t,
         attributes: AttributeList<'a>,
     },
     /// Indicates that an instance might bind to multiple parents
     MultiParent,
     Region {
-        region_idx: u8,
+        region_idx: udi_index_t,
         attributes: RegionAttributes,
     },
 
@@ -382,42 +383,42 @@ impl<'a> Entry<'a>
 
         // 30.6 Property Declarations for Drivers
         "meta" => Entry::Metalang {
-            meta_idx: get(&mut ents)?,
+            meta_idx: udi_index_t(get(&mut ents)?),
             interface_name: get_str(&mut ents)?,
             },
         "child_bind_ops" => Entry::ChildBindOps {
-            meta_idx: get(&mut ents)?,
-            region_idx: get(&mut ents)?,
-            ops_idx: get(&mut ents)?,
+            meta_idx  : udi_index_t(get(&mut ents)?),
+            region_idx: udi_index_t(get(&mut ents)?),
+            ops_idx   : udi_index_t(get(&mut ents)?),
         },
         "parent_bind_ops" => Entry::ParentBindOps {
-            meta_idx: get(&mut ents)?,
-            region_idx: get(&mut ents)?,
-            ops_idx: get(&mut ents)?,
-            bind_cb_idx: get(&mut ents)?,
+            meta_idx   : udi_index_t(get(&mut ents)?),
+            region_idx : udi_index_t(get(&mut ents)?),
+            ops_idx    : udi_index_t(get(&mut ents)?),
+            bind_cb_idx: udi_index_t(get(&mut ents)?),
         },
         "internal_bind_ops" => Entry::InternalBindOps {
-            meta_idx: get(&mut ents)?,
-            region_idx: get(&mut ents)?,
-            primary_ops_idx: get(&mut ents)?,
-            secondary_ops_idx: get(&mut ents)?,
-            bind_cb_idx: get(&mut ents)?,
+            meta_idx         : udi_index_t(get(&mut ents)?),
+            region_idx       : udi_index_t(get(&mut ents)?),
+            primary_ops_idx  : udi_index_t(get(&mut ents)?),
+            secondary_ops_idx: udi_index_t(get(&mut ents)?),
+            bind_cb_idx      : udi_index_t(get(&mut ents)?),
         },
         "device" => Entry::Device {
             device_name: get(&mut ents)?,
-            meta_idx: get(&mut ents)?,
+            meta_idx   : udi_index_t(get(&mut ents)?),
             attributes: AttributeList(::core::mem::replace(&mut ents, "".split_whitespace())),
         },
         "enumerates" => Entry::Enumerates {
             device_name: get(&mut ents)?,
             min_num: get(&mut ents)?,
             max_num: get(&mut ents)?,
-            meta_idx: get(&mut ents)?,
+            meta_idx: udi_index_t(get(&mut ents)?),
             attributes: AttributeList(::core::mem::replace(&mut ents, "".split_whitespace())),
         },
         "multi_parent" => Entry::MultiParent,
         "region" => Entry::Region {
-            region_idx: get(&mut ents)?,
+            region_idx: udi_index_t(get(&mut ents)?),
             attributes: {
                 let mut r = RegionAttributes::default();
                 while let Some(region_attribute) = ents.next()

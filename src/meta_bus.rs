@@ -1,13 +1,30 @@
 //! Bus Bridge metalanguage (Phsical I/O Specification)
 //! 
 //! 
-use crate::ffi::meta_bus::udi_bus_device_ops_t;
-use crate::ffi::meta_bus::udi_bus_bridge_ops_t;
-use crate::ffi::meta_bus::udi_bus_bind_cb_t;
+use ::udi_sys::meta_bus::udi_bus_device_ops_t;
+use ::udi_sys::meta_bus::udi_bus_bridge_ops_t;
+use ::udi_sys::meta_bus::udi_bus_bind_cb_t;
 
 pub type CbRefBind<'a> = crate::CbRef<'a, udi_bus_bind_cb_t>;
 pub type CbRefIntrAttach<'a> = crate::CbRef<'a, crate::ffi::meta_intr::udi_intr_attach_cb_t>;
 pub type CbRefIntrDetach<'a> = crate::CbRef<'a, crate::ffi::meta_intr::udi_intr_detach_cb_t>;
+
+impl_metalanguage!{
+    static METALANG_SPEC;
+    NAME udi_bridge;
+    OPS
+        1 => udi_bus_device_ops_t,
+        2 => udi_bus_bridge_ops_t,
+        3 => ::udi_sys::meta_intr::udi_intr_handler_ops_t,
+        4 => ::udi_sys::meta_intr::udi_intr_dispatcher_ops_t,
+        ;
+    CBS
+        1 => udi_bus_bind_cb_t,
+        2 => ::udi_sys::meta_intr::udi_intr_attach_cb_t,
+        3 => ::udi_sys::meta_intr::udi_intr_detach_cb_t,
+        4 => ::udi_sys::meta_intr::udi_intr_event_cb_t : BUF event_buf,
+        ;
+}
 
 pub enum PreferredEndianness {
     Any,
@@ -96,8 +113,14 @@ future_wrapper!(intr_detach_ack_op => <T as BusDevice>(cb: *mut crate::ffi::meta
     val.intr_detach_ack(cb)
 });
 
-impl udi_bus_device_ops_t {
-    pub const fn scratch_requirement<T: BusDevice>() -> usize {
+impl<T,CbList> crate::OpsStructure<::udi_sys::meta_bus::udi_bus_device_ops_t, T,CbList>
+where
+	T: BusDevice,
+    CbList: crate::HasCb<udi_bus_bind_cb_t>,
+    CbList: crate::HasCb<crate::ffi::meta_intr::udi_intr_attach_cb_t>,
+    CbList: crate::HasCb<crate::ffi::meta_intr::udi_intr_detach_cb_t>,
+{
+    pub const fn scratch_requirement() -> usize {
         let rv = crate::imc::task_size::<T,MarkerBusDevice>();
         let rv = crate::const_max(rv, bus_bind_ack_op::task_size::<T>());
         let rv = crate::const_max(rv, bus_unbind_ack_op::task_size::<T>());
@@ -105,15 +128,9 @@ impl udi_bus_device_ops_t {
         let rv = crate::const_max(rv, intr_detach_ack_op::task_size::<T>());
         rv
     }
-    pub const fn check_cbs<T>()
-    where
-        T: crate::HasCb<udi_bus_bind_cb_t>,
-        T: crate::HasCb<crate::ffi::meta_intr::udi_intr_attach_cb_t>,
-        T: crate::HasCb<crate::ffi::meta_intr::udi_intr_detach_cb_t>,
-    {}
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
     /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
-    pub const unsafe fn for_driver<T: BusDevice>() -> Self {
+    pub const unsafe fn for_driver() -> udi_bus_device_ops_t {
         return udi_bus_device_ops_t {
             channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerBusDevice>,
             bus_bind_ack_op: bus_bind_ack_op::<T>,
@@ -167,8 +184,14 @@ future_wrapper!(intr_detach_req_op => <T as BusBridge>(cb: *mut crate::ffi::meta
         )
 });
 
-impl udi_bus_bridge_ops_t {
-    pub const fn scratch_requirement<T: BusBridge>() -> usize {
+impl<T,CbList> crate::OpsStructure<::udi_sys::meta_bus::udi_bus_bridge_ops_t, T,CbList>
+where
+	T: BusBridge,
+    CbList: crate::HasCb<udi_bus_bind_cb_t>,
+    CbList: crate::HasCb<crate::ffi::meta_intr::udi_intr_attach_cb_t>,
+    CbList: crate::HasCb<crate::ffi::meta_intr::udi_intr_detach_cb_t>,
+{
+    pub const fn scratch_requirement() -> usize {
         let rv = crate::imc::task_size::<T,MarkerBusBridge>();
         let rv = crate::const_max(rv, bus_bind_req_op::task_size::<T>());
         let rv = crate::const_max(rv, bus_unbind_req_op::task_size::<T>());
@@ -176,15 +199,9 @@ impl udi_bus_bridge_ops_t {
         let rv = crate::const_max(rv, intr_detach_req_op::task_size::<T>());
         rv
     }
-    pub const fn check_cbs<T>()
-    where
-        T: crate::HasCb<udi_bus_bind_cb_t>,
-        T: crate::HasCb<crate::ffi::meta_intr::udi_intr_attach_cb_t>,
-        T: crate::HasCb<crate::ffi::meta_intr::udi_intr_detach_cb_t>,
-    {}
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
     /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
-    pub const unsafe fn for_driver<T: BusBridge>() -> Self {
+    pub const unsafe fn for_driver() -> udi_bus_bridge_ops_t {
         return udi_bus_bridge_ops_t {
             channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerBusBridge>,
             bus_bind_req_op: bus_bind_req_op::<T>,

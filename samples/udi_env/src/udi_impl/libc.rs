@@ -47,7 +47,7 @@ unsafe extern "C" fn udi_memmeove(s1: *mut c_void, s2: *const c_void, n: udi_siz
 
 #[no_mangle]
 unsafe extern "C" fn udi_strncpy_rtrim(s1: *mut c_char, s2: *const c_char, n: udi_size_t) -> *mut c_char {
-    todo!()
+    todo!("udi_strncpy_rtrim")
 }
 
 #[no_mangle]
@@ -70,7 +70,7 @@ unsafe extern "C" fn udi_memset(s: *mut c_void, c: udi_ubit8_t, n: udi_size_t) -
 
 #[no_mangle]
 unsafe extern "C" fn udi_strtou32(s: *const c_char, endptr: *mut *mut c_char, base: ::core::ffi::c_int) -> udi_ubit32_t {
-    todo!()
+    todo!("udi_strtou32")
 }
 
 /*
