@@ -75,7 +75,7 @@ impl ::udi::init::Driver for Driver
 impl ::udi::meta_bus::BusBridge for Driver
 {
     type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::Result<(::udi::meta_bus::PreferredEndianness,)>> + 's;
-    fn bus_bind_req<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefBind<'a>) -> Self::Future_bind_req<'a> {
+    fn bus_bind_req<'a>(&'a mut self, _cb: ::udi::meta_bus::CbRefBind<'a>) -> Self::Future_bind_req<'a> {
         async move {
             Ok((::udi::meta_bus::PreferredEndianness::Little,))
         }

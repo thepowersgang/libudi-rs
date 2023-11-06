@@ -75,6 +75,8 @@ fn main() {
         register_driver_module(&mut state, driver_module_uart);
     }
 
+    // TODO: Run device emulation?
+    println!("--- DONE ---")
 }
 
 /// Create an instance for all matching parent instances
