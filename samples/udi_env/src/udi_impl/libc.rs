@@ -46,8 +46,22 @@ unsafe extern "C" fn udi_memmeove(s1: *mut c_void, s2: *const c_void, n: udi_siz
 }
 
 #[no_mangle]
-unsafe extern "C" fn udi_strncpy_rtrim(s1: *mut c_char, s2: *const c_char, n: udi_size_t) -> *mut c_char {
-    todo!("udi_strncpy_rtrim")
+unsafe extern "C" fn udi_strncpy_rtrim(mut s1: *mut c_char, mut s2: *const c_char, mut n: udi_size_t) -> *mut c_char {
+    let init_s1 = s1;
+    while n > 0 && *s2 != 0 {
+        *s1 = *s2;
+        s1 = s1.offset(1);
+        s2 = s2.offset(1);
+        n -= 1;
+    }
+    *s1 = 0;
+    while s1 != init_s1 {
+        s1 = s1.offset(-1);
+        if (*s1 as u8 as char).is_ascii_whitespace() {
+            *s1 = 0;
+        }
+    }
+    init_s1
 }
 
 #[no_mangle]
@@ -69,8 +83,67 @@ unsafe extern "C" fn udi_memset(s: *mut c_void, c: udi_ubit8_t, n: udi_size_t) -
 }
 
 #[no_mangle]
-unsafe extern "C" fn udi_strtou32(s: *const c_char, endptr: *mut *mut c_char, base: ::core::ffi::c_int) -> udi_ubit32_t {
-    todo!("udi_strtou32")
+unsafe extern "C" fn udi_strtou32(mut s: *const c_char, endptr: *mut *mut c_char, base: ::core::ffi::c_int) -> udi_ubit32_t {
+    let mut rv = 0;
+    // Strip leading whitespace
+    while (*s) != 0 && (*s as u8 as char).is_ascii_whitespace() {
+        s = s.offset(1);
+    }
+    let is_neg = match *s as u8
+        {
+        b'+' => false,
+        b'-' => true,
+        _ => false,
+        };
+    // Handle prefix to determine base
+    let base = match base
+        {
+        0 => if *s as u8 == b'0' {
+            s = s.offset(1);
+            if *s as u8 == b'x' || *s as u8 == b'X' {
+                s = s.offset(1);
+                16
+            }
+            else {
+                8
+            }
+        }
+        else {
+            10
+        }
+        16 => {
+            // Consume the `0x` if it is there
+            if *s as u8 == b'0' {
+                s = s.offset(1);
+                if *s as u8 == b'x' || *s as u8 == b'X' {
+                    s = s.offset(1);
+                }
+            }
+            16
+        }
+        base => base,
+        };
+    while (*s) != 0 {
+        match (*s as u8 as char).to_digit(base as u32)
+        {
+        Some(v) => {
+            rv *= base as u32;
+            rv += v;
+            },
+        None => break,
+        }
+        s = s.offset(1);
+    }
+    if !endptr.is_null() {
+        *endptr = s as *mut c_char;
+    }
+
+    if is_neg {
+        !rv + 1
+    }
+    else {
+        rv
+    }
 }
 
 /*
