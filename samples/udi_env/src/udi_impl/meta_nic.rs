@@ -1,16 +1,15 @@
 use ::udi::ffi::udi_boolean_t;
 use ::udi::ffi::udi_index_t;
 use ::udi::ffi::udi_status_t;
-use ::udi::meta_nic::ffi::udi_nic_bind_cb_t;
-use ::udi::meta_nic::ffi::udi_nic_cb_t;
-use ::udi::meta_nic::ffi::udi_nic_ctrl_cb_t;
-use ::udi::meta_nic::ffi::udi_nic_info_cb_t;
-use ::udi::meta_nic::ffi::udi_nic_rx_cb_t;
-use ::udi::meta_nic::ffi::udi_nic_status_cb_t;
-use ::udi::meta_nic::ffi::udi_nic_tx_cb_t;
-use ::udi::meta_nic::ffi::{udi_nd_ctrl_ops_t,udi_nsr_ctrl_ops_t};
-use ::udi::meta_nic::ffi::{udi_nd_tx_ops_t,udi_nsr_tx_ops_t};
-use ::udi::meta_nic::ffi::{udi_nd_rx_ops_t,udi_nsr_rx_ops_t};
+use ::udi::ffi::meta_nic::udi_nic_cb_t;
+use ::udi::ffi::meta_nic::udi_nic_bind_cb_t;
+use ::udi::ffi::meta_nic::udi_nic_ctrl_cb_t;
+use ::udi::ffi::meta_nic::udi_nic_info_cb_t;
+use ::udi::ffi::meta_nic::udi_nic_status_cb_t;
+use ::udi::ffi::meta_nic::{udi_nic_rx_cb_t,udi_nic_tx_cb_t};
+use ::udi::ffi::meta_nic::{udi_nd_ctrl_ops_t,udi_nsr_ctrl_ops_t};
+use ::udi::ffi::meta_nic::{udi_nd_tx_ops_t,udi_nsr_tx_ops_t};
+use ::udi::ffi::meta_nic::{udi_nd_rx_ops_t,udi_nsr_rx_ops_t};
 
 dispatch_call! {
     fn udi_nd_bind_req(cb: *mut udi_nic_bind_cb_t, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)

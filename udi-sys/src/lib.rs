@@ -18,6 +18,7 @@ pub mod physio;
 pub mod meta_bus;
 pub mod meta_intr;
 pub mod meta_gio;
+pub mod meta_nic;
 pub mod libc;
 pub mod layout;
 

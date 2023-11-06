@@ -220,7 +220,7 @@ impl ::udi::meta_nic::Control for DriverNicCtrl
 			self.0.channel_tx = ::udi::imc::channel_spawn(cb.gcb(), tx_chan_index, OpsList::Tx as _).await;
 			self.0.channel_rx = ::udi::imc::channel_spawn(cb.gcb(), rx_chan_index, OpsList::Rx as _).await;
 			Ok(::udi::meta_nic::NicInfo {
-				media_type: ::udi::meta_nic::ffi::MediaType::UDI_NIC_ETHER,
+				media_type: ::udi::ffi::meta_nic::MediaType::UDI_NIC_ETHER,
 				min_pdu_size: 0,
 				max_pdu_size: 0,
 				rx_hw_threshold: 2,
@@ -398,9 +398,9 @@ mod udiprops {
 	ops: {
 		// TODO: How to enforce the right mapping to metalangs?
 		Dev : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bus::udi_bus_device_ops_t,
-		Ctrl: Meta=udiprops::meta::udi_nic   , ::udi::meta_nic::ffi::udi_nd_ctrl_ops_t : DriverNicCtrl,
-		Tx  : Meta=udiprops::meta::udi_nic   , ::udi::meta_nic::ffi::udi_nd_tx_ops_t : DriverNicCtrl,
-		Rx  : Meta=udiprops::meta::udi_nic   , ::udi::meta_nic::ffi::udi_nd_rx_ops_t : DriverNicCtrl,
+		Ctrl: Meta=udiprops::meta::udi_nic   , ::udi::ffi::meta_nic::udi_nd_ctrl_ops_t : DriverNicCtrl,
+		Tx  : Meta=udiprops::meta::udi_nic   , ::udi::ffi::meta_nic::udi_nd_tx_ops_t : DriverNicCtrl,
+		Rx  : Meta=udiprops::meta::udi_nic   , ::udi::ffi::meta_nic::udi_nd_rx_ops_t : DriverNicCtrl,
 		Irq : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_intr::udi_intr_handler_ops_t : DriverIrq,
 		},
 	cbs: {
@@ -410,11 +410,11 @@ mod udiprops {
 
 		_IntrDetach: Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_intr::udi_intr_detach_cb_t,
 
-		Nic    : Meta=udiprops::meta::udi_nic, ::udi::meta_nic::ffi::udi_nic_cb_t,
-		NicBind: Meta=udiprops::meta::udi_nic, ::udi::meta_nic::ffi::udi_nic_bind_cb_t,
-		NicCtrl: Meta=udiprops::meta::udi_nic, ::udi::meta_nic::ffi::udi_nic_ctrl_cb_t,
-		NicInfo: Meta=udiprops::meta::udi_nic, ::udi::meta_nic::ffi::udi_nic_info_cb_t,
-		NicTx  : Meta=udiprops::meta::udi_nic, ::udi::meta_nic::ffi::udi_nic_tx_cb_t,
-		NicRx  : Meta=udiprops::meta::udi_nic, ::udi::meta_nic::ffi::udi_nic_rx_cb_t,
+		Nic    : Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nic_cb_t,
+		NicBind: Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nic_bind_cb_t,
+		NicCtrl: Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nic_ctrl_cb_t,
+		NicInfo: Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nic_info_cb_t,
+		NicTx  : Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nic_tx_cb_t,
+		NicRx  : Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nic_rx_cb_t,
 		}
 }
