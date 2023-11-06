@@ -228,7 +228,7 @@ macro_rules! define_driver
 			_Zero,
 			$($op_name,)*
 		}
-		#[allow(non_snake_case)]
+		#[allow(non_snake_case, non_upper_case_globals)]
 		mod OpsList {
 			$(
 				pub const $op_name: $crate::ffi::udi_index_t = $crate::ffi::udi_index_t(super::RawOpsList::$op_name as _);
