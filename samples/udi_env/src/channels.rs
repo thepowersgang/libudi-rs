@@ -1,15 +1,27 @@
+//! Inner glue for UDI channels
+//! 
 
-
+/// The common innards of a channel
+/// 
+/// `udi_channel_t` is a tagged pointer to this (with the tag indicating which side)
 struct ChannelInner {
+    /// Child channels matched by the `spawn_index`
     spawns: ::std::sync::Mutex< ::std::collections::HashMap<::udi::ffi::udi_index_t,::udi::ffi::udi_channel_t> >,
+    /// Channel side information
     sides: [::std::cell::OnceCell<ChannelInnerSide>; 2],
+    // TODO: Track the currently "active" side?
 }
 struct ChannelInnerSide {
+    /// Target module
     driver_module: ::std::sync::Arc< crate::DriverModule<'static> >,
+    // TODO: Include instance instead?
+    /// Metalanguage Operations
     ops: &'static dyn udi::metalang_trait::MetalangOpsHandler,
+    /// Context pointer to use
     context: *mut ::udi::ffi::c_void,
 }
 
+/// Inner helper: A reference to a channel w/ side
 struct ChannelRef<'a>(&'a ChannelInner, bool);
 impl<'a> ChannelRef<'a> {
     unsafe fn from_handle(h: ::udi::ffi::udi_channel_t) -> Self {
@@ -31,7 +43,9 @@ pub unsafe fn get_driver_module(ch: &::udi::ffi::udi_channel_t) -> ::std::sync::
     cr.get_side().unwrap().driver_module.clone()
 }
 
-/// Spawn a channel without needing a source channel
+/// Spawn a channel without needing a parent/source channel
+/// 
+/// Returns the two channel handles
 pub fn spawn_raw() -> (::udi::ffi::udi_channel_t,::udi::ffi::udi_channel_t)
 {
     let h = Box::into_raw(Box::new(ChannelInner {
@@ -108,6 +122,7 @@ pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::m
     call(ops, cb);
 }
 
+/// Call `udi_event_ind` over the channel, for an internal bind event
 pub unsafe fn event_ind_bound_internal(channel: ::udi::ffi::udi_channel_t, bind_cb: *mut ::udi::ffi::udi_cb_t)
     -> (::udi::ffi::imc::udi_channel_event_ind_op_t, *mut ::udi::ffi::imc::udi_channel_event_cb_t) {
     event_ind(
@@ -120,6 +135,26 @@ pub unsafe fn event_ind_bound_internal(channel: ::udi::ffi::udi_channel_t, bind_
         },
     )
 }
+/// Call `udi_event_ind` over the channel, for a parent bind event
+pub unsafe fn event_ind_bound_parent(
+    channel: ::udi::ffi::udi_channel_t,
+    bind_cb: *mut ::udi::ffi::udi_cb_t,
+    parent_id: u8,
+    path_handles: *const ::udi::ffi::buf::udi_buf_path_t
+) -> (::udi::ffi::imc::udi_channel_event_ind_op_t, *mut ::udi::ffi::imc::udi_channel_event_cb_t) {
+    event_ind(
+        channel,
+        ::udi::ffi::imc::UDI_CHANNEL_BOUND,
+        ::udi::ffi::imc::udi_channel_event_cb_t_params {
+            parent_bound: ::udi::ffi::imc::udi_channel_event_cb_t_params_parent_bound {
+                bind_cb,
+                parent_id,
+                path_handles,
+            },
+        },
+    )
+}
+/// Innards to generate a call to `event_ind`
 unsafe fn event_ind(channel: ::udi::ffi::udi_channel_t, event: u8, params: ::udi::ffi::imc::udi_channel_event_cb_t_params)
     -> (::udi::ffi::imc::udi_channel_event_ind_op_t, *mut ::udi::ffi::imc::udi_channel_event_cb_t)
 {

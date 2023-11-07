@@ -36,6 +36,7 @@ impl InstanceInitState
             state: DriverState::UsageInd,
         }
     }
+    /// Assert that initialisation is complete, and return the fully populated instance
     pub fn assert_complete(self) -> Box<crate::DriverInstance>
     {
         let DriverState::Active = self.state else {
@@ -176,7 +177,8 @@ impl InstanceInitState
                 let bind_cb = crate::udi_impl::cb::alloc(&driver_module, bind_cb_idx, rgn.context, channel_to_parent);
                 unsafe {
                     crate::channels::anchor(channel_to_parent, self.instance.module.clone(), driver_module.get_meta_ops(ops_init), rgn.context);
-                    let (op, cb) = crate::channels::event_ind_bound_internal(channel_to_parent, bind_cb as *mut _);
+                    let (op, cb)
+                        = crate::channels::event_ind_bound_parent(channel_to_parent, bind_cb as *mut _, 0, ::core::ptr::null());
                     return (cb as *mut _, Box::new(move |cb| op(cb as *mut _)));
                 }
             }
@@ -208,6 +210,7 @@ impl InstanceInitState
         }
     }
 
+    /// Take the CB returned from the driver (via a `*_res` or `*_ack`) call
     pub fn returned_cb(&mut self) -> Option<*mut ::udi::ffi::udi_cb_t> {
         if self.returned_cb.is_null() {
             None
@@ -219,7 +222,7 @@ impl InstanceInitState
         }
     }
 
-    /// Called by [udi_impl::meta_mgmt::udi_usage_res]
+    /// Called by [crate::udi_impl::meta_mgmt::udi_usage_res]
     pub(crate) fn usage_res(&mut self, cb: *mut ::udi::ffi::meta_mgmt::udi_usage_cb_t)
     {
         match self.state
@@ -231,7 +234,7 @@ impl InstanceInitState
         _ => panic!("usage_ind called when not expected"),
         }
     }
-    /// Called by [udi_impl::meta_mgmt::udi_enumerate_ack]
+    /// Called by [crate::udi_impl::meta_mgmt::udi_enumerate_ack]
     pub(crate) fn enumerate_ack(&mut self, cb: *mut ::udi::ffi::meta_mgmt::udi_enumerate_cb_t, enumeration_result: ::udi::init::EnumerateResult)
     {
         let DriverState::EnumChildren { ref mut flagged_complete } = self.state else {
