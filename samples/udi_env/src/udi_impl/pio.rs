@@ -10,6 +10,7 @@ use ::udi::ffi::c_void;
 
 struct PioTransReal {
     // TODO: Get a handle/reference to the device too
+    instance: ::std::sync::Arc<crate::DriverInstance>,
 
     regset_idx: u32,
     base_offset: u32,
@@ -49,7 +50,9 @@ unsafe extern "C" fn udi_pio_map(
     pio_attributes: u16, pace: u32, serialization_domain: udi_index_t
     )
 {
-    //crate::channels::get_driver_module( &(*gcb).channel );
+    // TODO: This needs to communicate with the PCI bridge (or other bridges)
+    let instance = crate::channels::get_driver_instance( &(*gcb).channel );
+
     let trans_list = ::core::slice::from_raw_parts(trans_list, list_length as usize);
     let data_translation = match pio_attributes & (7 << 5)
         {
@@ -84,6 +87,7 @@ unsafe extern "C" fn udi_pio_map(
     let unaligned = pio_attributes & ::udi::ffi::pio::UDI_PIO_UNALIGNED != 0;
 
     let rv = Box::new(PioTransReal {
+        instance: instance.clone(),
         regset_idx,
         base_offset,
         length,
@@ -130,11 +134,12 @@ unsafe extern "C" fn udi_pio_trans(
         registers: Default::default()
     };
     let mut io_state = PioDevState {
+        dev: &**pio_handle.instance.device.get().expect("udi_pio_trans with no bound device"),
         regset_idx: pio_handle.regset_idx,
         base_offset: pio_handle.base_offset,
         length: pio_handle.length,
         data_translation: pio_handle.data_translation,
-        data_ordering: pio_handle.data_ordering,
+        _data_ordering: pio_handle.data_ordering,
     };
     let (status, retval) = match pio_trans_inner(&mut state, &mut io_state, &pio_handle.trans_list, start_label.0)
         {
@@ -278,33 +283,47 @@ impl PioMemState<'_> {
         val
     }
 }
-struct PioDevState {
+struct PioDevState<'a> {
+    dev: &'a dyn crate::emulated_devices::PioDevice,
     regset_idx: u32,
     base_offset: u32,
     length: u32,
 
     data_translation: DataTranslation,
-    data_ordering: DataOrdering,
+    _data_ordering: DataOrdering,
 }
-impl PioDevState {
+impl PioDevState<'_> {
     // PILE OF HACK:
     // - This is set up to semi-emulate a NE2000
     fn read(&self, reg: u32, size: u8) -> RegVal {
         println!("PIO Read {:#x}+{:#x},l={}", self.base_offset, reg, 1<<size);
+        assert!(size <= 5);
         assert!(self.base_offset + reg + 1 << size <= self.length);
-        match (self.regset_idx, self.base_offset + reg) {
-        (0, 0x1F) => RegVal::from_u8(0),
-        (0, 0x07) => RegVal::from_u8(0x80),
-        (0, 0x00) => RegVal::from_u8(0x99),
-        _ => todo!("Handle reg {:#X}", reg),
+        let mut rv = RegVal::default();
+        {
+            let dst = &mut rv.bytes[..1 << size];
+            self.dev.pio_read(self.regset_idx, self.base_offset + reg, dst);
+            match self.data_translation {
+            DataTranslation::NeverSwap => assert!(size == 0),
+            DataTranslation::BigEndian => dst.reverse(),
+            DataTranslation::LittleEndian => {},
+            }
         }
+        rv
     }
-    fn write(&mut self, reg: u32, val: RegVal, size: u8) {
+    fn write(&mut self, reg: u32, mut val: RegVal, size: u8) {
         assert!(size <= 5);
         println!("PIO Write {:#x}+{} = {:?}", reg, 1<<size, &val.bytes[..1<<size]);
         assert!(self.base_offset + reg + 1 << size <= self.length);
-        match (self.regset_idx, self.base_offset + reg) {
-        _ => {},
+
+        {
+            let src = &mut val.bytes[..1 << size];
+            match self.data_translation {
+            DataTranslation::NeverSwap => assert!(size == 0),
+            DataTranslation::BigEndian => src.reverse(),
+            DataTranslation::LittleEndian => {},
+            }
+            self.dev.pio_write(self.regset_idx, self.base_offset + reg, src);
         }
     }
 }

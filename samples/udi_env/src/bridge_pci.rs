@@ -4,14 +4,15 @@ struct Driver {
 }
 
 struct EmulatedDevice {
+    factory: fn(&EmulatedDevice) -> Box<dyn crate::emulated_devices::PioDevice>,
     vendor_id: u16,
     device_id: u16,
     class_word: u32,
 }
 static DEVICES: &[EmulatedDevice] = &[
-    EmulatedDevice { vendor_id: 0x10ec, device_id: 0x8029, class_word: 0 },
+    EmulatedDevice { factory: |_| crate::emulated_devices::Rtl8029::new_boxed(), vendor_id: 0x10ec, device_id: 0x8029, class_word: 0 },
     // A "Generic XT-Compatible Serial Controller"
-    EmulatedDevice { vendor_id: 0x8086, device_id: 0xFFFF, class_word: 0x07_00_00 },
+    EmulatedDevice { factory: |_| crate::emulated_devices::XTSerial::new_boxed(), vendor_id: 0x8086, device_id: 0xFFFF, class_word: 0x07_00_00 },
 ];
 
 impl ::udi::init::Driver for ::udi::init::RData<Driver>
@@ -40,7 +41,6 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 				attrs_out.push_u32("pci_base_class", ((c.class_word >> 16) & 0xFF) as _);
 				attrs_out.push_u32("pci_sub_class", ((c.class_word >> 8) & 0xFF) as _);
 				attrs_out.push_u32("pci_prog_if", ((c.class_word >> 0) & 0xFF) as _);
-                // TODO: Enforce in this return that the ops_idx points to a op that either has no context, or is a ChildBind
                 ::udi::init::EnumerateResult::ok::<OpsList::Bridge>(child_idx as _)
             }
             else {
@@ -78,9 +78,16 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 impl ::udi::meta_bus::BusBridge for ::udi::ChildBind<Driver,()>
 {
     type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::Result<(::udi::meta_bus::PreferredEndianness,)>> + 's;
-    fn bus_bind_req<'a>(&'a mut self, _cb: ::udi::meta_bus::CbRefBind<'a>) -> Self::Future_bind_req<'a> {
+    fn bus_bind_req<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefBind<'a>) -> Self::Future_bind_req<'a> {
         async move {
-            println!("PCI Bind Request: {:p} #{:#x}", self, self.child_id());
+            println!("PCI Bind Request: #{:#x}", self.child_id());
+            let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
+            let dev_desc = &DEVICES[self.child_id() as usize];
+            di
+                .device
+                .set( (dev_desc.factory)( dev_desc ) )
+                .ok()
+                .expect("Driver instance bound to multiple devices?");
             Ok((::udi::meta_bus::PreferredEndianness::Little,))
         }
     }
@@ -88,7 +95,8 @@ impl ::udi::meta_bus::BusBridge for ::udi::ChildBind<Driver,()>
     type Future_unbind_req<'s> = impl ::core::future::Future<Output=()> + 's;
     fn bus_unbind_req<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefBind<'a>) -> Self::Future_unbind_req<'a> {
         async move {
-            todo!("bus_unbind_req");
+            let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
+            assert!(di.device.get().is_some());
         }
     }
 
@@ -96,7 +104,8 @@ impl ::udi::meta_bus::BusBridge for ::udi::ChildBind<Driver,()>
     fn intr_attach_req<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefIntrAttach<'a>) -> Self::Future_intr_attach_req<'a> {
         async move {
             let channel = ::udi::imc::channel_spawn(cb.gcb(), cb.interrupt_index, OpsList::Interrupt as _).await;
-            //todo!("intr_attach_req");
+            let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
+            di.device.get().unwrap().set_interrupt_channel(cb.interrupt_index, channel);
             Ok( () )
         }
     }
@@ -104,15 +113,19 @@ impl ::udi::meta_bus::BusBridge for ::udi::ChildBind<Driver,()>
     type Future_intr_detach_req<'s> = impl ::core::future::Future<Output=()> + 's;
     fn intr_detach_req<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_req<'a> {
         async move {
-            todo!();
+            let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
+            di.device.get().unwrap().set_interrupt_channel(cb.interrupt_idx, ::core::ptr::null_mut());
         }
     }
 }
 impl ::udi::meta_intr::IntrDispatcher for ::udi::init::RData<Driver>
 {
     type Future_intr_event_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn intr_event_rdy<'a>(&'a mut self, cb: ::udi::meta_intr::CbRefEvent<'a>) -> Self::Future_intr_event_rdy<'a> {
+    fn intr_event_rdy<'a>(&'a mut self, cb: ::udi::meta_intr::CbHandleEvent) -> Self::Future_intr_event_rdy<'a> {
         async move {
+            let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
+            di.device.get().unwrap()
+                .push_intr_cb(0.into(), cb);
         }
     }
 }

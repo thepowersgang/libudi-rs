@@ -10,6 +10,7 @@ pub fn event_rdy(cb: super::cb::CbHandle<udi_intr_event_cb_t>) {
 }
 
 pub type CbRefEvent<'a> = crate::CbRef<'a, udi_intr_event_cb_t>;
+pub type CbHandleEvent<'a> = crate::cb::CbHandle<udi_intr_event_cb_t>;
 
 pub trait IntrHandler: 'static + crate::async_trickery::CbContext
 {
@@ -58,7 +59,7 @@ where
 
 pub trait IntrDispatcher: 'static + crate::async_trickery::CbContext
 {
-    async_method!(fn intr_event_rdy(&'a mut self, cb: CbRefEvent<'a>)->() as Future_intr_event_rdy);
+    async_method!(fn intr_event_rdy(&'a mut self, cb: CbHandleEvent)->() as Future_intr_event_rdy);
 }
 struct MarkerIntrDispatcher;
 impl<T> crate::imc::ChannelHandler<MarkerIntrDispatcher> for T
@@ -73,7 +74,7 @@ where
 
 
 future_wrapper!(intr_event_rdy_op => <T as IntrDispatcher>(cb: *mut udi_intr_event_cb_t) val @ {
-    val.intr_event_rdy(cb)
+    val.intr_event_rdy(unsafe { cb.into_owned() })
 });
 
 impl<T,CbList> crate::OpsStructure<::udi_sys::meta_intr::udi_intr_dispatcher_ops_t, T,CbList>

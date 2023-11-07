@@ -8,6 +8,8 @@ mod udi_impl;
 mod bridge_pci;
 mod management_agent;
 
+mod emulated_devices;
+
 extern crate udi_net_ne2000;
 
 mod driver {
@@ -48,7 +50,7 @@ fn main() {
 
     register_driver_module(&mut state, driver_module_buspci);
     let _ = driver_module_ne2000;
-    //register_driver_module(&mut state, driver_module_ne2000);
+    register_driver_module(&mut state, driver_module_ne2000);
 
     for a in ::std::env::args_os().skip(1)
     {
@@ -280,6 +282,7 @@ fn create_driver_instance<'a>(driver_module: Arc<DriverModule<'static>>, channel
             },
         module: driver_module,
         children: Default::default(),
+        device: Default::default(),
     });
     let mut state = management_agent::InstanceInitState::new(instance, channel_to_parent);
     
@@ -451,6 +454,8 @@ struct DriverInstance
     children: ::std::sync::Mutex< Vec<DriverChild> >,
     //management_channel: ::udi::ffi::udi_channel_t,
     //cur_state: DriverState,
+
+    device: ::std::sync::OnceLock<Box<dyn crate::emulated_devices::PioDevice>>,
 }
 struct DriverRegion
 {

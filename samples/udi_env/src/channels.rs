@@ -41,6 +41,11 @@ pub unsafe fn get_driver_instance(ch: &::udi::ffi::udi_channel_t) -> ::std::sync
     let cr = ChannelRef::from_handle(*ch);
     cr.get_side().unwrap().driver_instance.clone()
 }
+/// Internal helper: Query which instance is on the other end of this channel handle
+pub unsafe fn get_other_instance(ch: &::udi::ffi::udi_channel_t) -> ::std::sync::Arc<crate::DriverInstance> {
+    let cr = ChannelRef::from_handle(*ch);
+    ChannelRef::from_handle(cr.get_handle_reversed()).get_side().unwrap().driver_instance.clone()
+}
 
 /// Spawn a channel without needing a parent/source channel
 /// 
