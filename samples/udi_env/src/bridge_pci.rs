@@ -1,3 +1,4 @@
+#[derive(Default)]
 struct Driver {
     enum_dev_idx: usize,
 }
@@ -13,12 +14,12 @@ static DEVICES: &[EmulatedDevice] = &[
     EmulatedDevice { vendor_id: 0x8086, device_id: 0xFFFF, class_word: 0x07_00_00 },
 ];
 
-impl ::udi::init::Driver for Driver
+impl ::udi::init::Driver for ::udi::init::RData<Driver>
 {
     const MAX_ATTRS: u8 = 6;
-    type Future_init<'s> = impl ::core::future::Future<Output=Self>;
-    fn usage_ind(_cb: udi::init::CbRefUsage, _resouce_level: u8) -> Self::Future_init<'_> {
-        async move { Driver { enum_dev_idx: 0 } }
+    type Future_init<'s> = impl ::core::future::Future<Output=()>;
+    fn usage_ind<'s>(&'s mut self, _cb: udi::init::CbRefUsage<'s>, _resouce_level: u8) -> Self::Future_init<'s> {
+        async move { }
     }
 
     type Future_enumerate<'s> = impl ::core::future::Future<Output=(udi::init::EnumerateResult,udi::init::AttrSink<'s>)> + 's;
@@ -39,7 +40,8 @@ impl ::udi::init::Driver for Driver
 				attrs_out.push_u32("pci_base_class", ((c.class_word >> 16) & 0xFF) as _);
 				attrs_out.push_u32("pci_sub_class", ((c.class_word >> 8) & 0xFF) as _);
 				attrs_out.push_u32("pci_prog_if", ((c.class_word >> 0) & 0xFF) as _);
-                ::udi::init::EnumerateResult::Ok { ops_idx: OpsList::Bridge as _, child_id: child_idx as _ }
+                // TODO: Enforce in this return that the ops_idx points to a op that either has no context, or is a ChildBind
+                ::udi::init::EnumerateResult::ok::<OpsList::Bridge>(child_idx as _)
             }
             else {
                 ::udi::init::EnumerateResult::Done
@@ -72,11 +74,13 @@ impl ::udi::init::Driver for Driver
         }
     }
 }
-impl ::udi::meta_bus::BusBridge for Driver
+
+impl ::udi::meta_bus::BusBridge for ::udi::ChildBind<Driver,()>
 {
     type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::Result<(::udi::meta_bus::PreferredEndianness,)>> + 's;
     fn bus_bind_req<'a>(&'a mut self, _cb: ::udi::meta_bus::CbRefBind<'a>) -> Self::Future_bind_req<'a> {
         async move {
+            println!("PCI Bind Request: {:p} #{:#x}", self, self.child_id());
             Ok((::udi::meta_bus::PreferredEndianness::Little,))
         }
     }
@@ -104,7 +108,7 @@ impl ::udi::meta_bus::BusBridge for Driver
         }
     }
 }
-impl ::udi::meta_intr::IntrDispatcher for Driver
+impl ::udi::meta_intr::IntrDispatcher for ::udi::init::RData<Driver>
 {
     type Future_intr_event_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
     fn intr_event_rdy<'a>(&'a mut self, cb: ::udi::meta_intr::CbRefEvent<'a>) -> Self::Future_intr_event_rdy<'a> {
@@ -123,7 +127,7 @@ const META_BIRDGE: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t(1);
 ::udi::define_driver! {
     Driver as INIT_INFO_PCI;
     ops: {
-        Bridge   : Meta=META_BIRDGE, ::udi::ffi::meta_bus::udi_bus_bridge_ops_t,
+        Bridge   : Meta=META_BIRDGE, ::udi::ffi::meta_bus::udi_bus_bridge_ops_t : ChildBind<_,()>,
         Interrupt: Meta=META_BIRDGE, ::udi::ffi::meta_intr::udi_intr_dispatcher_ops_t,
     },
     cbs: {

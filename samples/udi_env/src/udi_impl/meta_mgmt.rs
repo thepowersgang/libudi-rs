@@ -22,7 +22,7 @@ pub unsafe extern "C" fn udi_enumerate_ack(cb: *mut udi_enumerate_cb_t, enumerat
     let is = &mut *( (*cb).gcb.initiator_context as *mut crate::management_agent::InstanceInitState);
     let enumeration_result = match enumeration_result
         {
-        0 => ::udi::init::EnumerateResult::Ok { ops_idx, child_id: (*cb).child_id },
+        0 => ::udi::init::EnumerateResult::Ok(::udi::init::EnumerateResultOk::from_raw(ops_idx, (*cb).child_id)),
         1 => ::udi::init::EnumerateResult::Leaf,
         2 => ::udi::init::EnumerateResult::Done,
         3 => ::udi::init::EnumerateResult::Rescan,

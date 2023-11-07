@@ -240,7 +240,7 @@ impl InstanceInitState
         self.returned_cb = cb as *mut _;
         match enumeration_result
         {
-        udi::init::EnumerateResult::Ok { ops_idx: child_ops_idx, child_id } => {
+        udi::init::EnumerateResult::Ok(child_info) => {
             // The driver now owns this pointer
             unsafe { (*cb).child_data = ::core::ptr::null_mut(); }
             let attrs = unsafe { ::core::slice::from_raw_parts((*cb).attr_list, (*cb).attr_valid_length as usize) };
@@ -256,7 +256,7 @@ impl InstanceInitState
             let mut child_bind_ops = None;
             for entry in self.instance.module.udiprops.clone() {
                 if let ::udiprops_parse::Entry::ChildBindOps { meta_idx, region_idx, ops_idx } = entry {
-                    if ops_idx == child_ops_idx {
+                    if ops_idx == child_info.ops_idx() {
                         child_bind_ops = Some((meta_idx, region_idx));
                     }
                 }
@@ -265,9 +265,9 @@ impl InstanceInitState
                 let region_idx_real = self.instance.module.get_region_index(region_idx).unwrap();
                 self.instance.children.push(crate::DriverChild {
                     is_bound: Default::default(),
-                    child_id,
+                    child_id: child_info.child_id(),
                     meta_idx,
-                    ops_idx: child_ops_idx,
+                    ops_idx: child_info.ops_idx(),
                     region_idx_real,
                     attrs: attrs.to_vec()
                 });

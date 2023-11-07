@@ -14,6 +14,10 @@ use ::core::marker::{PhantomData,Unpin};
 use ::core::future::Future;
 use crate::ffi::udi_cb_t;
 
+pub trait CbContext {
+	fn channel_cb_slot(&mut self) -> &mut *mut crate::ffi::imc::udi_channel_event_cb_t;
+}
+
 #[derive(Copy,Clone)]
 pub(crate) enum WaitRes {
 	//Unit,
@@ -54,19 +58,19 @@ pub(crate) unsafe fn abort_task(cb: *mut udi_cb_t)
 }
 
 /// Obtain a pointer to the driver instance from a cb
-pub(crate) unsafe fn get_rdata_t<T, Cb: GetCb>(cb: &Cb) -> &mut T {
-	&mut (*(cb.get_gcb().context as *mut crate::init::RData<T>)).inner
+pub(crate) unsafe fn get_rdata_t<T: CbContext, Cb: GetCb>(cb: &Cb) -> &mut T {
+	&mut *(cb.get_gcb().context as *mut T)
 }
 /// Set the channel operation cb
-pub(crate) unsafe fn set_channel_cb(cb: *mut crate::ffi::imc::udi_channel_event_cb_t) {
-	let slot = &mut (*( (*cb).get_gcb().context as *mut crate::init::RData<()>)).channel_cb;
+pub(crate) unsafe fn set_channel_cb<T: CbContext>(cb: *mut crate::ffi::imc::udi_channel_event_cb_t) {
+	let slot = get_rdata_t::<T,_>(&*cb).channel_cb_slot();
 	if *slot != ::core::ptr::null_mut() {
 		// Uh-oh
 	}
 	*slot = cb;
 }
-pub(crate) unsafe fn channel_event_complete<Cb: GetCb>(cb: *mut Cb, status: crate::ffi::udi_status_t) {
-	let slot = &mut (*( (*cb).get_gcb().context as *mut crate::init::RData<()>)).channel_cb;
+pub(crate) unsafe fn channel_event_complete<T: CbContext, Cb: GetCb>(cb: *mut Cb, status: crate::ffi::udi_status_t) {
+	let slot = get_rdata_t::<T,_>(&*cb).channel_cb_slot();
 	let channel_cb = *slot;
 	*slot = ::core::ptr::null_mut();
 	if channel_cb == ::core::ptr::null_mut() {
@@ -391,7 +395,7 @@ macro_rules! future_wrapper {
         future_wrapper!($name => <$t:ty as $trait>::$method($cb: *mut $cb_ty, $(, $a_n: $a_ty)*))
     };
     ($name:ident => <$t:ident as $trait:path>($cb:ident: *mut $cb_ty:ty $(, $a_n:ident: $a_ty:ty)*) $val:ident @ $b:block ) => {
-        unsafe extern "C" fn $name<T: $trait>($cb: *mut $cb_ty$(, $a_n: $a_ty)*)
+        unsafe extern "C" fn $name<T: $trait + $crate::async_trickery::CbContext>($cb: *mut $cb_ty$(, $a_n: $a_ty)*)
         {
             let job = {
 				let $val = crate::async_trickery::get_rdata_t::<T,_>(&*$cb);

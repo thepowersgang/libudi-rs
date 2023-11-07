@@ -6,6 +6,7 @@
 #![feature(const_trait_impl)]
 #![feature(const_mut_refs)]	// Used for getting size of tasks
 #![feature(extern_types)]	// Handle types
+#![feature(fundamental)]
 
 // A "region" is a thread
 // - rdata is the thread's data, i.e. the drive instance
@@ -126,6 +127,12 @@ pub unsafe trait Wrapper<Inner> {
 }
 pub trait HasCb<T: metalang_trait::MetalangCb> {
 }
+impl<T, Drv,Chld> HasCb<T> for ChildBind<Drv,Chld>
+where
+	T: metalang_trait::MetalangCb,
+	Drv: HasCb<T>,
+{
+}
 
 /// Define a set of wrapper types for another type, to separate trait impls
 /// 
@@ -145,12 +152,12 @@ macro_rules! define_wrappers {
 }
 
 #[doc(hidden)]
-pub const fn make_ops_init<T: metalang_trait::MetalangOps>(ops_idx: ffi::udi_index_t, meta_idx: ffi::udi_index_t, ops: &'static T) -> crate::ffi::init::udi_ops_init_t {
+pub const fn make_ops_init<T: metalang_trait::MetalangOps>(ops_idx: ffi::udi_index_t, meta_idx: ffi::udi_index_t, chan_context_size: ffi::udi_size_t, ops: &'static T) -> crate::ffi::init::udi_ops_init_t {
 	crate::ffi::init::udi_ops_init_t {
 		ops_idx,
 		meta_idx,
 		meta_ops_num: T::META_OPS_NUM,
-		chan_context_size: 0,
+		chan_context_size,
 		ops_vector: ops as *const _ as *const _,
 		op_flags: ::core::ptr::null(),
 	}
@@ -184,6 +191,62 @@ pub struct OpsStructure<Ops, T, CbList>
 	pd: ::core::marker::PhantomData<(Ops,T,CbList)>,
 }
 
+#[repr(C)]
+#[fundamental]
+pub struct ChildBind<Driver,ChildData>
+{
+	pd: ::core::marker::PhantomData<Driver>,
+	inner: ffi::init::udi_child_chan_context_t,
+	channel_cb: *mut crate::ffi::imc::udi_channel_event_cb_t,
+	child_data: ChildData,
+}
+impl<Driver,ChildData> ChildBind<Driver,ChildData>
+{
+	pub fn child_id(&self) -> ffi::udi_ubit32_t {
+		self.inner.child_id
+	}
+	pub fn dev(&self) -> &Driver {
+		unsafe { &*(self.inner.rdata as *const Driver) }
+	}
+	pub fn dev_mut(&mut self) -> &mut Driver {
+		unsafe { &mut *(self.inner.rdata as *mut Driver) }
+	}
+}
+impl<Driver,ChildData> ::core::ops::Deref for ChildBind<Driver,ChildData>
+{
+	type Target = ChildData;
+	fn deref(&self) -> &Self::Target {
+		&self.child_data
+	}
+}
+impl<Driver,ChildData> ::core::ops::DerefMut for ChildBind<Driver,ChildData>
+{
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.child_data
+	}
+}
+impl<Driver,ChildData> crate::async_trickery::CbContext for ChildBind<Driver,ChildData>
+{
+    fn channel_cb_slot(&mut self) -> &mut *mut crate::ffi::imc::udi_channel_event_cb_t {
+        &mut self.channel_cb
+    }
+}
+impl<Driver,ChildData> crate::imc::ChannelInit for ChildBind<Driver,ChildData>
+where
+	ChildData: Default,
+{
+    unsafe fn init(&mut self) {
+		::core::ptr::write(&mut self.child_data, ChildData::default())
+	}
+}
+
+pub mod ops_wrapper_markers {
+	/// Indicates that the ops entry is a valid ChildBind
+	pub trait ChildBind {
+		const IDX: crate::ffi::udi_index_t;
+	}
+}
+
 /// Define a UDI driver
 /// 
 /// ```rust
@@ -202,7 +265,7 @@ macro_rules! define_driver
 	(
 		$driver:path;
 		ops: {
-			$($op_name:ident: Meta=$op_meta:expr, $op_op:path $(: $wrapper:ty)?),*$(,)?
+			$($op_name:ident: Meta=$op_meta:expr, $op_op:path $(: $wrapper:ident<_$(,$wrapper_arg:ty)*>)?),*$(,)?
 		},
 		cbs: {
 			$($cb_name:ident: Meta=$cb_meta:expr, $cb_ty:path),*$(,)?
@@ -210,14 +273,14 @@ macro_rules! define_driver
 	) => {
 		$crate::define_driver!{
 			$driver as udi_init_info;
-			ops: { $($op_name: Meta=$op_meta, $op_op $(: $wrapper)?),* },
+			ops: { $($op_name: Meta=$op_meta, $op_op $(: $wrapper<_$(,$wrapper_arg)*>)? ),* },
 			cbs: { $($cb_name: Meta=$cb_meta, $cb_ty ),* }
 		}
 	};
 	(
 		$driver:path as $symname:ident;
 		ops: {
-			$($op_name:ident: Meta=$op_meta:expr, $op_op:path $(: $wrapper:ty)?),*$(,)?
+			$($op_name:ident: Meta=$op_meta:expr, $op_op:path $(: $wrapper:ident<_$(,$wrapper_arg:ty)*>)?),*$(,)?
 		},
 		cbs: {
 			$($cb_name:ident: Meta=$cb_meta:expr, $cb_ty:path),*$(,)?
@@ -232,6 +295,8 @@ macro_rules! define_driver
 		mod OpsList {
 			$(
 				pub const $op_name: $crate::ffi::udi_index_t = $crate::ffi::udi_index_t(super::RawOpsList::$op_name as _);
+				pub struct $op_name { }
+				$(impl $crate::ops_wrapper_markers::$wrapper for $op_name { const IDX: $crate::ffi::udi_index_t = $op_name; })?
 			)*
 		}
 		#[repr(u8)]
@@ -252,9 +317,9 @@ macro_rules! define_driver
 			$(impl $crate::HasCb<$cb_ty> for List {})*
 		}
 		const _STATE_SIZE: usize = {
-			let v = <$crate::OpsStructure<$crate::ffi::meta_mgmt::udi_mgmt_ops_t,Driver,Cbs::List>>::scratch_requirement();
+			let v = $crate::define_driver!(@ops_structrure_call $crate::ffi::meta_mgmt::udi_mgmt_ops_t, $driver, scratch_requirement)();
 			$(
-				let a = <$crate::OpsStructure<$op_op,$crate::define_driver!(@get_wrapper $driver $(: $wrapper)?),Cbs::List>>::scratch_requirement();
+				let a = $crate::define_driver!(@ops_structrure_call $op_op, $driver $(: $wrapper<_$(,$wrapper_arg)*>)?, scratch_requirement)();
 				let v = if v > a { v } else { a };
 			)*
 			v
@@ -262,31 +327,30 @@ macro_rules! define_driver
 		#[no_mangle]
 		pub static $symname: $crate::ffi::init::udi_init_t = $crate::ffi::init::udi_init_t {
 			primary_init_info: Some(&$crate::ffi::init::udi_primary_init_t {
-					mgmt_ops: {
-						static OPS: $crate::ffi::meta_mgmt::udi_mgmt_ops_t = unsafe { <$crate::OpsStructure<$crate::ffi::meta_mgmt::udi_mgmt_ops_t,Driver,Cbs::List>>::for_driver() };
-						&OPS
-						},
+					mgmt_ops: unsafe { &$crate::define_driver!(@ops_structrure_call $crate::ffi::meta_mgmt::udi_mgmt_ops_t, $driver, for_driver)() },
 					mgmt_op_flags: [0,0,0,0].as_ptr(),
 					mgmt_scratch_requirement: _STATE_SIZE,
 					rdata_size: ::core::mem::size_of::<$crate::init::RData<Driver>>(),
 					child_data_size: 0,
-					enumeration_attr_list_length: <$driver as $crate::init::Driver>::MAX_ATTRS,
+					enumeration_attr_list_length: <$crate::init::RData<$driver> as $crate::init::Driver>::MAX_ATTRS,
 					per_parent_paths: 0,
 				}),
 			secondary_init_list: ::core::ptr::null(),
 			ops_init_list: [
 				$(
 				{
-					$( $crate::enforce_is_wrapper_for::<$wrapper, $driver>(); )?
-					//<$op_op>::check_cbs::<Cbs::List>();
-					$crate::make_ops_init(OpsList::$op_name as _, $op_meta, unsafe { &<$crate::OpsStructure<$op_op,$crate::define_driver!(@get_wrapper $driver $(: $wrapper)?),Cbs::List>>::for_driver() })
+					$crate::make_ops_init(
+						OpsList::$op_name as _,
+						$op_meta,
+						0 $(+ ::core::mem::size_of::< $crate::$wrapper<$driver$(,$wrapper_arg)*> >())?,
+						unsafe { &$crate::define_driver!(@ops_structrure_call $op_op, $driver $(: $wrapper<_$(,$wrapper_arg)*>)?, for_driver)() }
+						)
 				},
 				)*
 				$crate::ffi::init::udi_ops_init_t::end_of_list()
 			].as_ptr(),
 			cb_init_list: [
 				$( $crate::make_cb_init::<Cbs::$cb_name>($cb_meta, _STATE_SIZE, None), )*
-				// TODO: How to ensure that all CBs needed by all ops are mentioned here?
 				$crate::ffi::init::udi_cb_init_t::end_of_list()
 			].as_ptr(),
 			gcb_init_list: ::core::ptr::null(),
@@ -294,7 +358,10 @@ macro_rules! define_driver
 			};
 	};
 
-	(@get_wrapper $driver:ty: $wrapper:ty ) => { $wrapper };
-	(@get_wrapper $driver:ty ) => { $driver };
+	(@ops_structrure_call $op_ty:ty, $driver:ty $(: $wrapper:ident<_$(,$wrapper_arg:ty)*>)?, $call:ident) => {
+		<$crate::OpsStructure<$op_ty,$crate::define_driver!(@get_wrapper $driver $(: $wrapper<_$(,$wrapper_arg)*>)?),Cbs::List>>::$call
+	};
+	(@get_wrapper $driver:ty: $wrapper:ident<_$(,$wrapper_arg:ty)*> ) => { $crate::$wrapper<$driver$(,$wrapper_arg)*> };
+	(@get_wrapper $driver:ty ) => { $crate::init::RData<$driver> };
 }
 

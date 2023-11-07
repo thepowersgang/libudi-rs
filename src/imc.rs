@@ -53,6 +53,11 @@ pub fn channel_spawn_ex(
 		)
 }
 
+pub trait ChannelInit {
+    /// SAFETY: Caller must ensure that this is only called once (on channel bind)
+    unsafe fn init(&mut self) {}
+}
+
 pub trait ChannelHandler<Marker>: 'static {
     fn channel_closed(&mut self);
     fn channel_bound(&mut self, params: &::udi_sys::imc::udi_channel_event_cb_t_params);
@@ -61,7 +66,7 @@ pub trait ChannelHandler<Marker>: 'static {
 pub const fn task_size<T: ChannelHandler<Marker>,Marker: 'static>() -> usize {
     0
 }
-pub unsafe extern "C" fn channel_event_ind_op<T: ChannelHandler<Marker>, Marker: 'static>(cb: *mut udi_channel_event_cb_t) {
+pub unsafe extern "C" fn channel_event_ind_op<T: ChannelHandler<Marker> + crate::async_trickery::CbContext, Marker: 'static>(cb: *mut udi_channel_event_cb_t) {
     // NOTE: There's no scratch availble to this function, so cannot use async
 
     // SAFE: Caller has ensured that the context is valid for this type
@@ -70,7 +75,7 @@ pub unsafe extern "C" fn channel_event_ind_op<T: ChannelHandler<Marker>, Marker:
     {
     ::udi_sys::imc::UDI_CHANNEL_CLOSED => state.channel_closed(),
     ::udi_sys::imc::UDI_CHANNEL_BOUND => {
-        crate::async_trickery::set_channel_cb(cb);
+        crate::async_trickery::set_channel_cb::<T>(cb);
         state.channel_bound( &(*cb).params );
         },
     ::udi_sys::imc::UDI_CHANNEL_OP_ABORTED => {

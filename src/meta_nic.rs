@@ -120,7 +120,7 @@ pub enum OpsNum
     NsrRx,
 }
 
-pub trait Control: 'static {
+pub trait Control: 'static + crate::async_trickery::CbContext {
     async_method!(fn bind_req(&'a mut self, cb: CbRefNicBind<'a>, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->crate::Result<NicInfo> as Future_bind_req);
     async_method!(fn unbind_req(&'a mut self, cb: CbRefNic<'a>)->() as Future_unbind_req);
     async_method!(fn enable_req(&'a mut self, cb: CbRefNic<'a>)->crate::Result<()> as Future_enable_req);
@@ -220,7 +220,7 @@ where
 }
 
 
-pub trait NdTx: 'static {
+pub trait NdTx: 'static + crate::async_trickery::CbContext {
     async_method!(fn tx_req(&'a mut self, cb: CbHandleNicTx)->() as Future_tx_req);
     async_method!(fn exp_tx_req(&'a mut self, cb: CbHandleNicTx)->() as Future_exp_tx_req);
 }
@@ -264,7 +264,7 @@ where
     }
 }
 
-pub trait NdRx: 'static {
+pub trait NdRx: 'static + crate::async_trickery::CbContext {
     async_method!(fn rx_rdy(&'a mut self, cb: CbHandleNicRx)->() as Future_rx_rdy);
 }
 struct MarkerNdRx;

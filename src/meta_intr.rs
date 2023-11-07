@@ -11,7 +11,7 @@ pub fn event_rdy(cb: super::cb::CbHandle<udi_intr_event_cb_t>) {
 
 pub type CbRefEvent<'a> = crate::CbRef<'a, udi_intr_event_cb_t>;
 
-pub trait IntrHandler: 'static
+pub trait IntrHandler: 'static + crate::async_trickery::CbContext
 {
     async_method!(fn intr_event_ind(&'a mut self, cb: CbRefEvent<'a>, flags: u8)->() as Future_intr_event_ind);
 }
@@ -56,7 +56,7 @@ where
 }
 
 
-pub trait IntrDispatcher: 'static
+pub trait IntrDispatcher: 'static + crate::async_trickery::CbContext
 {
     async_method!(fn intr_event_rdy(&'a mut self, cb: CbRefEvent<'a>)->() as Future_intr_event_rdy);
 }

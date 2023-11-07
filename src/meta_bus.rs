@@ -33,7 +33,7 @@ pub enum PreferredEndianness {
 }
 
 /// Trait for a device on a bus
-pub trait BusDevice: 'static {
+pub trait BusDevice: 'static + crate::async_trickery::CbContext {
     async_method!(fn bus_bind_ack(&'a mut self,
         cb: crate::CbRef<'a, udi_bus_bind_cb_t>,
         dma_constraints: crate::ffi::physio::udi_dma_constraints_t,
@@ -49,7 +49,7 @@ pub trait BusDevice: 'static {
 struct MarkerBusDevice;
 impl<T> crate::imc::ChannelHandler<MarkerBusDevice> for T
 where
-    T: BusDevice
+    T: BusDevice,
 {
     fn channel_closed(&mut self) {
     }
@@ -61,7 +61,7 @@ where
     }
 }
 
-pub trait BusBridge: 'static {
+pub trait BusBridge: 'static + crate::imc::ChannelInit + crate::async_trickery::CbContext {
     async_method!(fn bus_bind_req(&'a mut self, cb: CbRefBind<'a>) -> crate::Result<(PreferredEndianness,)> as Future_bind_req);
     async_method!(fn bus_unbind_req(&'a mut self, cb: CbRefBind<'a>) -> () as Future_unbind_req);
     async_method!(fn intr_attach_req(&'a mut self, cb: CbRefIntrAttach<'a>) -> crate::Result<()> as Future_intr_attach_req);
@@ -75,6 +75,8 @@ where
     fn channel_closed(&mut self) {
     }
     fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
+        // SAFE: Trusting that this trait is only being used through proper config.
+        unsafe { crate::imc::ChannelInit::init(self); }
         // SAFE: Trusting that this trait is only being used through proper config.
         //unsafe {
         //    crate::ffi::meta_bus::udi_bus_bind_req(params.parent_bound.bind_cb as *mut udi_bus_bind_cb_t);
@@ -97,13 +99,13 @@ future_wrapper!(bus_bind_ack_op => <T as BusDevice>(
         };
     crate::async_trickery::with_ack(
         val.bus_bind_ack(cb, dma_constraints, preferred_endianness, status),
-        |cb,res| unsafe { crate::async_trickery::channel_event_complete::<udi_bus_bind_cb_t>(cb, crate::Error::to_status(res)) }
+        |cb,res| unsafe { crate::async_trickery::channel_event_complete::<T,udi_bus_bind_cb_t>(cb, crate::Error::to_status(res)) }
         )
 });
 future_wrapper!(bus_unbind_ack_op => <T as BusDevice>(cb: *mut udi_bus_bind_cb_t) val @ {
     crate::async_trickery::with_ack(
         val.bus_unbind_ack(cb),
-        |cb,_res| unsafe { crate::async_trickery::channel_event_complete::<udi_bus_bind_cb_t>(cb, 0 /*res*/) }
+        |cb,_res| unsafe { crate::async_trickery::channel_event_complete::<T,udi_bus_bind_cb_t>(cb, 0 /*res*/) }
         )
 });
 future_wrapper!(intr_attach_ack_op => <T as BusDevice>(cb: *mut crate::ffi::meta_intr::udi_intr_attach_cb_t, status: crate::ffi::udi_status_t) val @ {

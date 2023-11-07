@@ -21,6 +21,13 @@ pub struct udi_limits_t
 }
 
 #[repr(C)]
+pub struct udi_child_chan_context_t
+{
+	pub rdata: *mut c_void,
+	pub child_id: udi_ubit32_t,
+}
+
+#[repr(C)]
 pub struct udi_primary_init_t
 {
 	pub mgmt_ops: &'static super::meta_mgmt::udi_mgmt_ops_t,

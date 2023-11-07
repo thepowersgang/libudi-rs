@@ -27,11 +27,11 @@ unsafe impl crate::async_trickery::GetCb for udi_mgmt_cb_t {
 
 #[allow(non_camel_case_types)]
 /// Trait for all drivers
-pub trait Driver: 'static {
+pub trait Driver: 'static + crate::async_trickery::CbContext {
 	const MAX_ATTRS: u8;
 
-	type Future_init<'s>: Future<Output=Self> + 's;
-	fn usage_ind(cb: CbRefUsage, resouce_level: u8) -> Self::Future_init<'_>;
+	type Future_init<'s>: Future<Output=()> + 's;
+	fn usage_ind<'s>(&'s mut self, cb: CbRefUsage<'s>, resouce_level: u8) -> Self::Future_init<'s>;
 
 	type Future_enumerate<'s>: Future<Output=(EnumerateResult,AttrSink<'s>)> + 's;
 	fn enumerate_req<'s>(&'s mut self, cb: CbRefEnumerate<'s>, level: EnumerateLevel, attrs_out: AttrSink<'s>) -> Self::Future_enumerate<'s>;
@@ -48,12 +48,33 @@ pub enum EnumerateLevel
 	Directed,
 	Release,
 }
+pub struct EnumerateResultOk {
+	ops_idx: crate::ffi::udi_index_t,
+	child_id: crate::ffi::udi_ubit32_t,
+}
+impl EnumerateResultOk {
+	pub fn new<Ops: crate::ops_wrapper_markers::ChildBind>(child_id: crate::ffi::udi_ubit32_t) -> Self {
+		Self {
+			ops_idx: Ops::IDX,
+			child_id,
+		}
+	}
+	pub unsafe fn from_raw(ops_idx: crate::ffi::udi_index_t, child_id: crate::ffi::udi_ubit32_t) -> Self {
+		Self {
+			ops_idx,
+			child_id,
+		}
+	}
+	pub fn ops_idx(&self) -> crate::ffi::udi_index_t {
+		self.ops_idx
+	}
+	pub fn child_id(&self) -> crate::ffi::udi_ubit32_t {
+		self.child_id
+	}
+}
 pub enum EnumerateResult
 {
-	Ok {
-		ops_idx: crate::ffi::udi_index_t,
-		child_id: crate::ffi::udi_ubit32_t,
-	},
+	Ok(EnumerateResultOk),
 	Leaf,
 	Done,
     Rescan,
@@ -61,6 +82,16 @@ pub enum EnumerateResult
     RemovedSelf,
     Released,
 	Failed,
+}
+impl EnumerateResult {
+	pub fn ok<Ops: crate::ops_wrapper_markers::ChildBind>(child_id: crate::ffi::udi_ubit32_t) -> Self {
+		EnumerateResult::Ok(EnumerateResultOk::new::<Ops>(child_id))
+	}
+}
+impl From<EnumerateResultOk> for EnumerateResult {
+	fn from(value: EnumerateResultOk) -> Self {
+		EnumerateResult::Ok(value)
+	}
 }
 /// A place to store attributes, limited to [Driver::MAX_ATTRS]
 pub struct AttrSink<'a>
@@ -174,10 +205,32 @@ pub enum MgmtOp
 }
 
 #[repr(C)]
+#[fundamental]
 pub struct RData<T> {
     pub(crate) init_context: ffi::init::udi_init_context_t,
 	pub(crate) channel_cb: *mut crate::ffi::imc::udi_channel_event_cb_t,
-    pub(crate) inner: T,
+	// NOTE: According to the docs on `udi_primary_init_info_t`, this structure is null-initialised.
+	is_init: bool,
+    pub inner: T,
+}
+impl<Driver> crate::async_trickery::CbContext for RData<Driver>
+{
+    fn channel_cb_slot(&mut self) -> &mut *mut crate::ffi::imc::udi_channel_event_cb_t {
+        &mut self.channel_cb
+    }
+}
+impl<Driver> ::core::ops::Deref for RData<Driver>
+{
+	type Target = Driver;
+	fn deref(&self) -> &Self::Target {
+		&self.inner
+	}
+}
+impl<Driver> ::core::ops::DerefMut for RData<Driver>
+{
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.inner
+	}
 }
 
 struct MgmtState<'a, T: Driver> {
@@ -200,10 +253,8 @@ impl<'a, T: Driver> Future for MgmtStateInit<'a, T> {
 		match unsafe { Pin::new_unchecked(&mut self_.inner_future) }.poll(cx)
 		{
 		Poll::Pending => Poll::Pending,
-		Poll::Ready(r) => {
+		Poll::Ready( () ) => {
 			let cb: &ffi::meta_mgmt::udi_usage_cb_t = async_trickery::cb_from_waker(cx.waker());
-			// SAFE: This pointer should valid
-            unsafe { ::core::ptr::write(&mut (*(cb.gcb.context as *mut RData<T>)).inner, r); }
             // SAFE: Correct FFI.
 			unsafe { ffi::meta_mgmt::udi_usage_res(cb as *const _ as *mut _); }
 			Poll::Ready( () )
@@ -239,9 +290,9 @@ future_wrapper!{enumerate_req_op => <T as Driver>(cb: *mut udi_enumerate_cb_t, e
 			use ffi::udi_index_t;
 			let (res,ops_idx) = match res
 				{
-				EnumerateResult::Ok { ops_idx, child_id } => {
-					(*cb).child_id = child_id;
-					(0,ops_idx)
+				EnumerateResult::Ok(child) => {
+					(*cb).child_id = child.child_id;
+					(0,child.ops_idx)
 					},
 				EnumerateResult::Leaf => (1,udi_index_t(0)),
 				EnumerateResult::Done => (2,udi_index_t(0)),
@@ -292,30 +343,41 @@ future_wrapper!{final_cleanup_req_op => <T as Driver>(cb: *mut udi_mgmt_cb_t) va
 	)
 }}
 
-impl<T,CbList> crate::OpsStructure<::udi_sys::meta_mgmt::udi_mgmt_ops_t, T,CbList>
+impl<T,CbList> crate::OpsStructure<::udi_sys::meta_mgmt::udi_mgmt_ops_t, RData<T> ,CbList>
 where
-	T: Driver,
+	RData<T>: Driver,
+	T: Default,
 {
     pub const fn scratch_requirement() -> usize {
         let rv = 0;
-		let rv = crate::const_max(rv, async_trickery::task_size::<MgmtState<T>>());
-		let rv = crate::const_max(rv, enumerate_req_op::task_size::<T>());
-		let rv = crate::const_max(rv, devmgmt_req_op::task_size::<T>());
-		let rv = crate::const_max(rv, final_cleanup_req_op::task_size::<T>());
+		let rv = crate::const_max(rv, async_trickery::task_size::<MgmtState<RData<T>>>());
+		let rv = crate::const_max(rv, enumerate_req_op::task_size::<RData<T>>());
+		let rv = crate::const_max(rv, devmgmt_req_op::task_size::<RData<T>>());
+		let rv = crate::const_max(rv, final_cleanup_req_op::task_size::<RData<T>>());
 		rv
     }
     pub const unsafe fn for_driver() -> ffi::meta_mgmt::udi_mgmt_ops_t {
         // ENTRYPOINT: mgmt_ops.usage_ind
-        unsafe extern "C" fn usage_ind<T: Driver>(cb: *mut udi_usage_cb_t, resource_level: u8)
+        unsafe extern "C" fn usage_ind<T>(cb: *mut udi_usage_cb_t, resource_level: u8)
+		where
+			RData<T>: Driver,
+			T: Default,
         {
-            let job = MgmtStateInit::<T> { inner_future: T::usage_ind(crate::CbRef::new(cb), resource_level) };
+			// This can be called at any time, so needs to handle that.
+			let rd = (*cb).gcb.context as *mut RData<T>;
+			// If `false` (zero) - then we need to initialise the inner before any access
+			if !(*rd).is_init {
+				(*rd).is_init = true;
+				::core::ptr::write(&mut (*rd).inner, Default::default());
+			}
+            let job = MgmtStateInit::<RData<T>> { inner_future: (*rd).usage_ind(crate::CbRef::new(cb), resource_level) };
             async_trickery::init_task(&*cb, MgmtState { op: Some(job) });
         }
         ffi::meta_mgmt::udi_mgmt_ops_t {
 			usage_ind_op: usage_ind::<T>,
-            enumerate_req_op: enumerate_req_op::<T>,
-            devmgmt_req_op: devmgmt_req_op::<T>,
-            final_cleanup_req_op: final_cleanup_req_op::<T>,
+            enumerate_req_op: enumerate_req_op::<RData<T>>,
+            devmgmt_req_op: devmgmt_req_op::<RData<T>>,
+            final_cleanup_req_op: final_cleanup_req_op::<RData<T>>,
 			}
     }
 }

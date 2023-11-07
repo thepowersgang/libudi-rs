@@ -25,7 +25,7 @@ impl<'a> ChannelRef<'a> {
     }
 }
 
-
+/// Internal helper: Query which module owns this channel handle
 pub unsafe fn get_driver_module(ch: &::udi::ffi::udi_channel_t) -> ::std::sync::Arc<crate::DriverModule> {
     let cr = ChannelRef::from_handle(*ch);
     cr.get_side().unwrap().driver_module.clone()
@@ -88,7 +88,10 @@ pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::m
         .filter(|cb| cb.meta_cb_num == Cb::META_CB_NUM)
         .map(|cb| cb.scratch_requirement)
         .max();
-    println!("Context = {:p}, scratch_requirement = {:?}", ch_side.context, scratch_requirement);
+    println!("remote_call({},{}): Context = {:p}, scratch_requirement = {:?}",
+        ::core::any::type_name::<O>(),
+        ::core::any::type_name::<Cb>(),
+        ch_side.context, scratch_requirement);
 
     (*gcb).channel = ch.get_handle_reversed();
     // Update context and scratch

@@ -244,8 +244,21 @@ fn maybe_child_bind(
 
     let (channel_parent, channel_child) = channels::spawn_raw();
     unsafe {
-        let ops = parent.module.get_meta_ops(parent.module.get_ops_init(child.ops_idx).unwrap());
-        channels::anchor(channel_parent, parent.module.clone(), ops, parent.regions[child.region_idx_real].context);
+        let ops_init = parent.module.get_ops_init(child.ops_idx).unwrap();
+        let ops = parent.module.get_meta_ops(ops_init);
+        let rdata = parent.regions[child.region_idx_real].context;
+        let context = if ops_init.chan_context_size > 0 {
+                assert!(ops_init.chan_context_size >= ::core::mem::size_of::<::udi::ffi::init::udi_child_chan_context_t>());
+                let ccx = ::libc::malloc(ops_init.chan_context_size) as *mut ::udi::ffi::init::udi_child_chan_context_t;
+                (*ccx).rdata = rdata;
+                (*ccx).child_id = child.child_id;
+                println!("udi_child_chan_context_t(s={}): {:p} #{}", ops_init.chan_context_size, rdata, child.child_id);
+                ccx as *mut ::udi::ffi::c_void
+            }
+            else {
+                rdata
+            };
+        channels::anchor(channel_parent, parent.module.clone(), ops, context);
     }
 
     Some( create_driver_instance(driver_module.clone(), Some(channel_child)) )
