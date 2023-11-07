@@ -18,10 +18,10 @@ unsafe extern "C" fn udi_channel_anchor(
 )
 {
     // Get the driver instance from the gcb
-    let driver_module = crate::channels::get_driver_module(&(*gcb).channel);
-    let ops_init = driver_module.get_ops_init(ops_idx).unwrap();
-    let ops = driver_module.get_meta_ops(ops_init);
-    crate::channels::anchor(channel, driver_module, ops, channel_context);
+    let driver_instance = crate::channels::get_driver_instance(&(*gcb).channel);
+    let ops_init = driver_instance.module.get_ops_init(ops_idx).unwrap();
+    let ops = driver_instance.module.get_meta_ops(ops_init);
+    crate::channels::anchor(channel, driver_instance, ops, channel_context);
     (callback)(gcb, channel);
 }
 
@@ -42,7 +42,7 @@ unsafe extern "C" fn udi_channel_spawn(
     channel_context: *mut c_void,
 )
 {
-    let driver_module = crate::channels::get_driver_module(&(*gcb).channel);
+    let driver_instance = crate::channels::get_driver_instance(&(*gcb).channel);
 
     // Create an unanchored channel either fresh or in `channel` with `spawn_idx`
     let new_channel = crate::channels::spawn(channel, spawn_idx);
@@ -51,9 +51,9 @@ unsafe extern "C" fn udi_channel_spawn(
         // Loose end requested
     }
     else {
-        let ops_init = driver_module.get_ops_init(ops_idx).unwrap();
-        let ops = driver_module.get_meta_ops(ops_init);
-        crate::channels::anchor(new_channel, driver_module, ops, channel_context);
+        let ops_init = driver_instance.module.get_ops_init(ops_idx).unwrap();
+        let ops = driver_instance.module.get_meta_ops(ops_init);
+        crate::channels::anchor(new_channel, driver_instance, ops, channel_context);
     }
 
     callback(gcb, new_channel);

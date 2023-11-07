@@ -1,4 +1,5 @@
 #![feature(impl_trait_in_assoc_type)]
+use ::std::sync::Arc;
 
 #[macro_use]
 mod channels;
@@ -19,8 +20,8 @@ mod driver {
 }
 
 struct GlobalState {
-    modules: Vec< ::std::sync::Arc<DriverModule<'static>> >,
-    instances: Vec< Box<DriverInstance> >,
+    modules: Vec< Arc<DriverModule<'static>> >,
+    instances: Vec< Arc<DriverInstance> >,
 }
 
 fn main() {
@@ -80,7 +81,7 @@ fn main() {
 }
 
 /// Create an instance for all matching parent instances
-fn register_driver_module(state: &mut GlobalState, driver_module: ::std::sync::Arc<DriverModule<'static>>)
+fn register_driver_module(state: &mut GlobalState, driver_module: Arc<DriverModule<'static>>)
 {
     let mut is_orphan = true;
 
@@ -95,7 +96,7 @@ fn register_driver_module(state: &mut GlobalState, driver_module: ::std::sync::A
         // Search all known devices (all children of all loaded instances) for one that matches this attribute list and metalang
         for parent in state.instances.iter_mut()
         {
-            for child in parent.children.iter()
+            for child in parent.children.lock().unwrap().iter()
             {
                 if child.is_bound.get() {
                     continue ;
@@ -122,7 +123,7 @@ fn register_driver_module(state: &mut GlobalState, driver_module: ::std::sync::A
     for parent in &mut state.instances[i..]
     {
         // Look for child drivers
-        for child in parent.children.iter()
+        for child in parent.children.lock().unwrap().iter()
         {
             if child.is_bound.get() {
                 continue ;
@@ -224,13 +225,13 @@ fn check_attributes(filter_attributes: ::udiprops_parse::parsed::AttributeList, 
 
 
 fn maybe_child_bind(
-    driver_module: &::std::sync::Arc<DriverModule<'static>>,
+    driver_module: &Arc<DriverModule<'static>>,
     meta: Option<&str>,
     attributes: ::udiprops_parse::parsed::AttributeList,
-    parent: &DriverInstance,
+    parent: &Arc<DriverInstance>,
     meta2: Option<&str>,
     child: &DriverChild
-) -> Option<Box<DriverInstance>>
+) -> Option<Arc<DriverInstance>>
 {
     if meta != meta2 {
         return None;
@@ -258,18 +259,18 @@ fn maybe_child_bind(
             else {
                 rdata
             };
-        channels::anchor(channel_parent, parent.module.clone(), ops, context);
+        channels::anchor(channel_parent, parent.clone(), ops, context);
     }
 
     Some( create_driver_instance(driver_module.clone(), Some(channel_child)) )
 }
 
-fn create_driver_instance<'a>(driver_module: ::std::sync::Arc<DriverModule<'static>>, channel_to_parent: Option<::udi::ffi::udi_channel_t>) -> Box<DriverInstance>
+fn create_driver_instance<'a>(driver_module: Arc<DriverModule<'static>>, channel_to_parent: Option<::udi::ffi::udi_channel_t>) -> Arc<DriverInstance>
 {
     // See UDI Spec 10.1.2
 
     // - Create primary region
-    let instance = Box::new(DriverInstance {
+    let instance = Arc::new(DriverInstance {
         regions: {
             let mut v = vec![DriverRegion::new(0.into(), driver_module.pri_init.rdata_size)];
             for secondary_region in driver_module.sec_init {
@@ -278,7 +279,7 @@ fn create_driver_instance<'a>(driver_module: ::std::sync::Arc<DriverModule<'stat
             v
             },
         module: driver_module,
-        children: Vec::new(),
+        children: Default::default(),
     });
     let mut state = management_agent::InstanceInitState::new(instance, channel_to_parent);
     
@@ -445,9 +446,9 @@ unsafe fn terminated_list<'a, T: 'a>(input: *const T, cb: impl Fn(&T)->bool) -> 
 
 struct DriverInstance
 {
-    module: ::std::sync::Arc<DriverModule<'static>>,
+    module: Arc<DriverModule<'static>>,
     regions: Vec<DriverRegion>,
-    children: Vec<DriverChild>,
+    children: ::std::sync::Mutex< Vec<DriverChild> >,
     //management_channel: ::udi::ffi::udi_channel_t,
     //cur_state: DriverState,
 }

@@ -20,8 +20,8 @@ impl<T: ::udi::metalang_trait::MetalangCb> MetalangCb for T {
 #[no_mangle]
 unsafe extern "C" fn udi_cb_alloc(callback: udi_cb_alloc_call_t, gcb: *mut udi_cb_t, cb_idx: udi_index_t, default_channel: udi_channel_t)
 {
-    let module = crate::channels::get_driver_module(&(*gcb).channel);
-    let rv = alloc(&module, cb_idx, (*gcb).context, default_channel);
+    let driver_module = &crate::channels::get_driver_instance(&(*gcb).channel).module;
+    let rv = alloc(driver_module, cb_idx, (*gcb).context, default_channel);
     callback(gcb, rv);
 }
 
@@ -35,8 +35,8 @@ unsafe extern "C" fn udi_cb_alloc_dynamic(
     inline_layout: *const udi_layout_t
 )
 {
-    let module = crate::channels::get_driver_module(&(*gcb).channel);
-    let rv = alloc_internal(&module, cb_idx, (*gcb).context, default_channel, None, None, Some((inline_size, inline_layout)));
+    let driver_module = &crate::channels::get_driver_instance(&(*gcb).channel).module;
+    let rv = alloc_internal(driver_module, cb_idx, (*gcb).context, default_channel, None, None, Some((inline_size, inline_layout)));
     callback(gcb, rv);
 }
 
@@ -51,11 +51,11 @@ unsafe extern "C" fn udi_cb_alloc_batch(
     path_handle: udi_buf_path_t
 )
 {
-    let module = crate::channels::get_driver_module(&(*gcb).channel);
+    let driver_module = &crate::channels::get_driver_instance(&(*gcb).channel).module;
     let mut prev_cb = ::core::ptr::null_mut();
     for _i in 0..count.0 {
         prev_cb = alloc_internal(
-            &module, cb_idx, (*gcb).context, ::core::ptr::null_mut(), 
+            driver_module, cb_idx, (*gcb).context, ::core::ptr::null_mut(), 
             Some(prev_cb), if with_buf.to_bool() { Some((buf_size, path_handle)) } else { None }, None
         );
     }

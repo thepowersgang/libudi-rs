@@ -1,7 +1,8 @@
+use ::std::sync::Arc;
 
 pub struct InstanceInitState
 {
-    instance: Box<crate::DriverInstance>,
+    instance: Arc<crate::DriverInstance>,
     channel_to_parent: Option<::udi::ffi::udi_channel_t>,
     returned_cb: *mut ::udi::ffi::udi_cb_t,
     is_active: bool,
@@ -27,7 +28,7 @@ type Op = (
     );
 impl InstanceInitState
 {
-    pub fn new(instance: Box<crate::DriverInstance>, channel_to_parent: Option<::udi::ffi::udi_channel_t>) -> Self {
+    pub fn new(instance: Arc<crate::DriverInstance>, channel_to_parent: Option<::udi::ffi::udi_channel_t>) -> Self {
         Self {
             instance,
             channel_to_parent,
@@ -37,7 +38,7 @@ impl InstanceInitState
         }
     }
     /// Assert that initialisation is complete, and return the fully populated instance
-    pub fn assert_complete(self) -> Box<crate::DriverInstance>
+    pub fn assert_complete(self) -> Arc<crate::DriverInstance>
     {
         let DriverState::Active = self.state else {
             panic!("assert_complete but not yet completed init");
@@ -149,8 +150,8 @@ impl InstanceInitState
         let (channel_1, channel_2) = crate::channels::spawn_raw();
         let bind_cb = crate::udi_impl::cb::alloc(&driver_module, bind_cb_idx, rgn.context, channel_1);
         unsafe {
-            crate::channels::anchor(channel_1, self.instance.module.clone(), driver_module.get_meta_ops(ops_pri), self.instance.regions[0].context);
-            crate::channels::anchor(channel_2, self.instance.module.clone(), driver_module.get_meta_ops(ops_sec), rgn.context);
+            crate::channels::anchor(channel_1, self.instance.clone(), driver_module.get_meta_ops(ops_pri), self.instance.regions[0].context);
+            crate::channels::anchor(channel_2, self.instance.clone(), driver_module.get_meta_ops(ops_sec), rgn.context);
 
             let (op, cb) = crate::channels::event_ind_bound_internal(channel_1, bind_cb as *mut _);
             (cb as *mut _, Box::new(move |cb| op(cb as *mut _)))
@@ -176,7 +177,7 @@ impl InstanceInitState
 
                 let bind_cb = crate::udi_impl::cb::alloc(&driver_module, bind_cb_idx, rgn.context, channel_to_parent);
                 unsafe {
-                    crate::channels::anchor(channel_to_parent, self.instance.module.clone(), driver_module.get_meta_ops(ops_init), rgn.context);
+                    crate::channels::anchor(channel_to_parent, self.instance.clone(), driver_module.get_meta_ops(ops_init), rgn.context);
                     let (op, cb)
                         = crate::channels::event_ind_bound_parent(channel_to_parent, bind_cb as *mut _, 0, ::core::ptr::null());
                     return (cb as *mut _, Box::new(move |cb| op(cb as *mut _)));
@@ -266,7 +267,7 @@ impl InstanceInitState
             }
             if let Some((meta_idx, region_idx)) = child_bind_ops {
                 let region_idx_real = self.instance.module.get_region_index(region_idx).unwrap();
-                self.instance.children.push(crate::DriverChild {
+                self.instance.children.lock().unwrap().push(crate::DriverChild {
                     is_bound: Default::default(),
                     child_id: child_info.child_id(),
                     meta_idx,

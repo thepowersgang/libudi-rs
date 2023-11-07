@@ -12,9 +12,8 @@ struct ChannelInner {
     // TODO: Track the currently "active" side?
 }
 struct ChannelInnerSide {
-    /// Target module
-    driver_module: ::std::sync::Arc< crate::DriverModule<'static> >,
-    // TODO: Include instance instead?
+    /// Target driver instance
+    driver_instance: ::std::sync::Arc< crate::DriverInstance >,
     /// Metalanguage Operations
     ops: &'static dyn udi::metalang_trait::MetalangOpsHandler,
     /// Context pointer to use
@@ -38,9 +37,9 @@ impl<'a> ChannelRef<'a> {
 }
 
 /// Internal helper: Query which module owns this channel handle
-pub unsafe fn get_driver_module(ch: &::udi::ffi::udi_channel_t) -> ::std::sync::Arc<crate::DriverModule> {
+pub unsafe fn get_driver_instance(ch: &::udi::ffi::udi_channel_t) -> ::std::sync::Arc<crate::DriverInstance> {
     let cr = ChannelRef::from_handle(*ch);
-    cr.get_side().unwrap().driver_module.clone()
+    cr.get_side().unwrap().driver_instance.clone()
 }
 
 /// Spawn a channel without needing a parent/source channel
@@ -74,13 +73,13 @@ pub unsafe fn spawn(
 /// Anchor a channel end
 pub unsafe fn anchor(
     channel: ::udi::ffi::udi_channel_t,
-    driver_module: ::std::sync::Arc<crate::DriverModule<'static>>,
+    driver_instance: ::std::sync::Arc<crate::DriverInstance>,
     ops: &'static dyn udi::metalang_trait::MetalangOpsHandler,
     context: *mut ::udi::ffi::c_void,
 )
 {
     let cr = ChannelRef::from_handle(channel);
-    cr.0.sides[cr.1 as usize].set(ChannelInnerSide { driver_module, context, ops }).ok().expect("Anchoring an anchored end");
+    cr.0.sides[cr.1 as usize].set(ChannelInnerSide { driver_instance, context, ops }).ok().expect("Anchoring an anchored end");
 }
 
 /// Call through a channel
@@ -93,7 +92,7 @@ pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::m
 
 
     // Get the scratch as the max of all CB instances for this type
-    let driver_module = &*ch_side.driver_module;
+    let driver_module = &*ch_side.driver_instance.module;
     let Some(meta_idx) = driver_module.get_metalang_by_name(<Cb::MetalangSpec as ::udi::metalang_trait::Metalanguage>::name()) else {
         panic!("No metalang `{}` in driver?!", <Cb::MetalangSpec as ::udi::metalang_trait::Metalanguage>::name());
     };
