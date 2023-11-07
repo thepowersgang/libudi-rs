@@ -77,6 +77,12 @@ use super::mem;
     OUT.B regs::PG0W_TPSR as _, R0;
     END_IMM 0;
 }
+::udi::define_pio_ops!{pub DISBALE =
+    // CMD = 0x22 [NoDMA, !Start, Stop]
+    LOAD_IMM.B R0, 0x21;
+    OUT.B regs::APG_CMD as _, R0;
+    END_IMM 0;
+}
 
 // NOTE: This expects `rx_next_page` as the input memory buffer
 ::udi::define_pio_ops!{pub RX =

@@ -31,6 +31,7 @@ impl Default for Driver {
 struct PioHandles {
 	reset: ::udi::pio::Handle,
 	enable: ::udi::pio::Handle,
+	disable: ::udi::pio::Handle,
 	rx: ::udi::pio::Handle,
 	tx: ::udi::pio::Handle,
 	irq_ack: ::udi::pio::Handle,
@@ -104,6 +105,7 @@ impl ::udi::meta_bus::BusDevice for ::udi::init::RData<Driver>
 			let pio_map = |trans_list| ::udi::pio::map(cb.gcb(), 0/*UDI_PCI_BAR_0*/, 0x00,0x20, trans_list, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0.into());
 			self.pio_handles.reset   = pio_map(&pio_ops::RESET).await;
 			self.pio_handles.enable  = pio_map(&pio_ops::ENABLE).await;
+			self.pio_handles.disable = pio_map(&pio_ops::DISBALE).await;
 			self.pio_handles.rx      = pio_map(&pio_ops::RX).await;
 			self.pio_handles.tx      = pio_map(&pio_ops::TX).await;
 			self.pio_handles.irq_ack = pio_map(&pio_ops::IRQACK).await;
@@ -171,7 +173,6 @@ impl ::udi::meta_intr::IntrHandler for ::udi::init::RData<Driver>
 					// Ensure that it's big enough for an entire packet
 					buf.ensure_size(cb.gcb(), 1520).await;
 					// Pull the packet off the device
-					let d = &mut **self;
 					match ::udi::pio::trans(
 						cb.gcb(), &self.inner.pio_handles.rx, 0.into(),
 						Some(&mut buf), Some(unsafe { ::udi::pio::MemPtr::new(::core::slice::from_mut(&mut self.inner.rx_next_page)) })
@@ -263,19 +264,17 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 	type Future_disable_req<'s> = impl ::core::future::Future<Output=()> + 's;
     fn disable_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_disable_req<'a> {
         async move {
-			//::udi::pio::trans(cb.gcb(), &self.pio_handles.disable, 0, None, None).await?;
-			//Ok( () )
-			todo!("disable_req");
+			let _ = ::udi::pio::trans(cb.gcb(), &self.dev().pio_handles.disable, 0.into(), None, None).await;
 		}
     }
 
 	type Future_ctrl_req<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn ctrl_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicCtrl<'a>) -> Self::Future_ctrl_req<'a> {
+    fn ctrl_req<'a>(&'a mut self, _cb: ::udi::meta_nic::CbRefNicCtrl<'a>) -> Self::Future_ctrl_req<'a> {
         async move { todo!() }
     }
 
 	type Future_info_req<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn info_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicInfo<'a>, _reset_statistics: bool) -> Self::Future_info_req<'a> {
+    fn info_req<'a>(&'a mut self, _cb: ::udi::meta_nic::CbRefNicInfo<'a>, _reset_statistics: bool) -> Self::Future_info_req<'a> {
         async move { todo!() }
     }
 }
