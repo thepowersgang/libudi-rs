@@ -1,5 +1,4 @@
 pub struct Rtl8029 {
-
 }
 impl Rtl8029 {
     pub fn new_boxed() -> Box<Self> {
@@ -37,6 +36,10 @@ impl super::PioDevice for Rtl8029 {
         {
         _ => {},
         }
-    }
-    
+    }    
+}
+
+struct Regs
+{
+    cmd: u8,    
 }

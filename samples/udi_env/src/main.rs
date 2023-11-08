@@ -1,4 +1,6 @@
 #![feature(impl_trait_in_assoc_type)]
+#![feature(c_variadic)]
+
 use ::std::sync::Arc;
 
 #[macro_use]
@@ -484,7 +486,7 @@ impl DriverRegion
     fn new(region_index: ::udi::ffi::udi_index_t, rdata_size: usize) -> DriverRegion {
         DriverRegion {
             context: unsafe {
-                let v: *mut udi::ffi::init::udi_init_context_t = ::libc::malloc(rdata_size) as *mut ::udi::ffi::init::udi_init_context_t;
+                let v: *mut udi::ffi::init::udi_init_context_t = ::libc::calloc(1, rdata_size) as *mut ::udi::ffi::init::udi_init_context_t;
                 if rdata_size == 0 {
                 }
                 else if rdata_size < ::core::mem::size_of::<::udi::ffi::init::udi_init_context_t>() {

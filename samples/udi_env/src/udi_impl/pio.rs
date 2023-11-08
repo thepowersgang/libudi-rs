@@ -443,11 +443,13 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
                 let pio_reg = ((op.operand >> 7) & 7) as u8;
                 let pio_stride = get_stride(op.operand >> 10);
                 let count_reg = ((op.operand >> 13) & 7) as u8;
+                println!("> {}+{} R{}+{} *R{}", mem_ref, mem_stride, pio_reg, pio_stride, count_reg);
 
                 let orig_mem_val = state.read(mem_ref & 7, 5);
 
                 let count = state.read(count_reg, 1).to_u32();
                 let mut reg = state.read(pio_reg, 1).to_u32();
+                println!("> [{}++{}] {}+{} *{}", orig_mem_val.to_u32(), mem_stride, reg, pio_stride, count);
                 for _ in 0..count {
                     if op.pio_op == REP_OUT_IND {
                         io_state.write(reg, state.read(mem_ref, op.tran_size), op.tran_size);
