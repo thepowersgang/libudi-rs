@@ -1,5 +1,7 @@
 #[derive(Default)]
 struct Driver {
+    ch_rx: ::udi::imc::ChannelHandle,
+    ch_tx: ::udi::imc::ChannelHandle,
 }
 
 impl ::udi::init::Driver for ::udi::init::RData<Driver>
@@ -43,9 +45,27 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 
 impl ::udi::meta_nic::NsrControl for ::udi::init::RData<Driver>
 {
+    type Future_gbc<'s> = impl ::core::future::Future<Output=::udi::meta_nic::BindChannels>;
+    fn get_bind_channels<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicBind<'a>) -> Self::Future_gbc<'a> {
+        async move {
+            let rv = ::udi::meta_nic::BindChannels {
+                rx: 1.into(),
+                tx: 2.into(),
+            };
+            self.ch_rx = ::udi::imc::channel_spawn(cb.gcb(), rv.rx, OpsList::Rx).await;
+            self.ch_tx = ::udi::imc::channel_spawn(cb.gcb(), rv.tx, OpsList::Tx).await;
+            rv
+        }
+    }
+    
     type Future_bind_ack<'s> = impl ::core::future::Future<Output=()>;
     fn bind_ack<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicBind<'a>, res: ::udi::Result<::udi::meta_nic::NicInfo>) -> Self::Future_bind_ack<'a> {
-        async move { todo!() }
+        async move {
+            match res {
+            Ok(v) => println!("--- SINK_NSR: New device, MAC: {:x?}", &v.mac_addr[..v.mac_addr_len as usize]),
+            Err(e) => println!("Error: {:?}", e),
+            }
+        }
     }
 
     type Future_unbind_ack<'s> = impl ::core::future::Future<Output=()>;

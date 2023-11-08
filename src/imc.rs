@@ -3,6 +3,21 @@
 //! 
 use ::udi_sys::imc::udi_channel_event_cb_t;
 
+pub struct ChannelHandle(::udi_sys::udi_channel_t);
+impl Default for ChannelHandle {
+    fn default() -> Self {
+        Self::null()
+    }
+}
+impl ChannelHandle {
+    pub const fn null() -> Self {
+        ChannelHandle(::core::ptr::null_mut())
+    }
+    pub fn raw(&self) -> ::udi_sys::udi_channel_t{
+        self.0
+    }
+}
+
 unsafe impl crate::async_trickery::GetCb for udi_channel_event_cb_t {
     fn get_gcb(&self) -> &::udi_sys::udi_cb_t {
         &self.gcb
@@ -14,7 +29,7 @@ pub fn channel_spawn(
 	cb: crate::CbRef<::udi_sys::udi_cb_t>,
     spawn_idx: ::udi_sys::udi_index_t,
     ops_idx: ::udi_sys::udi_index_t,
-) -> impl ::core::future::Future<Output=::udi_sys::udi_channel_t> {
+) -> impl ::core::future::Future<Output=ChannelHandle> {
 	extern "C" fn callback(gcb: *mut ::udi_sys::udi_cb_t, handle: ::udi_sys::udi_channel_t) {
 		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }
 	}
@@ -25,13 +40,13 @@ pub fn channel_spawn(
 			},
 		|res| {
 			let crate::WaitRes::Pointer(p) = res else { panic!(""); };
-			p as *mut _
+			ChannelHandle(p as *mut _)
 			}
 		)
 }
 
 /// Spawn a new channel (with custom channel and context values)
-pub fn channel_spawn_ex(
+pub unsafe fn channel_spawn_ex(
 	cb: crate::CbRef<::udi_sys::udi_cb_t>,
     channel: ::udi_sys::udi_channel_t,
     spawn_idx: ::udi_sys::udi_index_t,

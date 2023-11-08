@@ -105,7 +105,7 @@ impl ::udi::meta_bus::BusBridge for ::udi::ChildBind<Driver,()>
         async move {
             let channel = ::udi::imc::channel_spawn(cb.gcb(), cb.interrupt_index, OpsList::Interrupt as _).await;
             let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
-            di.device.get().unwrap().set_interrupt_channel(cb.interrupt_index, channel);
+            di.device.get().unwrap().set_interrupt_channel(cb.interrupt_index, channel.raw());
             Ok( () )
         }
     }

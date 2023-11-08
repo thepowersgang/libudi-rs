@@ -5,9 +5,9 @@ mod pio_ops;
 struct Driver
 {
 	pio_handles: PioHandles,
-	intr_channel: ::udi::ffi::udi_channel_t,
-	channel_tx: ::udi::ffi::udi_channel_t,
-	channel_rx: ::udi::ffi::udi_channel_t,
+	intr_channel: ::udi::imc::ChannelHandle,
+	channel_tx: ::udi::imc::ChannelHandle,
+	channel_rx: ::udi::imc::ChannelHandle,
 	rx_cb_queue: ::udi::meta_nic::ReadCbQueue,
 	mac_addr: [u8; 6],
 	rx_next_page: u8,
@@ -17,9 +17,9 @@ impl Default for Driver {
     fn default() -> Self {    
 		Driver {
 			pio_handles: Default::default(),
-			intr_channel: ::core::ptr::null_mut(),
-			channel_tx: ::core::ptr::null_mut(),
-			channel_rx: ::core::ptr::null_mut(),
+			intr_channel: Default::default(),
+			channel_tx: Default::default(),
+			channel_rx: Default::default(),
 			rx_cb_queue: Default::default(),
 			mac_addr: [0; 6],
 			rx_next_page: mem::RX_FIRST_PG,
@@ -122,7 +122,7 @@ impl ::udi::meta_bus::BusDevice for ::udi::init::RData<Driver>
 			//::udi::Error::from_status(self.intr_attach_res.wait().await)?;
 
 			for _ in 0 .. 4/*NE2K_NUM_INTR_EVENT_CBS*/ {
-				let intr_event_cb = ::udi::cb::alloc::<Cbs::IntrEvent>(cb.gcb(), self.intr_channel).await;
+				let intr_event_cb = ::udi::cb::alloc::<Cbs::IntrEvent>(cb.gcb(), self.intr_channel.raw()).await;
 				::udi::meta_intr::event_rdy(intr_event_cb);
 			}
 
