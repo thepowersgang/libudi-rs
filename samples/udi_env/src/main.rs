@@ -6,6 +6,8 @@ mod channels;
 mod udi_impl;
 
 mod bridge_pci;
+mod sink_nsr;
+
 mod management_agent;
 
 mod emulated_devices;
@@ -34,11 +36,16 @@ fn main() {
     };
 
     // ----
-    let driver_module_buspci = unsafe {
+    register_driver_module(&mut state, unsafe {
         let udiprops = ::udiprops_parse::load_from_raw_section(bridge_pci::UDIPROPS.as_bytes());
         ::std::sync::Arc::new( DriverModule::new(&bridge_pci::INIT_INFO_PCI, udiprops) )
-    };
+    });
+    register_driver_module(&mut state, unsafe {
+        let udiprops = ::udiprops_parse::load_from_raw_section(sink_nsr::UDIPROPS.as_bytes());
+        ::std::sync::Arc::new( DriverModule::new(&sink_nsr::INIT_INFO_NSR, udiprops) )
+    });
 
+    // ----
     let driver_module_ne2000 = unsafe {
         let udiprops = ::udiprops_parse::load_from_raw_section({
             let ptr = driver::libudi_rs_udiprops.as_ptr();
@@ -47,8 +54,6 @@ fn main() {
             });
         ::std::sync::Arc::new(DriverModule::new(&driver::udi_init_info, udiprops))
     };
-
-    register_driver_module(&mut state, driver_module_buspci);
     let _ = driver_module_ne2000;
     register_driver_module(&mut state, driver_module_ne2000);
 
@@ -178,7 +183,7 @@ fn check_attributes(filter_attributes: ::udiprops_parse::parsed::AttributeList, 
                 ::udi::ffi::attr::UDI_ATTR_STRING => {
                     let v = &a.attr_value[..a.attr_length as usize];
                     let v = ::std::str::from_utf8(v).unwrap_or("");
-                    println!("{} {:?} == {:?}", attr_name, attr_value, v);
+                    println!("check_attributes: {} {:?} == {:?}", attr_name, attr_value, v);
 
                     match attr_value {
                     ::udiprops_parse::parsed::Attribute::String(val) => val == v,
@@ -187,7 +192,7 @@ fn check_attributes(filter_attributes: ::udiprops_parse::parsed::AttributeList, 
                     }
                 ::udi::ffi::attr::UDI_ATTR_ARRAY8 => {
                     let v = &a.attr_value[..a.attr_length as usize];
-                    println!("{} {:?} == {:?}", attr_name, attr_value, v);
+                    println!("check_attributes: {} {:?} == {:?}", attr_name, attr_value, v);
                     match attr_value {
                     ::udiprops_parse::parsed::Attribute::Array8(val) => val == v,
                     _ => false,
@@ -195,7 +200,7 @@ fn check_attributes(filter_attributes: ::udiprops_parse::parsed::AttributeList, 
                     }
                 ::udi::ffi::attr::UDI_ATTR_UBIT32 => {
                     let v = u32::from_le_bytes(a.attr_value[..4].try_into().unwrap());
-                    println!("{} {:?} == {:?}", attr_name, attr_value, v);
+                    println!("check_attributes: {} {:?} == {:?}", attr_name, attr_value, v);
                     match attr_value {
                     ::udiprops_parse::parsed::Attribute::Ubit32(val) => val == v,
                     _ => false,
@@ -264,6 +269,10 @@ fn maybe_child_bind(
         channels::anchor(channel_parent, parent.clone(), ops, context);
     }
 
+    println!("maybe_child_bind: Creating instance of `{}` bound to {} #{}",
+        driver_module.name(),
+        parent.module.name(), child.child_id
+        );
     Some( create_driver_instance(driver_module.clone(), Some(channel_child)) )
 }
 
@@ -344,6 +353,15 @@ impl<'a> DriverModule<'a> {
             }
         }
         rv
+    }
+
+    fn name(&self) -> &str {
+        for p in self.udiprops.clone() {
+            if let ::udiprops_parse::Entry::Name(n) = p {
+                return self.get_message(n).unwrap_or("BADMSG");
+            }
+        }
+        return "?";
     }
 
     fn get_region_index(&self, region_idx: ::udi::ffi::udi_index_t) -> Option<usize> {
