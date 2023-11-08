@@ -213,6 +213,8 @@ pub struct RData<T> {
 	is_init: bool,
     pub inner: T,
 }
+impl<Driver> crate::imc::ChannelInit for RData<Driver> {
+}
 impl<Driver> crate::async_trickery::CbContext for RData<Driver>
 {
     fn channel_cb_slot(&mut self) -> &mut *mut crate::ffi::imc::udi_channel_event_cb_t {

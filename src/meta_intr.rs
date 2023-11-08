@@ -12,7 +12,7 @@ pub fn event_rdy(cb: super::cb::CbHandle<udi_intr_event_cb_t>) {
 pub type CbRefEvent<'a> = crate::CbRef<'a, udi_intr_event_cb_t>;
 pub type CbHandleEvent<'a> = crate::cb::CbHandle<udi_intr_event_cb_t>;
 
-pub trait IntrHandler: 'static + crate::async_trickery::CbContext
+pub trait IntrHandler: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit
 {
     async_method!(fn intr_event_ind(&'a mut self, cb: CbRefEvent<'a>, flags: u8)->() as Future_intr_event_ind);
 }
@@ -21,10 +21,6 @@ impl<T> crate::imc::ChannelHandler<MarkerIntrHandler> for T
 where
     T: IntrHandler
 {
-    fn channel_closed(&mut self) {
-    }
-    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
-    }
 }
 
 
@@ -57,7 +53,7 @@ where
 }
 
 
-pub trait IntrDispatcher: 'static + crate::async_trickery::CbContext
+pub trait IntrDispatcher: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit
 {
     async_method!(fn intr_event_rdy(&'a mut self, cb: CbHandleEvent)->() as Future_intr_event_rdy);
 }
@@ -66,10 +62,6 @@ impl<T> crate::imc::ChannelHandler<MarkerIntrDispatcher> for T
 where
     T: IntrDispatcher
 {
-    fn channel_closed(&mut self) {
-    }
-    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
-    }
 }
 
 

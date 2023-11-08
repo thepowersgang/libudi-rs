@@ -33,7 +33,7 @@ pub enum PreferredEndianness {
 }
 
 /// Trait for a device on a bus
-pub trait BusDevice: 'static + crate::async_trickery::CbContext {
+pub trait BusDevice: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
     async_method!(fn bus_bind_ack(&'a mut self,
         cb: crate::CbRef<'a, udi_bus_bind_cb_t>,
         dma_constraints: crate::ffi::physio::udi_dma_constraints_t,
@@ -51,8 +51,6 @@ impl<T> crate::imc::ChannelHandler<MarkerBusDevice> for T
 where
     T: BusDevice,
 {
-    fn channel_closed(&mut self) {
-    }
     fn channel_bound(&mut self, params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
         // SAFE: Trusting that this trait is only being used through proper config.
         unsafe {
@@ -72,16 +70,6 @@ impl<T> crate::imc::ChannelHandler<MarkerBusBridge> for T
 where
     T: BusBridge
 {
-    fn channel_closed(&mut self) {
-    }
-    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
-        // SAFE: Trusting that this trait is only being used through proper config.
-        unsafe { crate::imc::ChannelInit::init(self); }
-        // SAFE: Trusting that this trait is only being used through proper config.
-        //unsafe {
-        //    crate::ffi::meta_bus::udi_bus_bind_req(params.parent_bound.bind_cb as *mut udi_bus_bind_cb_t);
-        //}
-    }
 }
 
 future_wrapper!(bus_bind_ack_op => <T as BusDevice>(

@@ -120,7 +120,7 @@ pub enum OpsNum
     NsrRx,
 }
 
-pub trait Control: 'static + crate::async_trickery::CbContext {
+pub trait Control: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
     async_method!(fn bind_req(&'a mut self, cb: CbRefNicBind<'a>, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->crate::Result<NicInfo> as Future_bind_req);
     async_method!(fn unbind_req(&'a mut self, cb: CbRefNic<'a>)->() as Future_unbind_req);
     async_method!(fn enable_req(&'a mut self, cb: CbRefNic<'a>)->crate::Result<()> as Future_enable_req);
@@ -133,10 +133,6 @@ impl<T> crate::imc::ChannelHandler<MarkerControl> for T
 where
     T: Control
 {
-    fn channel_closed(&mut self) {
-    }
-    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
-    }
 }
 
 future_wrapper!(nd_bind_req_op => <T as Control>(cb: *mut ffi::udi_nic_bind_cb_t, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)
@@ -221,7 +217,13 @@ where
 
 // --------------------------------------------------------------------
 
-pub trait NsrControl: 'static + crate::async_trickery::CbContext {
+pub struct BindChannels {
+    pub tx: udi_index_t,
+    pub rx: udi_index_t,
+}
+
+pub trait NsrControl: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
+    async_method!(fn get_bind_channels(&'a mut self, cb: CbRefNicBind<'a>)->BindChannels as Future_gbc);
     async_method!(fn bind_ack(&'a mut self, cb: CbRefNicBind<'a>, res: crate::Result<NicInfo>)->() as Future_bind_ack);
     async_method!(fn unbind_ack(&'a mut self, cb: CbRefNic<'a>, res: crate::Result<()>)->() as Future_unbind_ack);
     async_method!(fn enable_ack(&'a mut self, cb: CbRefNic<'a>, res: crate::Result<()>)->() as Future_enable_ack);
@@ -229,14 +231,23 @@ pub trait NsrControl: 'static + crate::async_trickery::CbContext {
     async_method!(fn info_ack(&'a mut self, cb: CbRefNicInfo<'a>)->() as Future_info_ack);
     async_method!(fn status_ind(&'a mut self, cb: CbRefNicStatus<'a>)->() as Future_status_ind);
 }
+future_wrapper!(nsr_channel_bound => <T as NsrControl>(cb: *mut ffi::udi_nic_bind_cb_t) val @ {
+    crate::async_trickery::with_ack(
+        val.get_bind_channels(cb),
+        |cb,chans| unsafe { ffi::udi_nd_bind_req(cb, chans.tx, chans.rx) },
+    )
+});
 struct MarkerNsrControl;
 impl<T> crate::imc::ChannelHandler<MarkerNsrControl> for T
 where
     T: NsrControl
 {
-    fn channel_closed(&mut self) {
-    }
-    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
+    fn channel_bound(&mut self, params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
+        // Start a UDI async using the bind CB
+        unsafe {
+            let cb = params.parent_bound.bind_cb as *mut ffi::udi_nic_bind_cb_t;
+            nsr_channel_bound::<T>(cb)
+        }
     }
 }
 
@@ -244,11 +255,26 @@ future_wrapper!(nsr_bind_ack_op => <T as NsrControl>(cb: *mut ffi::udi_nic_bind_
     let res = match crate::Error::from_status(status)
         {
         Err(e) => Err(e),
-        Ok(()) => {
-            todo!("");
-            },
+        Ok(()) => Ok(NicInfo {
+            media_type: match cb.media_type
+                {
+                0 => ffi::MediaType::UDI_NIC_ETHER,
+                _ => todo!("MediaType"),
+                },
+            min_pdu_size: cb.min_pdu_size,
+            max_pdu_size: cb.max_pdu_size,
+            rx_hw_threshold: cb.rx_hw_threshold,
+            capabilities: cb.capabilities,
+            max_perfect_multicast: cb.max_perfect_multicast,
+            max_total_multicast: cb.max_total_multicast,
+            mac_addr_len: cb.mac_addr_len,
+            mac_addr: cb.mac_addr,
+            }),
         };
-    val.bind_ack(cb, res)
+    crate::async_trickery::with_ack(
+        val.bind_ack(cb, res),
+        |cb,()| unsafe { crate::async_trickery::channel_event_complete::<T,ffi::udi_nic_bind_cb_t>(cb, ::udi_sys::UDI_OK as _) }
+        )
 });
 future_wrapper!(nsr_unbind_ack_op => <T as NsrControl>(cb: *mut ffi::udi_nic_cb_t, status: ::udi_sys::udi_status_t) val @ {
     val.unbind_ack(cb, crate::Error::from_status(status))
@@ -283,6 +309,8 @@ where
         let v = crate::const_max(v, nsr_ctrl_ack_op::task_size::<T>());
         let v = crate::const_max(v, nsr_info_ack_op::task_size::<T>());
         let v = crate::const_max(v, nsr_status_ind_op::task_size::<T>());
+
+        let v = crate::const_max(v, nsr_channel_bound::task_size::<T>());
         v
     }
     /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
@@ -302,7 +330,7 @@ where
 
 // --------------------------------------------------------------------
 
-pub trait NdTx: 'static + crate::async_trickery::CbContext {
+pub trait NdTx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
     async_method!(fn tx_req(&'a mut self, cb: CbHandleNicTx)->() as Future_tx_req);
     async_method!(fn exp_tx_req(&'a mut self, cb: CbHandleNicTx)->() as Future_exp_tx_req);
 }
@@ -311,10 +339,6 @@ impl<T> crate::imc::ChannelHandler<MarkerNdTx> for T
 where
     T: NdTx
 {
-    fn channel_closed(&mut self) {
-    }
-    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
-    }
 }
 
 future_wrapper!(nd_tx_req_op => <T as NdTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
@@ -348,7 +372,7 @@ where
 
 // --------------------------------------------------------------------
 
-pub trait NsrTx: 'static + crate::async_trickery::CbContext {
+pub trait NsrTx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
     async_method!(fn tx_rdy(&'a mut self, cb: CbHandleNicTx)->() as Future_tx_rdy);
 }
 struct MarkerNsrTx;
@@ -356,8 +380,6 @@ impl<T> crate::imc::ChannelHandler<MarkerNsrTx> for T
 where
     T: NsrTx
 {
-    fn channel_closed(&mut self) {}
-    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {}
 }
 
 future_wrapper!(nsr_tx_rdy_op => <T as NsrTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
@@ -386,7 +408,7 @@ where
 
 // --------------------------------------------------------------------
 
-pub trait NdRx: 'static + crate::async_trickery::CbContext {
+pub trait NdRx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
     async_method!(fn rx_rdy(&'a mut self, cb: CbHandleNicRx)->() as Future_rx_rdy);
 }
 struct MarkerNdRx;
@@ -394,10 +416,6 @@ impl<T> crate::imc::ChannelHandler<MarkerNdRx> for T
 where
     T: NdRx
 {
-    fn channel_closed(&mut self) {
-    }
-    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
-    }
 }
 future_wrapper!(nd_rx_rdy_op => <T as NdRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
     val.rx_rdy(unsafe { cb.into_owned() })
@@ -425,7 +443,7 @@ where
 
 // --------------------------------------------------------------------
 
-pub trait NsrRx: 'static + crate::async_trickery::CbContext {
+pub trait NsrRx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
     async_method!(fn rx_ind(&'a mut self, cb: CbHandleNicRx)->() as Future_rx_ind);
     async_method!(fn exp_rx_ind(&'a mut self, cb: CbHandleNicRx)->() as Future_exp_rx_ind);
 }
@@ -434,8 +452,6 @@ impl<T> crate::imc::ChannelHandler<MarkerNsrRx> for T
 where
     T: NsrRx
 {
-    fn channel_closed(&mut self) {}
-    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {}
 }
 future_wrapper!(nsr_rx_ind_op => <T as NsrRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
     val.rx_ind(unsafe { cb.into_owned() })
