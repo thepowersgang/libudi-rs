@@ -102,7 +102,7 @@ impl ::udi::meta_bus::BusDevice for ::udi::init::RData<Driver>
 		_status: ::udi::ffi::udi_status_t
 	) -> Self::Future_bind_ack<'a> {
 		async move {
-			unsafe { ::udi::ffi::log::udi_debug_printf("bus_bind_ack: %p".as_ptr() as _, &*self); }
+			::udi::debug_printf!("NIC bus_bind_ack: %p", &*self);
 			let pio_map = |trans_list| ::udi::pio::map(cb.gcb(), 0/*UDI_PCI_BAR_0*/, 0x00,0x20, trans_list, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0.into());
 			self.pio_handles.reset   = pio_map(&pio_ops::RESET).await;
 			self.pio_handles.enable  = pio_map(&pio_ops::ENABLE).await;
@@ -131,6 +131,7 @@ impl ::udi::meta_bus::BusDevice for ::udi::init::RData<Driver>
 			let d = &mut **self;
 			::udi::pio::trans(cb.gcb(), &d.pio_handles.reset, 0.into(), None, Some(unsafe { ::udi::pio::MemPtr::new(&mut d.mac_addr) })).await?;
 
+			::udi::debug_printf!("NIC bus_bind_ack (RET): %p", &*self);
 			// Binding is complete!
 			Ok( () )
 		}
@@ -224,9 +225,14 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 	type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::Result<::udi::meta_nic::NicInfo>> + 's;
     fn bind_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicBind<'a>, tx_chan_index: udi::ffi::udi_index_t, rx_chan_index: udi::ffi::udi_index_t) -> Self::Future_bind_req<'a> {
         async move {
-			unsafe { ::udi::ffi::log::udi_debug_printf("NIC bind_req: %p %p".as_ptr() as _, &*self, self.dev()); }
+			::udi::debug_printf!("NIC bind_req: %p %p", &*self, self.dev());
 			self.dev_mut().channel_tx = ::udi::imc::channel_spawn(cb.gcb(), tx_chan_index, OpsList::Tx as _).await;
 			self.dev_mut().channel_rx = ::udi::imc::channel_spawn(cb.gcb(), rx_chan_index, OpsList::Rx as _).await;
+			::udi::debug_printf!("NIC mac_addr = %02x:%02x:%02x:%02x:%02x:%02x",
+				self.dev().mac_addr[0] as _, self.dev().mac_addr[1] as _, self.dev().mac_addr[2] as _,
+				self.dev().mac_addr[3] as _, self.dev().mac_addr[4] as _, self.dev().mac_addr[5] as _,
+				);
+			//::udi::debug_printf!("NIC ether_type = %s", "eth\0".as_ptr() as *const i8);
 			Ok(::udi::meta_nic::NicInfo {
 				media_type: ::udi::ffi::meta_nic::MediaType::UDI_NIC_ETHER,
 				min_pdu_size: 0,

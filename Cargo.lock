@@ -55,6 +55,7 @@ name = "udi"
 version = "0.1.0"
 dependencies = [
  "udi-sys",
+ "udi_macros",
 ]
 
 [[package]]
@@ -81,7 +82,7 @@ name = "udi-sys"
 version = "0.1.0"
 
 [[package]]
-name = "udi_layout_derive"
+name = "udi_macros"
 version = "0.1.0"
 dependencies = [
  "quote",

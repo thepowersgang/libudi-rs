@@ -24,6 +24,8 @@ pub mod metalang_trait;
 
 pub use cb::CbRef;
 
+pub use ::udi_macros::debug_printf;
+//pub use ::udi_macros::GetLayout;
 pub use ::udi_sys as ffi;
 
 pub mod buf;
