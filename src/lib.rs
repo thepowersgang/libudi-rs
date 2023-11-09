@@ -208,10 +208,10 @@ impl<Driver,ChildData> ChildBind<Driver,ChildData>
 		self.inner.child_id
 	}
 	pub fn dev(&self) -> &Driver {
-		unsafe { &*(self.inner.rdata as *const Driver) }
+		unsafe { & (*(self.inner.rdata as *const crate::init::RData<Driver>)).inner }
 	}
 	pub fn dev_mut(&mut self) -> &mut Driver {
-		unsafe { &mut *(self.inner.rdata as *mut Driver) }
+		unsafe { &mut (*(self.inner.rdata as *mut crate::init::RData<Driver>)).inner }
 	}
 }
 impl<Driver,ChildData> ::core::ops::Deref for ChildBind<Driver,ChildData>
