@@ -329,16 +329,8 @@ impl<'a> DriverModule<'a> {
             cbs: terminated_list(init.cb_init_list, |cbi: &udi::ffi::init::udi_cb_init_t| cbi.cb_idx.0 == 0),
             udiprops: udiprops.clone(),
         };
-        if true {
-            if let Some(pi) = init.primary_init_info {
-                dbg!(pi.mgmt_ops.devmgmt_req_op);
-            }
-            dbg!(rv.ops.len());
-            for o in rv.ops {
-                dbg!(*o.ops_vector);
-            }
-        }
 
+        // TODO: Pre-cache/check some entries
         #[cfg(false_)]
         for ent in udiprops.clone()
         {

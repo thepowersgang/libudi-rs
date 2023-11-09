@@ -102,7 +102,7 @@ impl ::udi::meta_bus::BusDevice for ::udi::init::RData<Driver>
 		_status: ::udi::ffi::udi_status_t
 	) -> Self::Future_bind_ack<'a> {
 		async move {
-			::udi::debug_printf!("NIC bus_bind_ack: %p", &*self);
+			::udi::debug_printf!("NIC bus_bind_ack: self(%p)", &*self);
 			let pio_map = |trans_list| ::udi::pio::map(cb.gcb(), 0/*UDI_PCI_BAR_0*/, 0x00,0x20, trans_list, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0.into());
 			self.pio_handles.reset   = pio_map(&pio_ops::RESET).await;
 			self.pio_handles.enable  = pio_map(&pio_ops::ENABLE).await;
