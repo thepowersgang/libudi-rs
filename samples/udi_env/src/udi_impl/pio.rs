@@ -283,6 +283,20 @@ impl PioMemState<'_> {
         val
     }
 }
+struct MemRef(u8);
+impl ::core::fmt::Display for MemRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 & 0x18
+        {
+        ::udi::ffi::pio::UDI_PIO_DIRECT => write!(f, "R{}", self.0 & 0x7),
+        ::udi::ffi::pio::UDI_PIO_SCRATCH => write!(f, "[scratch R{}]", self.0 & 0x7),
+        ::udi::ffi::pio::UDI_PIO_BUF => write!(f, "[buf R{}]", self.0 & 0x7),
+        ::udi::ffi::pio::UDI_PIO_MEM => write!(f, "[mem R{}]", self.0 & 0x7),
+        _ => unreachable!(),
+        }
+    }
+}
+
 struct PioDevState<'a> {
     dev: &'a dyn crate::emulated_devices::PioDevice,
     regset_idx: u32,
@@ -293,10 +307,7 @@ struct PioDevState<'a> {
     _data_ordering: DataOrdering,
 }
 impl PioDevState<'_> {
-    // PILE OF HACK:
-    // - This is set up to semi-emulate a NE2000
     fn read(&self, reg: u32, size: u8) -> RegVal {
-        println!("PIO Read {:#x}+{:#x},l={}", self.base_offset, reg, 1<<size);
         assert!(size <= 5);
         assert!(self.base_offset + reg + 1 << size <= self.length);
         let mut rv = RegVal::default();
@@ -309,6 +320,7 @@ impl PioDevState<'_> {
             DataTranslation::LittleEndian => {},
             }
         }
+        println!("PIO Read {:#x}+{:#x},l={} - {:?}", self.base_offset, reg, 1<<size, &rv.bytes[..1<<size]);
         rv
     }
     fn write(&mut self, reg: u32, mut val: RegVal, size: u8) {
@@ -379,6 +391,7 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
             {
             0x00 ..= 0x7F => unreachable!(),
             LOAD_IMM => {
+                println!("> LOAD_IMM R{} {:#x}", op.pio_op&7, op.operand);
                 state.write(op.pio_op & 7, RegVal::from_u16(op.operand), op.tran_size);
                 },
             CSKIP => {
@@ -442,8 +455,8 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
                 let mem_stride = get_stride(op.operand >> 5);
                 let pio_reg = ((op.operand >> 7) & 7) as u8;
                 let pio_stride = get_stride(op.operand >> 10);
-                let count_reg = ((op.operand >> 13) & 7) as u8;
-                println!("> {}+{} R{}+{} *R{}", mem_ref, mem_stride, pio_reg, pio_stride, count_reg);
+                let count_reg = ((op.operand >> 12) & 7) as u8;
+                println!("{} {}+{} R{}+{} *R{}", if op.pio_op == REP_OUT_IND { "REP_OUT_IND" } else { "REP_IN_IND" }, MemRef(mem_ref), mem_stride, pio_reg, pio_stride, count_reg);
 
                 let orig_mem_val = state.read(mem_ref & 7, 5);
 
