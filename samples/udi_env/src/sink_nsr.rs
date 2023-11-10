@@ -36,7 +36,7 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
     }
 
     type Future_devmgmt<'s> = impl ::core::future::Future<Output=::udi::Result<u8>> + 's;
-    fn devmgmt_req<'s>(&'s mut self, cb: udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, parent_id: udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
+    fn devmgmt_req<'s>(&'s mut self, _cb: udi::init::CbRefMgmt<'s>, _mgmt_op: udi::init::MgmtOp, _parent_id: udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
         async move {
             todo!("devmgmt_req");
         }
@@ -59,7 +59,7 @@ impl ::udi::meta_nic::NsrControl for ::udi::init::RData<Driver>
     }
     
     type Future_bind_ack<'s> = impl ::core::future::Future<Output=()>;
-    fn bind_ack<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicBind<'a>, res: ::udi::Result<::udi::meta_nic::NicInfo>) -> Self::Future_bind_ack<'a> {
+    fn bind_ack<'a>(&'a mut self, _cb: ::udi::meta_nic::CbRefNicBind<'a>, res: ::udi::Result<::udi::meta_nic::NicInfo>) -> Self::Future_bind_ack<'a> {
         async move {
             match res {
             Ok(v) => println!("--- SINK_NSR: New device, MAC: {:x?}", &v.mac_addr[..v.mac_addr_len as usize]),
@@ -69,47 +69,47 @@ impl ::udi::meta_nic::NsrControl for ::udi::init::RData<Driver>
     }
 
     type Future_unbind_ack<'s> = impl ::core::future::Future<Output=()>;
-    fn unbind_ack<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNic<'a>, res: ::udi::Result<()>) -> Self::Future_unbind_ack<'a> {
-        async move { todo!() }
+    fn unbind_ack<'a>(&'a mut self, _cb: ::udi::meta_nic::CbRefNic<'a>, _res: ::udi::Result<()>) -> Self::Future_unbind_ack<'a> {
+        async move { todo!("unbind_ack") }
     }
 
     type Future_enable_ack<'s> = impl ::core::future::Future<Output=()>;
-    fn enable_ack<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNic<'a>, res: ::udi::Result<()>) -> Self::Future_enable_ack<'a> {
-        async move { todo!() }
+    fn enable_ack<'a>(&'a mut self, _cb: ::udi::meta_nic::CbRefNic<'a>, _res: ::udi::Result<()>) -> Self::Future_enable_ack<'a> {
+        async move { todo!("enable_ack") }
     }
 
     type Future_ctrl_ack<'s> = impl ::core::future::Future<Output=()>;
-    fn ctrl_ack<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicCtrl<'a>, res: ::udi::Result<()>) -> Self::Future_ctrl_ack<'a> {
-        async move { todo!() }
+    fn ctrl_ack<'a>(&'a mut self, _cb: ::udi::meta_nic::CbRefNicCtrl<'a>, _res: ::udi::Result<()>) -> Self::Future_ctrl_ack<'a> {
+        async move { todo!("ctrl_ack") }
     }
 
     type Future_info_ack<'s> = impl ::core::future::Future<Output=()>;
-    fn info_ack<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicInfo<'a>) -> Self::Future_info_ack<'a> {
-        async move { todo!() }
+    fn info_ack<'a>(&'a mut self, _cb: ::udi::meta_nic::CbRefNicInfo<'a>) -> Self::Future_info_ack<'a> {
+        async move { todo!("info_ack") }
     }
 
     type Future_status_ind<'s> = impl ::core::future::Future<Output=()>;
-    fn status_ind<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicStatus<'a>) -> Self::Future_status_ind<'a> {
-        async move { todo!() }
+    fn status_ind<'a>(&'a mut self, _cb: ::udi::meta_nic::CbRefNicStatus<'a>) -> Self::Future_status_ind<'a> {
+        async move { todo!("status_ind") }
     }
 }
 impl ::udi::meta_nic::NsrTx for ::udi::init::RData<Driver>
 {
     type Future_tx_rdy<'s> = impl ::core::future::Future<Output=()>;
-    fn tx_rdy<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_tx_rdy<'a> {
-        async move { todo!() }
+    fn tx_rdy<'a>(&'a mut self, _cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_tx_rdy<'a> {
+        async move { todo!("tx_rdy") }
     }
 }
 impl ::udi::meta_nic::NsrRx for ::udi::init::RData<Driver>
 {
     type Future_rx_ind<'s> = impl ::core::future::Future<Output=()>;
-    fn rx_ind<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_rx_ind<'a> {
-        async move { todo!() }
+    fn rx_ind<'a>(&'a mut self, _cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_rx_ind<'a> {
+        async move { todo!("rx_ind") }
     }
 
     type Future_exp_rx_ind<'s> = impl ::core::future::Future<Output=()>;
-    fn exp_rx_ind<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_exp_rx_ind<'a> {
-        async move { todo!() }
+    fn exp_rx_ind<'a>(&'a mut self, _cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_exp_rx_ind<'a> {
+        async move { todo!("exp_rx_ind") }
     }
 }
 
