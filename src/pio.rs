@@ -394,7 +394,7 @@ macro_rules! define_pio_ops
 	// Group B
 	(@b $size:ident, $opname:ident, $regname:ident, $val:expr) => {
 		$crate::ffi::pio::udi_pio_trans_t {
-			pio_op: $crate::pio::vals::ops_group_b::$opname|$crate::ffi::pio::UDI_PIO_DIRECT,
+			pio_op: $crate::pio::vals::ops_group_b::$opname|$crate::pio::vals::regs::$regname|$crate::ffi::pio::UDI_PIO_DIRECT,
 			tran_size: $crate::pio::vals::size::$size,
 			operand: $val
 		}
