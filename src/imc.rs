@@ -13,6 +13,9 @@ impl ChannelHandle {
     pub const fn null() -> Self {
         ChannelHandle(::core::ptr::null_mut())
     }
+    pub const unsafe fn from_raw(h: ::udi_sys::udi_channel_t) -> Self {
+        ChannelHandle(h)
+    }
     pub fn raw(&self) -> ::udi_sys::udi_channel_t{
         self.0
     }

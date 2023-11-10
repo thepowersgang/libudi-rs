@@ -10,7 +10,7 @@ pub fn event_rdy(cb: super::cb::CbHandle<udi_intr_event_cb_t>) {
 }
 
 pub type CbRefEvent<'a> = crate::CbRef<'a, udi_intr_event_cb_t>;
-pub type CbHandleEvent<'a> = crate::cb::CbHandle<udi_intr_event_cb_t>;
+pub type CbHandleEvent = crate::cb::CbHandle<udi_intr_event_cb_t>;
 
 pub trait IntrHandler: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit
 {

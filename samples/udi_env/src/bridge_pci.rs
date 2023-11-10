@@ -105,7 +105,7 @@ impl ::udi::meta_bus::BusBridge for ::udi::ChildBind<Driver,()>
         async move {
             let channel = ::udi::imc::channel_spawn(cb.gcb(), cb.interrupt_index, OpsList::Interrupt as _).await;
             let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
-            di.device.get().unwrap().set_interrupt_channel(cb.interrupt_index, channel.raw());
+            di.device.get().unwrap().set_interrupt_channel(cb.interrupt_index, channel);
             Ok( () )
         }
     }
@@ -114,7 +114,7 @@ impl ::udi::meta_bus::BusBridge for ::udi::ChildBind<Driver,()>
     fn intr_detach_req<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_req<'a> {
         async move {
             let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
-            di.device.get().unwrap().set_interrupt_channel(cb.interrupt_idx, ::core::ptr::null_mut());
+            di.device.get().unwrap().set_interrupt_channel(cb.interrupt_idx, ::udi::imc::ChannelHandle::null());
         }
     }
 }

@@ -1,9 +1,8 @@
 use ::udi::ffi::udi_index_t;
-use ::udi::ffi::udi_channel_t;
 
 pub trait PioDevice
 {
-    fn set_interrupt_channel(&self, index: udi_index_t, channel: udi_channel_t);
+    fn set_interrupt_channel(&self, index: udi_index_t, channel: ::udi::imc::ChannelHandle);
     fn push_intr_cb(&self, index: udi_index_t, cb: ::udi::meta_intr::CbHandleEvent);
 
     fn pio_read(&self, regset_idx: u32, reg: u32, dst: &mut [u8]);
