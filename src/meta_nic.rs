@@ -182,36 +182,20 @@ future_wrapper!(nd_info_req_op => <T as Control>(cb: *mut ffi::udi_nic_info_cb_t
     val.info_req(cb, reset_statistics.to_bool())
 });
 
-impl<T,CbList> crate::OpsStructure<ffi::udi_nd_ctrl_ops_t, T,CbList>
-where
-	T: Control,
-    CbList: crate::HasCb<ffi::udi_nic_cb_t>,
-    CbList: crate::HasCb<ffi::udi_nic_bind_cb_t>,
-    CbList: crate::HasCb<ffi::udi_nic_ctrl_cb_t>,
-    CbList: crate::HasCb<ffi::udi_nic_info_cb_t>,
-{
-    pub const fn scratch_requirement() -> usize {
-        let v = crate::imc::task_size::<T, MarkerControl>();
-        let v = crate::const_max(v, nd_bind_req_op::task_size::<T>());
-        let v = crate::const_max(v, nd_unbind_req_op::task_size::<T>());
-        let v = crate::const_max(v, nd_enable_req_op::task_size::<T>());
-        let v = crate::const_max(v, nd_disable_req_op::task_size::<T>());
-        let v = crate::const_max(v, nd_ctrl_req_op::task_size::<T>());
-        let v = crate::const_max(v, nd_info_req_op::task_size::<T>());
-        v
+map_ops_structure!{
+    ffi::udi_nd_ctrl_ops_t => Control,MarkerControl {
+        nd_bind_req_op,
+        nd_unbind_req_op,
+        nd_enable_req_op,
+        nd_disable_req_op,
+        nd_ctrl_req_op,
+        nd_info_req_op,
     }
-    /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
-    /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
-    pub const unsafe fn for_driver() -> ffi::udi_nd_ctrl_ops_t {
-        ffi::udi_nd_ctrl_ops_t {
-            channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerControl>,
-            nd_bind_req_op: nd_bind_req_op::<T>,
-            nd_unbind_req_op: nd_unbind_req_op::<T>,
-            nd_enable_req_op: nd_enable_req_op::<T>,
-            nd_disable_req_op: nd_disable_req_op::<T>,
-            nd_ctrl_req_op: nd_ctrl_req_op::<T>,
-            nd_info_req_op: nd_info_req_op::<T>,
-        }
+    CBS {
+        ffi::udi_nic_cb_t,
+        ffi::udi_nic_bind_cb_t,
+        ffi::udi_nic_ctrl_cb_t,
+        ffi::udi_nic_info_cb_t,
     }
 }
 
@@ -291,41 +275,22 @@ future_wrapper!(nsr_info_ack_op => <T as NsrControl>(cb: *mut ffi::udi_nic_info_
 future_wrapper!(nsr_status_ind_op => <T as NsrControl>(cb: *mut ffi::udi_nic_status_cb_t) val @ {
     val.status_ind(cb)
 });
-
-
-impl<T,CbList> crate::OpsStructure<ffi::udi_nsr_ctrl_ops_t, T,CbList>
-where
-	T: NsrControl,
-    CbList: crate::HasCb<ffi::udi_nic_cb_t>,
-    CbList: crate::HasCb<ffi::udi_nic_bind_cb_t>,
-    CbList: crate::HasCb<ffi::udi_nic_ctrl_cb_t>,
-    CbList: crate::HasCb<ffi::udi_nic_info_cb_t>,
-{
-    pub const fn scratch_requirement() -> usize {
-        let v = crate::imc::task_size::<T, MarkerNsrControl>();
-        let v = crate::const_max(v, nsr_bind_ack_op::task_size::<T>());
-        let v = crate::const_max(v, nsr_unbind_ack_op::task_size::<T>());
-        let v = crate::const_max(v, nsr_enable_ack_op::task_size::<T>());
-        let v = crate::const_max(v, nsr_ctrl_ack_op::task_size::<T>());
-        let v = crate::const_max(v, nsr_info_ack_op::task_size::<T>());
-        let v = crate::const_max(v, nsr_status_ind_op::task_size::<T>());
-
-        let v = crate::const_max(v, nsr_channel_bound::task_size::<T>());
-        v
+map_ops_structure!{
+    ffi::udi_nsr_ctrl_ops_t => NsrControl,MarkerNsrControl {
+        nsr_bind_ack_op,
+        nsr_unbind_ack_op,
+        nsr_enable_ack_op,
+        nsr_ctrl_ack_op,
+        nsr_info_ack_op,
+        nsr_status_ind_op,
     }
-    /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
-    /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
-    pub const unsafe fn for_driver() -> ffi::udi_nsr_ctrl_ops_t {
-        ffi::udi_nsr_ctrl_ops_t {
-            channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerNsrControl>,
-            nsr_bind_ack_op  : nsr_bind_ack_op::<T>,
-            nsr_unbind_ack_op: nsr_unbind_ack_op::<T>,
-            nsr_enable_ack_op: nsr_enable_ack_op::<T>,
-            nsr_ctrl_ack_op  : nsr_ctrl_ack_op::<T>,
-            nsr_info_ack_op  : nsr_info_ack_op::<T>,
-            nsr_status_ind_op: nsr_status_ind_op::<T>,
-        }
+    CBS {
+        ffi::udi_nic_cb_t,
+        ffi::udi_nic_bind_cb_t,
+        ffi::udi_nic_ctrl_cb_t,
+        ffi::udi_nic_info_cb_t,
     }
+    EXTRA_OP nsr_channel_bound
 }
 
 // --------------------------------------------------------------------
@@ -347,29 +312,15 @@ future_wrapper!(nd_tx_req_op => <T as NdTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @
 future_wrapper!(nd_exp_tx_req_op => <T as NdTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
     val.exp_tx_req(unsafe { cb.into_owned() })
 });
-
-impl<T,CbList> crate::OpsStructure<ffi::udi_nd_tx_ops_t, T,CbList>
-where
-	T: NdTx,
-    CbList: crate::HasCb<ffi::udi_nic_tx_cb_t>,
-{
-    pub const fn scratch_requirement() -> usize {
-        let v = crate::imc::task_size::<T, MarkerNdTx>();
-        let v = crate::const_max(v, nd_tx_req_op::task_size::<T>());
-        let v = crate::const_max(v, nd_exp_tx_req_op::task_size::<T>());
-        v
+map_ops_structure!{
+    ffi::udi_nd_tx_ops_t => NdTx,MarkerNdTx {
+        nd_tx_req_op,
+        nd_exp_tx_req_op,
     }
-    /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
-    /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
-    pub const unsafe fn for_driver() -> ffi::udi_nd_tx_ops_t {
-        ffi::udi_nd_tx_ops_t {
-            channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerNdTx>,
-            nd_tx_req_op: nd_tx_req_op::<T>,
-            nd_exp_tx_req_op: nd_exp_tx_req_op::<T>,
-        }
+    CBS {
+        ffi::udi_nic_tx_cb_t,
     }
 }
-
 // --------------------------------------------------------------------
 
 pub trait NsrTx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
@@ -385,24 +336,12 @@ where
 future_wrapper!(nsr_tx_rdy_op => <T as NsrTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
     val.tx_rdy(unsafe { cb.into_owned() })
 });
-
-impl<T,CbList> crate::OpsStructure<ffi::udi_nsr_tx_ops_t, T,CbList>
-where
-	T: NsrTx,
-    CbList: crate::HasCb<ffi::udi_nic_tx_cb_t>,
-{
-    pub const fn scratch_requirement() -> usize {
-        let v = crate::imc::task_size::<T, MarkerNsrTx>();
-        let v = crate::const_max(v, nsr_tx_rdy_op::task_size::<T>());
-        v
+map_ops_structure!{
+    ffi::udi_nsr_tx_ops_t => NsrTx,MarkerNsrTx {
+        nsr_tx_rdy_op,
     }
-    /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
-    /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
-    pub const unsafe fn for_driver() -> ffi::udi_nsr_tx_ops_t {
-        ffi::udi_nsr_tx_ops_t {
-            channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerNsrTx>,
-            nsr_tx_rdy_op: nsr_tx_rdy_op::<T>,
-        }
+    CBS {
+        ffi::udi_nic_tx_cb_t,
     }
 }
 
@@ -420,27 +359,14 @@ where
 future_wrapper!(nd_rx_rdy_op => <T as NdRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
     val.rx_rdy(unsafe { cb.into_owned() })
 });
-
-impl<T,CbList> crate::OpsStructure<ffi::udi_nd_rx_ops_t, T,CbList>
-where
-	T: NdRx,
-    CbList: crate::HasCb<ffi::udi_nic_rx_cb_t>,
-{
-    pub const fn scratch_requirement() -> usize {
-        let v = crate::imc::task_size::<T, MarkerNdRx>();
-        let v = crate::const_max(v, nd_rx_rdy_op::task_size::<T>());
-        v
+map_ops_structure!{
+    ffi::udi_nd_rx_ops_t => NdRx,MarkerNdRx {
+        nd_rx_rdy_op,
     }
-    /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
-    /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
-    pub const unsafe fn for_driver() -> ffi::udi_nd_rx_ops_t {
-        ffi::udi_nd_rx_ops_t {
-            channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerNdRx>,
-            nd_rx_rdy_op: nd_rx_rdy_op::<T>,
-        }
+    CBS {
+        ffi::udi_nic_rx_cb_t,
     }
 }
-
 // --------------------------------------------------------------------
 
 pub trait NsrRx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
@@ -459,29 +385,15 @@ future_wrapper!(nsr_rx_ind_op => <T as NsrRx>(cb: *mut ffi::udi_nic_rx_cb_t) val
 future_wrapper!(nsr_exp_rx_ind_op => <T as NsrRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
     val.exp_rx_ind(unsafe { cb.into_owned() })
 });
-
-impl<T,CbList> crate::OpsStructure<ffi::udi_nsr_rx_ops_t, T,CbList>
-where
-	T: NsrRx,
-    CbList: crate::HasCb<ffi::udi_nic_rx_cb_t>,
-{
-    pub const fn scratch_requirement() -> usize {
-        let v = crate::imc::task_size::<T, MarkerNsrRx>();
-        let v = crate::const_max(v, nsr_rx_ind_op::task_size::<T>());
-        let v = crate::const_max(v, nsr_exp_rx_ind_op::task_size::<T>());
-        v
+map_ops_structure!{
+    ffi::udi_nsr_rx_ops_t => NsrRx,MarkerNsrRx {
+        nsr_rx_ind_op,
+        nsr_exp_rx_ind_op,
     }
-    /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
-    /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
-    pub const unsafe fn for_driver() -> ffi::udi_nsr_rx_ops_t {
-        ffi::udi_nsr_rx_ops_t {
-            channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerNsrRx>,
-            nsr_rx_ind_op: nsr_rx_ind_op::<T>,
-            nsr_exp_rx_ind_op: nsr_exp_rx_ind_op::<T>,
-        }
+    CBS {
+        ffi::udi_nic_rx_cb_t,
     }
 }
-
 
 // --------------------------------------------------------------------
 

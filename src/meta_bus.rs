@@ -102,35 +102,20 @@ future_wrapper!(intr_attach_ack_op => <T as BusDevice>(cb: *mut crate::ffi::meta
 future_wrapper!(intr_detach_ack_op => <T as BusDevice>(cb: *mut crate::ffi::meta_intr::udi_intr_detach_cb_t) val @ {
     val.intr_detach_ack(cb)
 });
-
-impl<T,CbList> crate::OpsStructure<::udi_sys::meta_bus::udi_bus_device_ops_t, T,CbList>
-where
-	T: BusDevice,
-    CbList: crate::HasCb<udi_bus_bind_cb_t>,
-    CbList: crate::HasCb<crate::ffi::meta_intr::udi_intr_attach_cb_t>,
-    CbList: crate::HasCb<crate::ffi::meta_intr::udi_intr_detach_cb_t>,
-{
-    pub const fn scratch_requirement() -> usize {
-        let rv = crate::imc::task_size::<T,MarkerBusDevice>();
-        let rv = crate::const_max(rv, bus_bind_ack_op::task_size::<T>());
-        let rv = crate::const_max(rv, bus_unbind_ack_op::task_size::<T>());
-        let rv = crate::const_max(rv, intr_attach_ack_op::task_size::<T>());
-        let rv = crate::const_max(rv, intr_detach_ack_op::task_size::<T>());
-        rv
+map_ops_structure!{
+    ::udi_sys::meta_bus::udi_bus_device_ops_t => BusDevice,MarkerBusDevice {
+        bus_bind_ack_op,
+        bus_unbind_ack_op,
+        intr_attach_ack_op,
+        intr_detach_ack_op,
     }
-    /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
-    /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
-    pub const unsafe fn for_driver() -> udi_bus_device_ops_t {
-        return udi_bus_device_ops_t {
-            channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerBusDevice>,
-            bus_bind_ack_op: bus_bind_ack_op::<T>,
-            bus_unbind_ack_op: bus_unbind_ack_op::<T>,
-            intr_attach_ack_op: intr_attach_ack_op::<T>,
-            intr_detach_ack_op: intr_detach_ack_op::<T>,
-        };
+    CBS {
+        udi_bus_bind_cb_t,
+        ::udi_sys::meta_intr::udi_intr_attach_cb_t,
+        ::udi_sys::meta_intr::udi_intr_detach_cb_t,
     }
 }
-
+// --------------------------------------------------------------------
 
 future_wrapper!(bus_bind_req_op => <T as BusBridge>(
     cb: *mut udi_bus_bind_cb_t
@@ -173,31 +158,16 @@ future_wrapper!(intr_detach_req_op => <T as BusBridge>(cb: *mut crate::ffi::meta
         |cb,_res| unsafe { crate::ffi::meta_intr::udi_intr_detach_ack(cb) }
         )
 });
-
-impl<T,CbList> crate::OpsStructure<::udi_sys::meta_bus::udi_bus_bridge_ops_t, T,CbList>
-where
-	T: BusBridge,
-    CbList: crate::HasCb<udi_bus_bind_cb_t>,
-    CbList: crate::HasCb<crate::ffi::meta_intr::udi_intr_attach_cb_t>,
-    CbList: crate::HasCb<crate::ffi::meta_intr::udi_intr_detach_cb_t>,
-{
-    pub const fn scratch_requirement() -> usize {
-        let rv = crate::imc::task_size::<T,MarkerBusBridge>();
-        let rv = crate::const_max(rv, bus_bind_req_op::task_size::<T>());
-        let rv = crate::const_max(rv, bus_unbind_req_op::task_size::<T>());
-        let rv = crate::const_max(rv, intr_attach_req_op::task_size::<T>());
-        let rv = crate::const_max(rv, intr_detach_req_op::task_size::<T>());
-        rv
+map_ops_structure!{
+    ::udi_sys::meta_bus::udi_bus_bridge_ops_t => BusBridge,MarkerBusBridge {
+        bus_bind_req_op,
+        bus_unbind_req_op,
+        intr_attach_req_op,
+        intr_detach_req_op,
     }
-    /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
-    /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
-    pub const unsafe fn for_driver() -> udi_bus_bridge_ops_t {
-        return udi_bus_bridge_ops_t {
-            channel_event_ind_op: crate::imc::channel_event_ind_op::<T, MarkerBusBridge>,
-            bus_bind_req_op: bus_bind_req_op::<T>,
-            bus_unbind_req_op: bus_unbind_req_op::<T>,
-            intr_attach_req_op: intr_attach_req_op::<T>,
-            intr_detach_req_op: intr_detach_req_op::<T>,
-        };
+    CBS {
+        udi_bus_bind_cb_t,
+        ::udi_sys::meta_intr::udi_intr_attach_cb_t,
+        ::udi_sys::meta_intr::udi_intr_detach_cb_t,
     }
 }

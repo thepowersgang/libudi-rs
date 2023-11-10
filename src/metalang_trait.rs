@@ -136,3 +136,40 @@ macro_rules! impl_metalanguage
         )*
     };
 }
+
+/// Helper to generate code to create a ops structure based on a trait
+/// 
+/// See [future_wrapper]
+macro_rules! map_ops_structure {
+    (
+        $struct:path => $trait:path,$marker:ty {
+            $($name:ident,)*
+        }
+        CBS {
+            $($cb:ty,)*
+        }
+        $( EXTRA_OP $extra_op:ident );*
+    ) => {
+        impl<T,CbList> crate::OpsStructure<$struct, T,CbList>
+        where
+            T: $trait,
+            $( CbList: crate::HasCb<$cb>, )*
+        {
+            pub const fn scratch_requirement() -> usize {
+                let v = crate::imc::task_size::<T, $marker>();
+                $(let v = crate::const_max(v, $name::task_size::<T>());)*
+                $(let v = crate::const_max(v, $extra_op::task_size::<T>());)*
+                v
+            }
+            /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
+            /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
+            pub const unsafe fn for_driver() -> $struct {
+                $struct {
+                    channel_event_ind_op: crate::imc::channel_event_ind_op::<T, $marker>,
+                    $( $name: $name::<T>, )*
+                }
+            }
+        }
+        
+    };
+}
