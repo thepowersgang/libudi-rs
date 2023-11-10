@@ -208,7 +208,7 @@ pub struct BindChannels {
 
 pub trait NsrControl: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
     async_method!(fn get_bind_channels(&'a mut self, cb: CbRefNicBind<'a>)->BindChannels as Future_gbc);
-    async_method!(fn bind_ack(&'a mut self, cb: CbRefNicBind<'a>, res: crate::Result<NicInfo>)->() as Future_bind_ack);
+    async_method!(fn bind_ack(&'a mut self, cb: CbRefNicBind<'a>, res: crate::Result<()>)->() as Future_bind_ack);
     async_method!(fn unbind_ack(&'a mut self, cb: CbRefNic<'a>, res: crate::Result<()>)->() as Future_unbind_ack);
     async_method!(fn enable_ack(&'a mut self, cb: CbRefNic<'a>, res: crate::Result<()>)->() as Future_enable_ack);
     async_method!(fn ctrl_ack(&'a mut self, cb: CbRefNicCtrl<'a>, res: crate::Result<()>)->() as Future_ctrl_ack);
@@ -236,25 +236,7 @@ where
 }
 
 future_wrapper!(nsr_bind_ack_op => <T as NsrControl>(cb: *mut ffi::udi_nic_bind_cb_t, status: ::udi_sys::udi_status_t) val @ {
-    let res = match crate::Error::from_status(status)
-        {
-        Err(e) => Err(e),
-        Ok(()) => Ok(NicInfo {
-            media_type: match cb.media_type
-                {
-                0 => ffi::MediaType::UDI_NIC_ETHER,
-                _ => todo!("MediaType"),
-                },
-            min_pdu_size: cb.min_pdu_size,
-            max_pdu_size: cb.max_pdu_size,
-            rx_hw_threshold: cb.rx_hw_threshold,
-            capabilities: cb.capabilities,
-            max_perfect_multicast: cb.max_perfect_multicast,
-            max_total_multicast: cb.max_total_multicast,
-            mac_addr_len: cb.mac_addr_len,
-            mac_addr: cb.mac_addr,
-            }),
-        };
+    let res = crate::Error::from_status(status);
     crate::async_trickery::with_ack(
         val.bind_ack(cb, res),
         |cb,()| unsafe { crate::async_trickery::channel_event_complete::<T,ffi::udi_nic_bind_cb_t>(cb, ::udi_sys::UDI_OK as _) }

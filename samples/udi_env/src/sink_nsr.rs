@@ -59,10 +59,10 @@ impl ::udi::meta_nic::NsrControl for ::udi::init::RData<Driver>
     }
     
     type Future_bind_ack<'s> = impl ::core::future::Future<Output=()>;
-    fn bind_ack<'a>(&'a mut self, _cb: ::udi::meta_nic::CbRefNicBind<'a>, res: ::udi::Result<::udi::meta_nic::NicInfo>) -> Self::Future_bind_ack<'a> {
+    fn bind_ack<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicBind<'a>, res: ::udi::Result<()>) -> Self::Future_bind_ack<'a> {
         async move {
             match res {
-            Ok(v) => println!("--- SINK_NSR: New device, MAC: {:x?}", &v.mac_addr[..v.mac_addr_len as usize]),
+            Ok(()) => println!("--- SINK_NSR: New device, MAC: {:x?}", &cb.mac_addr[..cb.mac_addr_len as usize]),
             Err(e) => println!("Error: {:?}", e),
             }
         }
