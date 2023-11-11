@@ -72,17 +72,17 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
     }
 }
 
-pub const UDIPROPS: &'static str = "\
-name 100\0\
-properties_version 0x101\0\
-requires udi_gio 0x101\0\
-meta 1 udi_gio\0\
-device 101 1\0\
-parent_bind_ops 1 0 1 2\0\
-message 100 Sink GIO serial\0\
-message 101 Serial Device\0\
-";
-const META_GIO: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t(1);
+::udi_macros::udiprops!("
+name 100
+properties_version 0x101
+requires udi_gio 0x101
+meta 1 udi_gio
+device 101 1 gio_type str uart
+parent_bind_ops 1 0 1 1
+message 100 Sink GIO serial
+message 101 Serial Device
+");
+const META_GIO: ::udi::ffi::udi_index_t = udiprops::meta::udi_gio;
 ::udi::define_driver! {
     Driver as INIT_INFO_GIOSERIAL;
     ops: {

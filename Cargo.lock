@@ -66,6 +66,7 @@ dependencies = [
  "libc",
  "udi",
  "udi-net_ne2000",
+ "udi_macros",
  "udiprops_parse",
 ]
 

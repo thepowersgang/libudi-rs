@@ -113,30 +113,30 @@ impl ::udi::meta_nic::NsrRx for ::udi::init::RData<Driver>
     }
 }
 
-pub const UDIPROPS: &'static str = "\
-name 100\0\
-properties_version 0x101\0\
-requires udi_nic 0x101\0\
-meta 1 udi_nic\0\
-device 101 1\0\
-parent_bind_ops 1 0 1 2\0\
-message 100 Sink NSR\0\
-message 101 Network Device\0\
-";
-const META_NIC: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t(1);
+::udi_macros::udiprops!("
+name 100
+properties_version 0x101
+requires udi_nic 0x101
+meta 1 udi_nic
+device 101 1
+# Meta 1, region 0, Ops 2 (Ctrl), CB 2 (NicBind)
+parent_bind_ops 1 0 1 2
+message 100 Sink NSR
+message 101 Network Device
+");
 ::udi::define_driver! {
     Driver as INIT_INFO_NSR;
     ops: {
-        Ctrl: Meta=META_NIC, ::udi::ffi::meta_nic::udi_nsr_ctrl_ops_t,
-        Tx  : Meta=META_NIC, ::udi::ffi::meta_nic::udi_nsr_tx_ops_t,
-        Rx  : Meta=META_NIC, ::udi::ffi::meta_nic::udi_nsr_rx_ops_t,
+        Ctrl: Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nsr_ctrl_ops_t,
+        Tx  : Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nsr_tx_ops_t,
+        Rx  : Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nsr_rx_ops_t,
     },
     cbs: {
-        _Nic    : Meta=META_NIC, ::udi::ffi::meta_nic::udi_nic_cb_t,
-        _NicBind: Meta=META_NIC, ::udi::ffi::meta_nic::udi_nic_bind_cb_t,
-        _NicCtrl: Meta=META_NIC, ::udi::ffi::meta_nic::udi_nic_ctrl_cb_t,
-        _NicInfo: Meta=META_NIC, ::udi::ffi::meta_nic::udi_nic_info_cb_t,
-        _NicRx  : Meta=META_NIC, ::udi::ffi::meta_nic::udi_nic_rx_cb_t,
-        _NicTx  : Meta=META_NIC, ::udi::ffi::meta_nic::udi_nic_tx_cb_t,
+        _Nic    : Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nic_cb_t,
+        _NicBind: Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nic_bind_cb_t,
+        _NicCtrl: Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nic_ctrl_cb_t,
+        _NicInfo: Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nic_info_cb_t,
+        _NicRx  : Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nic_rx_cb_t,
+        _NicTx  : Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nic_tx_cb_t,
     }
 }

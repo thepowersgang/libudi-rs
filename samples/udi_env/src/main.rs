@@ -44,11 +44,11 @@ fn main() {
         ::std::sync::Arc::new( DriverModule::new(&bridge_pci::INIT_INFO_PCI, udiprops) )
     });
     register_driver_module(&mut state, unsafe {
-        let udiprops = ::udiprops_parse::load_from_raw_section(sink_nsr::UDIPROPS.as_bytes());
+        let udiprops = ::udiprops_parse::load_from_raw_section(&sink_nsr::udiprops::udiprops);
         ::std::sync::Arc::new( DriverModule::new(&sink_nsr::INIT_INFO_NSR, udiprops) )
     });
     register_driver_module(&mut state, unsafe {
-        let udiprops = ::udiprops_parse::load_from_raw_section(sink_gio_serial::UDIPROPS.as_bytes());
+        let udiprops = ::udiprops_parse::load_from_raw_section(&sink_gio_serial::udiprops::udiprops);
         ::std::sync::Arc::new( DriverModule::new(&sink_gio_serial::INIT_INFO_GIOSERIAL, udiprops) )
     });
 
