@@ -8,7 +8,9 @@ use ::udi::ffi::udi_size_t;
 use ::udi::ffi::udi_index_t;
 use ::udi::ffi::c_void;
 
-struct PioTransReal {
+pub type Handle = Box<PioTransReal>;
+
+pub struct PioTransReal {
     // TODO: Get a handle/reference to the device too
     instance: ::std::sync::Arc<crate::DriverInstance>,
 
@@ -116,7 +118,9 @@ unsafe extern "C" fn udi_pio_atmic_sizes(_pio_handle: udi_pio_handle_t) -> u32
 #[no_mangle]
 unsafe extern "C" fn udi_pio_abort_sequence(pio_handle: udi_pio_handle_t, scratch_requirement: udi_size_t)
 {
-    todo!("udi_pio_abort_sequence");
+    let handle = Box::from_raw(pio_handle as *mut PioTransReal);
+    let instance = handle.instance.clone();
+    *instance.pio_abort_sequence.lock().unwrap() = Some((handle, scratch_requirement));
 }
 
 #[no_mangle]

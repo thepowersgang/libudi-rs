@@ -299,6 +299,7 @@ fn create_driver_instance<'a>(driver_module: Arc<DriverModule<'static>>, channel
         module: driver_module,
         children: Default::default(),
         device: Default::default(),
+        pio_abort_sequence: Default::default(),
     });
     let mut state = management_agent::InstanceInitState::new(instance, channel_to_parent);
     
@@ -474,6 +475,7 @@ struct DriverInstance
     //cur_state: DriverState,
 
     device: ::std::sync::OnceLock<Box<dyn crate::emulated_devices::PioDevice>>,
+    pio_abort_sequence: ::std::sync::Mutex<Option<(udi_impl::pio::Handle, usize)>>,
 }
 struct DriverRegion
 {
