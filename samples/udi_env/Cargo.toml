@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 udi = { path = "../../" }
 udi_macros = { path = "../../udi_macros" }
-udiprops_parse = { path = "../../udi_udiprops_parse" }
+udiprops_parse = { path = "../../udiprops_parse" }
 udi-net_ne2000 = { path = "../net_ne2000" }
 
 libc = "0.2.149"

@@ -9,4 +9,4 @@ crate-type = ["cdylib","rlib"]
 [dependencies]
 udi = { path = "../../" }
 [build-dependencies]
-udiprops_parse = { path = "../../udi_udiprops_parse" }
+udiprops_parse = { path = "../../udiprops_parse" }

@@ -11,7 +11,7 @@ udi_macros = { path = "udi_macros" }
 members = [
     ".",
     "udi-sys",
-    "udi_udiprops_parse",
+    "udiprops_parse",
     "udi_macros",
     "tools/fix_elf",
     "samples/net_ne2000",
