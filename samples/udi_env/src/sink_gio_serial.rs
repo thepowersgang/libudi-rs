@@ -1,6 +1,7 @@
 
 #[derive(Default)]
 struct Driver {
+    //cb_pool: ::udi::cb::Chain<::udi::ffi::meta_gio::udi_gio_xfer_cb_t>,
 }
 impl ::udi::init::Driver for ::udi::init::RData<Driver>
 {
@@ -46,29 +47,67 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
     type Future_bind_ack<'s> = impl ::core::future::Future<Output=()>;
     fn bind_ack<'s>(&'s mut self, cb: ::udi::cb::CbRef<'s,::udi::ffi::meta_gio::udi_gio_bind_cb_t>, size: ::udi::Result<u64>) -> Self::Future_bind_ack<'s> {
         async move {
-            // TODO: Save the handle
-            todo!("bind_ack({:?})", size)
+            match size {
+            Ok(0) => {
+                // TODO: Save the channel handle?
+                // - Allocate a xfer cb to use for TX requests
+                let tx_cb = ::udi::cb::alloc::<Cbs::_Xfer>(cb.gcb(), cb.gcb.channel).await;
+                },
+            Ok(_) => {
+                println!("Unexpected non-zero size for a UART");
+                },
+            Err(e) => println!("Bind failure: {:?}", e),
+            }
         }
     }
 
     type Future_unbind_ack<'s> = impl ::core::future::Future<Output=()>;
-    fn unbind_ack<'s>(&'s mut self, cb: ::udi::cb::CbRef<'s,::udi::ffi::meta_gio::udi_gio_bind_cb_t>) -> Self::Future_unbind_ack<'s> {
+    fn unbind_ack<'s>(&'s mut self, _cb: ::udi::cb::CbRef<'s,::udi::ffi::meta_gio::udi_gio_bind_cb_t>) -> Self::Future_unbind_ack<'s> {
         async move { todo!("unbind_ack") }
     }
 
     type Future_xfer_ack<'s> = impl ::core::future::Future<Output=()>;
-    fn xfer_ack<'s>(&'s mut self, cb: ::udi::cb::CbRef<'s,::udi::ffi::meta_gio::udi_gio_xfer_cb_t>) -> Self::Future_xfer_ack<'s> {
-        async move { todo!("xfer_ack") }
+    fn xfer_ack<'s>(&'s mut self, cb: ::udi::cb::CbHandle<::udi::ffi::meta_gio::udi_gio_xfer_cb_t>) -> Self::Future_xfer_ack<'s> {
+        async move {
+            match cb.op
+            {
+            ::udi::ffi::meta_gio::UDI_GIO_OP_READ => {},
+            ::udi::ffi::meta_gio::UDI_GIO_OP_WRITE => {},
+            _ => todo!("xfer_ack - Unknown operation: {:#x}", cb.op),
+            }
+            /*
+            self.cb_pool.push_front(cb);
+            */
+        }
     }
 
     type Future_xfer_nak<'s> = impl ::core::future::Future<Output=()>;
-    fn xfer_nak<'s>(&'s mut self, cb: ::udi::cb::CbRef<'s,::udi::ffi::meta_gio::udi_gio_xfer_cb_t>, res: ::udi::Result<()>) -> Self::Future_xfer_nak<'s> {
-        async move { todo!("xfer_nck") }
+    fn xfer_nak<'s>(&'s mut self, cb: ::udi::cb::CbHandle<::udi::ffi::meta_gio::udi_gio_xfer_cb_t>, res: ::udi::Result<()>) -> Self::Future_xfer_nak<'s> {
+        async move {
+            match res {
+            Ok(_) => {},
+            Err(e) => println!("xfer_nak - Error {:?}", e),
+            }
+            /*
+            self.cb_pool.push_front(cb);
+            */
+            todo!("xfer_nak")
+        }
     }
 
     type Future_event_ind<'s> = impl ::core::future::Future<Output=()>;
-    fn event_ind<'s>(&'s mut self, cb: ::udi::cb::CbRef<'s,::udi::ffi::meta_gio::udi_gio_event_cb_t>) -> Self::Future_event_ind<'s> {
-        async move { todo!("event_ind") }
+    fn event_ind<'s>(&'s mut self, _cb: ::udi::cb::CbRef<'s,::udi::ffi::meta_gio::udi_gio_event_cb_t>) -> Self::Future_event_ind<'s> {
+        async move {
+            // Grab a CB and populate it for read
+            /*
+            if let Some(xfer_cb) = self.cb_pool.pop_front() {
+                xfer_cb.op = ::udi::ffi::meta_gio::UDI_GIO_OP_READ;
+                xfer_cb.tr_params = ::core::ptr::null_mut();
+                ::udi::meta_gio::xfer_req(xfer_cb);
+            }
+            */
+            todo!("event_ind")
+        }
     }
 }
 
@@ -77,7 +116,7 @@ name 100
 properties_version 0x101
 requires udi_gio 0x101
 meta 1 udi_gio
-device 101 1 gio_type str uart
+device 101 1 gio_type string uart
 parent_bind_ops 1 0 1 1
 message 100 Sink GIO serial
 message 101 Serial Device

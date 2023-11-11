@@ -31,8 +31,8 @@ pub trait Client: 'static + crate::imc::ChannelInit + crate::async_trickery::CbC
 {
     async_method!(fn bind_ack  (&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_gio_bind_cb_t>, size: crate::Result<u64>)->() as Future_bind_ack);
     async_method!(fn unbind_ack(&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_gio_bind_cb_t>)->() as Future_unbind_ack);
-    async_method!(fn xfer_ack  (&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_gio_xfer_cb_t>)->() as Future_xfer_ack);
-    async_method!(fn xfer_nak  (&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_gio_xfer_cb_t>, res: crate::Result<()>)->() as Future_xfer_nak);
+    async_method!(fn xfer_ack  (&'s mut self, cb: crate::cb::CbHandle<ffi::udi_gio_xfer_cb_t>)->() as Future_xfer_ack);
+    async_method!(fn xfer_nak  (&'s mut self, cb: crate::cb::CbHandle<ffi::udi_gio_xfer_cb_t>, res: crate::Result<()>)->() as Future_xfer_nak);
     async_method!(fn event_ind (&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_gio_event_cb_t>)->() as Future_event_ind);
 }
 struct MarkerClient;
@@ -65,13 +65,16 @@ future_wrapper!(gio_unbind_ack_op => <T as Client>(cb: *mut ffi::udi_gio_bind_cb
     val.unbind_ack(cb)
 });
 future_wrapper!(gio_xfer_ack_op => <T as Client>(cb: *mut ffi::udi_gio_xfer_cb_t) val @ {
-    val.xfer_ack(cb)
+    val.xfer_ack(unsafe { cb.into_owned() })
 });
 future_wrapper!(gio_xfer_nak_op => <T as Client>(cb: *mut ffi::udi_gio_xfer_cb_t, status: ::udi_sys::udi_status_t) val @ {
-    val.xfer_nak(cb, crate::Error::from_status(status))
+    val.xfer_nak(unsafe { cb.into_owned() }, crate::Error::from_status(status))
 });
 future_wrapper!(gio_event_ind_op => <T as Client>(cb: *mut ffi::udi_gio_event_cb_t) val @ {
-    val.event_ind(cb)
+    crate::async_trickery::with_ack(
+        val.event_ind(cb),
+        |cb,()| unsafe { ::udi_sys::meta_gio::udi_gio_event_res(cb) }
+        )
 });
 map_ops_structure!{
     ffi::udi_gio_client_ops_t => Client,MarkerClient {
