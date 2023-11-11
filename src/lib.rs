@@ -32,6 +32,7 @@ pub mod buf;
 pub mod init;
 pub mod cb;
 pub mod layout;
+pub mod libc;
 #[macro_use]
 pub mod imc;
 pub mod pio;

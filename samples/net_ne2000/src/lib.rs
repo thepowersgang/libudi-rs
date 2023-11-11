@@ -232,7 +232,10 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 				self.dev().mac_addr[0] as _, self.dev().mac_addr[1] as _, self.dev().mac_addr[2] as _,
 				self.dev().mac_addr[3] as _, self.dev().mac_addr[4] as _, self.dev().mac_addr[5] as _,
 				);
-			//::udi::debug_printf!("NIC ether_type = %s", "eth\0".as_ptr() as *const i8);
+			{
+				let s = ::core::ffi::CStr::from_bytes_with_nul(b"eth\0").unwrap();
+				::udi::debug_printf!("NIC ether_type = %s", s);
+			}
 			Ok(::udi::meta_nic::NicInfo {
 				media_type: ::udi::ffi::meta_nic::MediaType::UDI_NIC_ETHER,
 				min_pdu_size: 0,

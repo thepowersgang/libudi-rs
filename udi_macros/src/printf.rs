@@ -3,14 +3,13 @@ pub fn debug_printf(input: ::proc_macro::TokenStream) -> ::proc_macro::TokenStre
 {
     struct Input {
         format_string: String,
-        require_unsafe: bool,
         exp_arg_tys: Vec<::syn::Type>,
         arg_values: Vec<::syn::Expr>,
     }
     impl ::syn::parse::Parse for Input {
         fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
             let lit: ::syn::LitStr = input.parse()?;
-            let (exp_arg_tys,require_unsafe) = parse_format_args(&lit)?;
+            let exp_arg_tys = parse_format_args(&lit)?;
             let arg_values = if input.peek(::syn::Token![,]) {
                     let _: ::syn::Token![,] = input.parse()?;
                     ::syn::punctuated::Punctuated::<::syn::Expr, ::syn::Token![,]>::parse_terminated(input)?
@@ -21,7 +20,6 @@ pub fn debug_printf(input: ::proc_macro::TokenStream) -> ::proc_macro::TokenStre
                 };
             Ok(Self {
                 format_string: lit.value(),
-                require_unsafe,
                 exp_arg_tys,
                 arg_values,
             })
@@ -35,12 +33,11 @@ pub fn debug_printf(input: ::proc_macro::TokenStream) -> ::proc_macro::TokenStre
         .map(|(i,ty)| ::syn::Ident::new(format!("arg{}", i).as_str(), ::syn::spanned::Spanned::span(&ty)))
         .collect();
     let input_arg = &input.arg_values;
-    let unsafe_tok = if input.require_unsafe { Some( ::syn::Ident::new("unsafe", ::syn::spanned::Spanned::span(&exp_arg_tys[0])) ) } else { None };
     ::proc_macro::TokenStream::from(::quote::quote!{
         {
-            #unsafe_tok fn udi_debug_printf( #( #arg_name: #exp_arg_tys ),* ) {
+            fn udi_debug_printf( #( #arg_name: #exp_arg_tys ),* ) {
                 unsafe {
-                    ::udi::ffi::log::udi_debug_printf( concat!(#format,"\0").as_ptr() as _ #(, #arg_name )* );
+                    ::udi::ffi::log::udi_debug_printf( concat!(#format,"\0").as_ptr() as _ #(, ::udi::libc::SnprintfArg::into_arg(#arg_name) )* );
                 }
             }
             udi_debug_printf( #(#input_arg),* );
@@ -48,13 +45,65 @@ pub fn debug_printf(input: ::proc_macro::TokenStream) -> ::proc_macro::TokenStre
     })
 }
 
-fn parse_format_args(input: &::syn::LitStr) -> ::syn::Result< (Vec<::syn::Type>, bool) >
+pub fn snprintf(input: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream
+{
+    struct Input {
+        buf: ::syn::Expr,
+
+        format_string: String,
+        exp_arg_tys: Vec<::syn::Type>,
+        arg_values: Vec<::syn::Expr>,
+    }
+    impl ::syn::parse::Parse for Input {
+        fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+            let buf = input.parse()?;
+            let _: ::syn::Token![,] = input.parse()?;
+            let lit: ::syn::LitStr = input.parse()?;
+            let exp_arg_tys = parse_format_args(&lit)?;
+            let arg_values = if input.peek(::syn::Token![,]) {
+                    let _: ::syn::Token![,] = input.parse()?;
+                    ::syn::punctuated::Punctuated::<::syn::Expr, ::syn::Token![,]>::parse_terminated(input)?
+                        .into_iter().collect()
+                }
+                else {
+                    vec![]
+                };
+            Ok(Self {
+                buf,
+                format_string: lit.value(),
+                exp_arg_tys,
+                arg_values,
+            })
+        }
+    }
+
+    let input = ::syn::parse_macro_input!(input as Input);
+
+    let buf = &input.buf;
+    let format = &input.format_string;
+    let exp_arg_tys = &input.exp_arg_tys;
+    let arg_name: Vec<_> = exp_arg_tys.iter().enumerate()
+        .map(|(i,ty)| ::syn::Ident::new(format!("arg{}", i).as_str(), ::syn::spanned::Spanned::span(&ty)))
+        .collect();
+    let input_arg = &input.arg_values;
+    ::proc_macro::TokenStream::from(::quote::quote!{
+        {
+            fn udi_snprintf( buf: &mut [u8], #( #arg_name: #exp_arg_tys ),* ) {
+                unsafe {
+                    ::udi::ffi::libc::udi_snprintf( buf.as_ptr(), buf.len(), concat!(#format,"\0").as_ptr() as _ #(, ::udi::libc::SnprintfArg::into_arg(#arg_name) )* );
+                }
+            }
+            udi_snprintf( #buf, #(#input_arg),* );
+        }
+    })
+}
+
+fn parse_format_args(input: &::syn::LitStr) -> ::syn::Result< Vec<::syn::Type> >
 {
     fn nextc(input: &::syn::LitStr, it: &mut ::core::str::Chars<'_>) -> ::syn::Result<char> {
         it.next().ok_or(::syn::Error::new(input.span(), "Unexpected end of format string"))
     }
     let mut rv = Vec::new();
-    let mut require_unsafe = false;
     let input_s = input.value();
     let mut it = input_s.chars();
     while let Some(c) = it.next()
@@ -107,8 +156,7 @@ fn parse_format_args(input: &::syn::LitStr) -> ::syn::Result< (Vec<::syn::Type>,
             'a'|'A' => ::syn::parse_str("::udi::ffi::udi_busaddr64_t").unwrap(),
             'c' => ::syn::parse_str("u8").unwrap(),
             's' => {
-                require_unsafe = true;
-                ::syn::parse_str("*const i8").unwrap()
+                ::syn::parse_str("&::core::ffi::CStr").unwrap()
                 },
             '<' => {
                 while c != '>' {
@@ -119,5 +167,5 @@ fn parse_format_args(input: &::syn::LitStr) -> ::syn::Result< (Vec<::syn::Type>,
             _ => return Err(::syn::Error::new(input.span(), format!("Invalid formatting fragment `%{}`", c))),
             })
     }
-    Ok((rv, require_unsafe))
+    Ok(rv)
 }

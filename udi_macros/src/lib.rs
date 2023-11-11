@@ -19,6 +19,11 @@ pub fn udiprops(input: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
 pub fn debug_printf(input: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
     printf::debug_printf(input)
 }
+/// Call the `udi_snprintf` function without needing unsafe
+#[proc_macro]
+pub fn snprintf(input: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+    printf::snprintf(input)
+}
 
 /// Derive macro for the `GetLayout` trait
 #[proc_macro_derive(GetLayout, attributes(layout_ignore))]
