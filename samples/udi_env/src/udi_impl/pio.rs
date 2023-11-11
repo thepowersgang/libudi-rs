@@ -18,7 +18,9 @@ struct PioTransReal {
     trans_list: Vec<udi_pio_trans_t>,
     data_translation: DataTranslation,
     data_ordering: DataOrdering,
+    #[allow(dead_code)]
     unaligned: bool,
+    #[allow(dead_code)]
     serialization_domain: udi_index_t
 }
 /// Translation applied to values sent to the device
@@ -266,7 +268,15 @@ impl PioMemState<'_> {
                 let addr = reg.to_u32();
                 unsafe { (self.scratch as *const u8).offset(addr as _) }
                 },
-            ::udi::ffi::pio::UDI_PIO_BUF => todo!("read buf"),
+            ::udi::ffi::pio::UDI_PIO_BUF => {
+                let addr = reg.to_u32();
+                let mut val = RegVal::default();
+                unsafe {
+                    // TODO: Error handling.
+                    crate::udi_impl::buf::read(*self.buf, addr as usize, &mut val.bytes[..1 << size]);
+                }
+                return val;
+            },
             ::udi::ffi::pio::UDI_PIO_MEM => {
                 let addr = reg.to_u32();
                 unsafe { (self.mem_ptr as *const u8).offset(addr as _) }

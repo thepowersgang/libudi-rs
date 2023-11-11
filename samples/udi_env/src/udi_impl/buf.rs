@@ -70,6 +70,22 @@ pub fn allocate(size: udi_size_t, _path_handle: udi_buf_path_t) -> *mut udi_buf_
     }
     rv
 }
+/// Read from a buffer
+pub unsafe fn read(buf_ptr: *mut udi_buf_t, off: usize, dst: &mut [u8]) -> Option<usize> {
+    if let Some(p) = get_buf(&buf_ptr) {
+        if off < p.len() && off+dst.len() <= p.len() {
+            let src = p.get_slice(off, dst.len());
+            dst.copy_from_slice(src);
+            Some(dst.len())
+        }
+        else {
+            None
+        }
+    }
+    else {
+        None
+    }
+}
 
 #[no_mangle]
 unsafe extern "C" fn udi_buf_copy(
