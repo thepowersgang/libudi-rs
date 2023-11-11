@@ -355,6 +355,16 @@ impl ::core::fmt::Display for MemRef {
         }
     }
 }
+struct Size(u8);
+impl ::core::fmt::Display for Size {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0
+        {
+        0 => f.write_str("B"),
+        _ => write!(f, "{}", 1 << self.0),
+        }
+    }
+}
 
 struct PioDevState<'a> {
     dev: &'a dyn crate::emulated_devices::PioDevice,
@@ -420,7 +430,8 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
     let mut ofs = find_label(trans_list, start_label)?;
     for _ in 0 .. MAX_OPERATIONS {
         let op = &trans_list[ofs];
-        println!("pio_trans_inner: +{} OP 0x{:02x} 0x{:04x}", ofs, op.pio_op, op.operand);
+        let s = Size(op.tran_size);
+        print!("pio_trans_inner: +{} OP 0x{:02x} 0x{:04x}: ", ofs, op.pio_op, op.operand);
 
         if op.pio_op < 0x80 {
             // Group A
@@ -428,22 +439,22 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
             match op.pio_op & 0xE0
             {
             IN => {
-                println!("IN {}, #{:#x}", MemRef(op.pio_op & 0x1F), op.operand);
+                println!("IN{s} {}, #{:#x}", MemRef(op.pio_op & 0x1F), op.operand);
                 let val = io_state.read(op.operand as u32, op.tran_size);
                 state.write(op.pio_op & 0x1F, val, op.tran_size);
                 },
             OUT => {
-                println!("OUT #{:#x}, {}", op.operand, MemRef(op.pio_op & 0x1F));
+                println!("OUT.{s} #{:#x}, {}", op.operand, MemRef(op.pio_op & 0x1F));
                 let val = state.read(op.pio_op & 0x1F, op.tran_size);
                 io_state.write(op.operand as u32, val, op.tran_size);
                 },
             LOAD => {
-                println!("LOAD R{}, {}", op.operand & 7, MemRef(op.pio_op & 0x1F));
+                println!("LOAD.{s} R{}, {}", op.operand & 7, MemRef(op.pio_op & 0x1F));
                 let val = state.read(op.pio_op & 0x1F, op.tran_size);
                 state.write(op.operand as u8 & 7, val, op.tran_size);
                 },
             STORE => {
-                println!("STORE {}, R{}", MemRef(op.pio_op & 0x1F), op.operand & 7);
+                println!("STORE.{s} {}, R{}", MemRef(op.pio_op & 0x1F), op.operand & 7);
                 let val = state.read(op.operand as u8 & 7, op.tran_size);
                 state.write(op.pio_op & 0x1F, val, op.tran_size);
                 },
@@ -462,7 +473,7 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
             {
             0x00 ..= 0x7F => unreachable!(),
             LOAD_IMM => {
-                println!("LOAD_IMM R{} {:#x}", op.pio_op&7, op.operand);
+                println!("LOAD_IMM.{s} R{} {:#x}", op.pio_op&7, op.operand);
                 state.write(op.pio_op & 7, RegVal::from_u16(op.operand), op.tran_size);
                 },
             CSKIP => {
@@ -475,7 +486,7 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
                     3 => ("NNeg", !val.is_neg(op.tran_size)),
                     _ => todo!("CSKIP"),
                     };
-                println!("CSKIP R{} {}", op.pio_op&7, msg);
+                println!("CSKIP.{s} R{} {}", op.pio_op&7, msg);
                 if cnd {
                     ofs += 1;
                 }
@@ -485,46 +496,46 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
             SHIFT_LEFT => todo!("SHIFT_LEFT"),
             SHIFT_RIGHT => todo!("SHIFT_RIGHT"),
             AND => {
-                println!("AND R{}, R{}", op.pio_op & 7, op.operand & 7);
+                println!("AND.{s} R{}, R{}", op.pio_op & 7, op.operand & 7);
                 let val_l = state.read(op.pio_op & 7, op.tran_size);
                 let val_r = state.read(op.operand as u8 & 7, op.tran_size);
                 state.write(op.pio_op & 7, val_l & val_r, op.tran_size);
                 },
             AND_IMM => {
-                println!("AND_IMM R{}, {:#x}", op.pio_op&7, op.operand);
+                println!("AND_IMM.{s} R{}, {:#x}", op.pio_op&7, op.operand);
                 let val = state.read(op.pio_op & 7, op.tran_size);
                 state.write(op.pio_op & 7, val & RegVal::from_u16(op.operand), op.tran_size);
                 },
             OR => {
-                println!("OR R{}, R{}", op.pio_op & 7, op.operand & 7);
+                println!("OR.{s} R{}, R{}", op.pio_op & 7, op.operand & 7);
                 let val_l = state.read(op.pio_op & 7, op.tran_size);
                 let val_r = state.read(op.operand as u8 & 7, op.tran_size);
                 state.write(op.pio_op & 7, val_l | val_r, op.tran_size);
                 },
             OR_IMM  => {
-                println!("OR_IMM R{}, {:#x}", op.pio_op&7, op.operand);
+                println!("OR_IMM.{s} R{}, {:#x}", op.pio_op&7, op.operand);
                 let val = state.read(op.pio_op & 7, op.tran_size);
                 state.write(op.pio_op & 7, val | RegVal::from_u16(op.operand), op.tran_size);
                 },
             XOR => {
-                println!("ADD R{}, R{}", op.pio_op & 7, op.operand & 7);
+                println!("ADD.{s} R{}, R{}", op.pio_op & 7, op.operand & 7);
                 let val_l = state.read(op.pio_op & 7, op.tran_size);
                 let val_r = state.read(op.operand as u8 & 7, op.tran_size);
                 state.write(op.pio_op & 7, val_l ^ val_r, op.tran_size);
                 },
             ADD => {
-                println!("ADD R{}, R{}", op.pio_op & 7, op.operand & 7);
+                println!("ADD.{s} R{}, R{}", op.pio_op & 7, op.operand & 7);
                 let val_l = state.read(op.pio_op & 7, op.tran_size);
                 let val_r = state.read(op.operand as u8 & 7, op.tran_size);
                 state.write(op.pio_op & 7, val_l + val_r, op.tran_size);
                 },
             ADD_IMM => {
-                println!("ADD_IMM R{}, {:#x}", op.pio_op & 7, op.operand);
+                println!("ADD_IMM.{s} R{}, {:#x}", op.pio_op & 7, op.operand);
                 let val = state.read(op.pio_op & 7, op.tran_size);
                 state.write(op.pio_op & 7, val + RegVal::from_u16_signed(op.operand), op.tran_size);
                 },
             SUB => {
-                println!("SUB R{}, R{}", op.pio_op & 7, op.operand & 7);
+                println!("SUB.{s} R{}, R{}", op.pio_op & 7, op.operand & 7);
                 let val_l = state.read(op.pio_op & 7, op.tran_size);
                 let val_r = state.read(op.operand as u8 & 7, op.tran_size);
                 state.write(op.pio_op & 7, val_l - val_r, op.tran_size);
@@ -565,7 +576,7 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
                 let pio_reg = ((op.operand >> 7) & 7) as u8;
                 let pio_stride = get_stride(op.operand >> 10);
                 let count_reg = ((op.operand >> 12) & 7) as u8;
-                println!("{} {}+{} R{}+{} *R{}", if op.pio_op == REP_OUT_IND { "REP_OUT_IND" } else { "REP_IN_IND" }, MemRef(mem_ref), mem_stride, pio_reg, pio_stride, count_reg);
+                println!("{}.{s} {}+{} R{}+{} *R{}", if op.pio_op == REP_OUT_IND { "REP_OUT_IND" } else { "REP_IN_IND" }, MemRef(mem_ref), mem_stride, pio_reg, pio_stride, count_reg);
 
                 let orig_mem_val = state.read(mem_ref & 7, 5);
 
@@ -588,19 +599,22 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
 
                 state.write(mem_ref & 7, orig_mem_val, 5);
                 },
-            DELAY   => {},
-            BARRIER => {},
-            SYNC    => {},
-            SYNC_OUT=> {},
-            DEBUG   => {},
+            DELAY   => println!("DELAY"),
+            BARRIER => println!("BARRIER"),
+            SYNC    => println!("SYNC"),
+            SYNC_OUT=> println!("SYNC_OUT"),
+            DEBUG   => println!("DEBUG"),
             // Unallocated
-            0xF9..=0xFD => return Err(::udi::Error::from_status(::udi::ffi::UDI_STAT_NOT_UNDERSTOOD as _).unwrap_err()),
+            0xF9..=0xFD => {
+                println!("unallocated - errror");
+                return Err(::udi::Error::from_status(::udi::ffi::UDI_STAT_NOT_UNDERSTOOD as _).unwrap_err())
+                },
             END    => {
-                println!("END R{}", op.operand);
+                println!("END.{s} R{}", op.operand);
                 return Ok(state.read(op.operand as u8 & 7, op.tran_size).to_u16());
                 },
             END_IMM => {
-                println!("END_IMM {:#x}", op.operand);
+                println!("END_IMM.{s} {:#x}", op.operand);
                 return Ok(op.operand)
                 },
             }
