@@ -9,6 +9,7 @@ mod udi_impl;
 
 mod bridge_pci;
 mod sink_nsr;
+mod sink_gio_serial;
 
 mod management_agent;
 
@@ -45,6 +46,10 @@ fn main() {
     register_driver_module(&mut state, unsafe {
         let udiprops = ::udiprops_parse::load_from_raw_section(sink_nsr::UDIPROPS.as_bytes());
         ::std::sync::Arc::new( DriverModule::new(&sink_nsr::INIT_INFO_NSR, udiprops) )
+    });
+    register_driver_module(&mut state, unsafe {
+        let udiprops = ::udiprops_parse::load_from_raw_section(sink_gio_serial::UDIPROPS.as_bytes());
+        ::std::sync::Arc::new( DriverModule::new(&sink_gio_serial::INIT_INFO_GIOSERIAL, udiprops) )
     });
 
     // ----
@@ -421,6 +426,7 @@ impl<'a> DriverModule<'a> {
     fn get_metalang(&self, des_meta_idx: ::udi::ffi::udi_index_t) -> Option<&dyn udi::metalang_trait::Metalanguage> {
         Some(match self.get_metalang_name(des_meta_idx)?
         {
+        "udi_gio" => &::udi::meta_gio::METALANG_SPEC,
         "udi_bridge" => &::udi::meta_bus::METALANG_SPEC,
         "udi_nic" => &::udi::meta_nic::METALANG_SPEC,
         name => todo!("Unknown metalang {:?}", name),
