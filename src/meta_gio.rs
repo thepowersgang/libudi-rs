@@ -19,6 +19,13 @@ impl_metalanguage!{
         ;
 }
 
+impl crate::ops_markers::ParentBind<::udi_sys::meta_gio::udi_gio_bind_cb_t> for ::udi_sys::meta_gio::udi_gio_client_ops_t {
+    const ASSERT: () = ();
+}
+impl crate::ops_markers::ChildBind for ::udi_sys::meta_gio::udi_gio_provider_ops_t {
+    const ASSERT: () = ();
+}
+
 /// GIO Client (e.g. the user of a serial port)
 pub trait Client: 'static + crate::imc::ChannelInit + crate::async_trickery::CbContext
 {

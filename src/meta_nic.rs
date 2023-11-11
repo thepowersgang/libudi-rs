@@ -38,6 +38,13 @@ impl_metalanguage!{
         ;
 }
 
+impl crate::ops_markers::ParentBind<::udi_sys::meta_nic::udi_nic_bind_cb_t> for ::udi_sys::meta_nic::udi_nsr_ctrl_ops_t {
+    const ASSERT: () = ();
+}
+impl crate::ops_markers::ChildBind for ::udi_sys::meta_nic::udi_nd_ctrl_ops_t {
+    const ASSERT: () = ();
+}
+
 // SAFE: Follows the contract, gcb is first field
 def_cb!(unsafe CbRefNic => ffi::udi_nic_cb_t : 1);
 // SAFE: Follows the contract, gcb is first field

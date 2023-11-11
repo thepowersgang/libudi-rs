@@ -244,8 +244,24 @@ where
 
 pub mod ops_wrapper_markers {
 	/// Indicates that the ops entry is a valid ChildBind
-	pub trait ChildBind {
+	pub trait ChildBind: super::ops_markers::Ops {
 		const IDX: crate::ffi::udi_index_t;
+	}
+}
+/// Marker traits for checking ops entries
+pub mod ops_markers {
+	/// Trait for an entry in `OpsList` created by [super::define_driver]
+	pub trait Ops {
+		type OpsTy;
+	}
+	/// Trait for `udi_*_ops_t` structures indicating that they expect to be a parent binding with the given
+	/// cb.
+	pub trait ParentBind<Cb> {
+		const ASSERT: ();
+	}
+	/// Trait for `udi_*_ops_t` structures indicating that they expect to be a child binding
+	pub trait ChildBind {
+		const ASSERT: ();
 	}
 }
 
@@ -295,9 +311,13 @@ macro_rules! define_driver
 		}
 		#[allow(non_snake_case, non_upper_case_globals)]
 		mod OpsList {
+			$crate::define_driver!(@indexes $($op_name)*);
 			$(
 				pub const $op_name: $crate::ffi::udi_index_t = $crate::ffi::udi_index_t(super::RawOpsList::$op_name as _);
 				pub struct $op_name { }
+				impl $crate::ops_markers::Ops for $op_name {
+					type OpsTy = $op_op;
+				}
 				$(impl $crate::ops_wrapper_markers::$wrapper for $op_name { const IDX: $crate::ffi::udi_index_t = $op_name; })?
 			)*
 		}
@@ -308,6 +328,7 @@ macro_rules! define_driver
 		}
 		#[allow(non_snake_case)]
 		mod Cbs {
+			$crate::define_driver!(@indexes $($cb_name)*);
 			$(
 				pub struct $cb_name(());
 				impl $crate::cb::CbDefinition for $cb_name {
@@ -365,5 +386,17 @@ macro_rules! define_driver
 	};
 	(@get_wrapper $driver:ty: $wrapper:ident<_$(,$wrapper_arg:ty)*> ) => { $crate::$wrapper<$driver$(,$wrapper_arg)*> };
 	(@get_wrapper $driver:ty ) => { $crate::init::RData<$driver> };
+	(@indexes $($name:ident)*) => { $crate::define_driver!(@indexes_inner $($name)* = _1); };
+	(@indexes_inner $this_name:ident $($name:ident)* =_1 ) => { pub type _1 = $this_name; $crate::define_driver!(@indexes_inner $($name)* = _2); };
+	(@indexes_inner $this_name:ident $($name:ident)* =_2 ) => { pub type _2 = $this_name; $crate::define_driver!(@indexes_inner $($name)* = _3); };
+	(@indexes_inner $this_name:ident $($name:ident)* =_3 ) => { pub type _3 = $this_name; $crate::define_driver!(@indexes_inner $($name)* = _4); };
+	(@indexes_inner $this_name:ident $($name:ident)* =_4 ) => { pub type _4 = $this_name; $crate::define_driver!(@indexes_inner $($name)* = _5); };
+	(@indexes_inner $this_name:ident $($name:ident)* =_5 ) => { pub type _5 = $this_name; $crate::define_driver!(@indexes_inner $($name)* = _6); };
+	(@indexes_inner $this_name:ident $($name:ident)* =_6 ) => { pub type _6 = $this_name; $crate::define_driver!(@indexes_inner $($name)* = _7); };
+	(@indexes_inner $this_name:ident $($name:ident)* =_7 ) => { pub type _7 = $this_name; $crate::define_driver!(@indexes_inner $($name)* = _8); };
+	(@indexes_inner $this_name:ident $($name:ident)* =_8 ) => { pub type _8 = $this_name; $crate::define_driver!(@indexes_inner $($name)* = _9); };
+	(@indexes_inner $this_name:ident $($name:ident)* =_9 ) => { pub type _9 = $this_name; $crate::define_driver!(@indexes_inner $($name)* = _10); };
+	(@indexes_inner $this_name:ident $($name:ident)* =_10 ) => { pub type _10 = $this_name; $crate::define_driver!(@indexes_inner $($name)* = _11); };
+	(@indexes_inner =$out:ident ) => { };
 }
 

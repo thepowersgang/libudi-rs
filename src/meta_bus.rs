@@ -9,6 +9,14 @@ pub type CbRefBind<'a> = crate::CbRef<'a, udi_bus_bind_cb_t>;
 pub type CbRefIntrAttach<'a> = crate::CbRef<'a, crate::ffi::meta_intr::udi_intr_attach_cb_t>;
 pub type CbRefIntrDetach<'a> = crate::CbRef<'a, crate::ffi::meta_intr::udi_intr_detach_cb_t>;
 
+
+impl crate::ops_markers::ParentBind<::udi_sys::meta_bus::udi_bus_bind_cb_t> for ::udi_sys::meta_bus::udi_bus_device_ops_t {
+    const ASSERT: () = ();
+}
+impl crate::ops_markers::ChildBind for ::udi_sys::meta_bus::udi_bus_bridge_ops_t {
+    const ASSERT: () = ();
+}
+
 impl_metalanguage!{
     static METALANG_SPEC;
     NAME udi_bridge;

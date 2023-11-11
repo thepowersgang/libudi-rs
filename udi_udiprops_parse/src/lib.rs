@@ -117,20 +117,77 @@ pub fn encode_to_raw(props: &[String]) -> Vec<u8> {
 pub fn create_module_body(outfp: &mut dyn ::std::io::Write, props: &[String], emit_linkage: bool) -> ::std::io::Result<()>
 {
 	let mut meta_bindings = ::std::collections::HashMap::new();
+	let mut regions = ::std::collections::HashMap::new();
 
-	for line in props.iter()
+    let parsed: Vec<_> = props.iter()
+        .map(|line| match parsed::Entry::parse_line(line)
+        {
+        Ok(v) => v,
+        Err(e) => {
+            panic!("Malformed udiprops line {:?} - {:?}", line, e);
+            },
+        })
+        .collect()
+        ;
+	for ent in parsed.iter()
 	{
-        let ent = match parsed::Entry::parse_line(line)
-            {
-            Ok(v) => v,
-            Err(e) => {
-                panic!("Malformed udiprops line {:?} - {:?}", line, e);
-                },
-            };
         match ent
         {
         parsed::Entry::Metalang { meta_idx, interface_name } => {
 			meta_bindings.insert(meta_idx, interface_name.to_owned());
+            },
+        parsed::Entry::Region { region_idx, attributes } => {
+            let _ = attributes;
+            regions.insert(region_idx, ());
+            },
+        _ => {},
+        }
+    }
+	for ent in parsed.iter()
+	{
+        match ent {
+        parsed::Entry::Metalang { .. } => {},
+        parsed::Entry::Region { .. } => {},
+
+        parsed::Entry::ParentBindOps { meta_idx, region_idx, ops_idx, bind_cb_idx } => {
+            // - Make sure that the metalang is present
+            if let None = meta_bindings.get(meta_idx) {
+                writeln!(outfp, r#"compile_error!("parent_bind_ops references undefined metalang {}");"#, meta_idx)?;
+            }
+            // - Ensure that the region is defined
+            if let None = regions.get(region_idx) {
+                writeln!(outfp, r#"compile_error!("parent_bind_ops references undefined region {}");"#, region_idx)?;
+            }
+            // - Emit code that references the `define_driver` structs to make sure that `ops_idx`` binds with `bind_cb_idx`
+            writeln!(outfp, r#"
+fn _check_parent_bind_ops() {{
+    let _ = <
+        <super::OpsList::_{ops_idx} as ::udi::ops_markers::Ops>::OpsTy
+        as
+        ::udi::ops_markers::ParentBind< <super::Cbs::_{bind_cb_idx} as ::udi::cb::CbDefinition >::Cb >
+    >::ASSERT;
+}}
+"#)?;
+            },
+        parsed::Entry::ChildBindOps { meta_idx, region_idx, ops_idx } => {
+            // - Make sure that the metalang is present
+            if let None = meta_bindings.get(meta_idx) {
+                writeln!(outfp, r#"compile_error!("parent_bind_ops references undefined metalang {}");"#, meta_idx)?;
+            }
+            // - Ensure that the region is defined
+            if let None = regions.get(region_idx) {
+                writeln!(outfp, r#"compile_error!("parent_bind_ops references undefined region {}");"#, region_idx)?;
+            }
+            // - Emit code that references the `define_driver` structs to make sure that `ops_idx`` binds with `bind_cb_idx`
+            writeln!(outfp, r#"
+fn _check_child_bind_ops() {{
+    let _ = <
+        <super::OpsList::_{ops_idx} as ::udi::ops_markers::Ops>::OpsTy
+        as
+        ::udi::ops_markers::ChildBind
+    >::ASSERT;
+}}
+"#)?;
             },
         _ => {},
 		}
