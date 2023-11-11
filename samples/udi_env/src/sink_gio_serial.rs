@@ -1,7 +1,7 @@
 
 #[derive(Default)]
 struct Driver {
-    //cb_pool: ::udi::cb::Chain<::udi::ffi::meta_gio::udi_gio_xfer_cb_t>,
+    cb_pool: ::udi::cb::Chain<::udi::ffi::meta_gio::udi_gio_xfer_cb_t>,
 }
 impl ::udi::init::Driver for ::udi::init::RData<Driver>
 {
@@ -49,9 +49,20 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
         async move {
             match size {
             Ok(0) => {
-                // TODO: Save the channel handle?
-                // - Allocate a xfer cb to use for TX requests
-                let tx_cb = ::udi::cb::alloc::<Cbs::_Xfer>(cb.gcb(), cb.gcb.channel).await;
+                // Allocate a pool of CBs with 1KiB buffers
+                let mut cbs = ::udi::cb::alloc_batch::<Cbs::_Xfer>(cb.gcb(), 3, Some((1024, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
+                while let Some(mut xfer_cb) = cbs.pop_front() {
+                    xfer_cb.gcb.channel = cb.gcb.channel;
+                    self.cb_pool.push_front(xfer_cb);
+                }
+
+                // TEST: Send some data
+                let mut tx_cb = self.cb_pool.pop_front().unwrap();
+                tx_cb.op = ::udi::ffi::meta_gio::UDI_GIO_DIR_WRITE;
+                unsafe {
+                    ::udi::buf::Handle::from_raw(tx_cb.data_buf).write(cb.gcb(), 0..5, b"hello").await;
+                    ::udi::meta_gio::xfer_req(tx_cb);
+                }
                 },
             Ok(_) => {
                 println!("Unexpected non-zero size for a UART");
@@ -71,13 +82,13 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
         async move {
             match cb.op
             {
-            ::udi::ffi::meta_gio::UDI_GIO_OP_READ => {},
+            ::udi::ffi::meta_gio::UDI_GIO_OP_READ => {
+                // Signal the drivers
+                },
             ::udi::ffi::meta_gio::UDI_GIO_OP_WRITE => {},
             _ => todo!("xfer_ack - Unknown operation: {:#x}", cb.op),
             }
-            /*
             self.cb_pool.push_front(cb);
-            */
         }
     }
 
@@ -88,10 +99,7 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
             Ok(_) => {},
             Err(e) => println!("xfer_nak - Error {:?}", e),
             }
-            /*
             self.cb_pool.push_front(cb);
-            */
-            todo!("xfer_nak")
         }
     }
 
@@ -99,14 +107,14 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
     fn event_ind<'s>(&'s mut self, _cb: ::udi::cb::CbRef<'s,::udi::ffi::meta_gio::udi_gio_event_cb_t>) -> Self::Future_event_ind<'s> {
         async move {
             // Grab a CB and populate it for read
-            /*
-            if let Some(xfer_cb) = self.cb_pool.pop_front() {
+            if let Some(mut xfer_cb) = self.cb_pool.pop_front() {
                 xfer_cb.op = ::udi::ffi::meta_gio::UDI_GIO_OP_READ;
                 xfer_cb.tr_params = ::core::ptr::null_mut();
-                ::udi::meta_gio::xfer_req(xfer_cb);
+                unsafe { ::udi::meta_gio::xfer_req(xfer_cb); }
             }
-            */
-            todo!("event_ind")
+            else {
+
+            }
         }
     }
 }
