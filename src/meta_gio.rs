@@ -5,6 +5,11 @@
 use ::udi_sys::meta_gio::*;
 use ::udi_sys::meta_gio as ffi;
 
+/// SAFETY: Caller must ensure that the internal pointers of the cb are valid
+pub unsafe fn xfer_req(cb: crate::cb::CbHandle<ffi::udi_gio_xfer_cb_t>) {
+    ffi::udi_gio_xfer_req(cb.into_raw())
+}
+
 impl_metalanguage!{
     static METALANG_SPEC;
     NAME udi_gio;
@@ -14,7 +19,7 @@ impl_metalanguage!{
         ;
     CBS
         1 => udi_gio_bind_cb_t,
-        2 => udi_gio_xfer_cb_t,
+        2 => udi_gio_xfer_cb_t : BUF data_buf,
         3 => udi_gio_event_cb_t,
         ;
 }

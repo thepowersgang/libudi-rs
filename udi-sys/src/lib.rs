@@ -53,6 +53,8 @@ pub struct udi_boolean_t(pub u8);
 impl udi_boolean_t {
 	pub fn to_bool(&self) -> bool { self.0 != 0 }
 }
+pub const TRUE: udi_boolean_t = udi_boolean_t(1);
+pub const FALSE: udi_boolean_t = udi_boolean_t(0);
 pub type udi_ubit8_t  = u8;
 pub type udi_ubit16_t = u16;
 pub type udi_ubit32_t = u32;

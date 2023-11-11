@@ -67,6 +67,62 @@ impl<T> ::core::ops::DerefMut for CbHandle<T> {
     }
 }
 
+/// A chain of CBs, as returned by [alloc_batch]
+pub struct Chain<T>(*mut T);
+impl<T> Default for Chain<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+impl<T> Chain<T> {
+    pub const fn new() -> Self {
+        Chain(::core::ptr::null_mut())
+    }
+}
+impl<T> Chain<T>
+where
+    T: crate::metalang_trait::MetalangCb + crate::async_trickery::GetCb
+{
+    pub fn pop_front(&mut self) -> Option<CbHandle<T>> {
+        if self.0.is_null() {
+            None
+        }
+        else {
+            let rv = self.0;
+            // SAFE: For a pointer to be in this structure, it must be chained using `get_chain_slot`
+            let new_next = unsafe {
+                let slot = Self::get_chain_slot(&mut *rv);
+                ::core::mem::replace(slot, ::core::ptr::null_mut())
+            };
+            self.0 = new_next as *mut T;
+            Some(CbHandle(rv))
+        }
+    }
+    pub fn push_front(&mut self, cb: CbHandle<T>) {
+        let cb = cb.into_raw();
+        // SAFE: `cb` is from a `CbHandle` which is valid
+        unsafe {
+            let slot = Self::get_chain_slot(&mut *cb);
+            *slot = self.0;
+        }
+        self.0 = cb;
+    }
+
+    fn get_chain_slot(cb: &mut T) -> &mut *mut T {
+        unsafe fn cast_ptr_mutref<U,T>(p: &mut *mut U) -> &mut *mut T {
+            &mut *(p as *mut _ as *mut *mut T)
+        }
+        // SAFE: Correct pointer manipulations
+        unsafe {
+            let cb = cb as *mut T;
+            match (*cb).get_chain() {
+            Some(slot) => cast_ptr_mutref(slot),
+            None => cast_ptr_mutref( &mut (*(cb as *mut _ as *mut ::udi_sys::udi_cb_t)).initiator_context ),
+            }
+        }
+    }
+}
+
 /// Trait covering the definition of a Control Block (in [crate::define_driver])
 pub trait CbDefinition {
     const INDEX: crate::ffi::udi_index_t;
@@ -92,6 +148,34 @@ where
 		|res| {
 			let crate::WaitRes::Pointer(p) = res else { panic!(""); };
 			CbHandle(p as *mut _)
+			}
+		)
+}
+
+/// Allocate a collection of CBs
+pub fn alloc_batch<CbDef>(
+	cb: crate::CbRef<crate::ffi::udi_cb_t>,
+    count: u8,
+    buffer: Option<(usize, crate::ffi::buf::udi_buf_path_t)>,
+    ) -> impl ::core::future::Future<Output=Chain<CbDef::Cb>>
+where
+    CbDef: CbDefinition,
+{
+	extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, new_cb: *mut crate::ffi::udi_cb_t) {
+		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(new_cb as *mut ())); }
+	}
+    let (with_buf,buf_size,path_handle,) = match buffer {
+        None => (::udi_sys::FALSE, 0, ::udi_sys::buf::UDI_NULL_PATH_BUF),
+        Some((size, path)) => (::udi_sys::TRUE, size, path)
+    };
+	crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
+        cb,
+		move |cb| unsafe {
+            crate::ffi::cb::udi_cb_alloc_batch(callback, cb as *const _ as *mut _, CbDef::INDEX, count.into(), with_buf, buf_size, path_handle)
+			},
+		|res| {
+			let crate::WaitRes::Pointer(p) = res else { panic!(""); };
+			Chain(p as *mut _)
 			}
 		)
 }

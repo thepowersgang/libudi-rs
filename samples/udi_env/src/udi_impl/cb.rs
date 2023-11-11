@@ -96,7 +96,7 @@ fn alloc_internal(
 
         // Buffer allocation
         if let Some((buf_size, buf_path)) = buf_info {
-            let dst = cb_spec.get_buffer(&mut *rv).expect("No buffer");
+            let dst = cb_spec.get_buffer(&mut *rv).expect("Buffer allocation requested, but no buffer available");
             *dst = crate::udi_impl::buf::allocate(buf_size, buf_path);
         }
         

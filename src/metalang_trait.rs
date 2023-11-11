@@ -45,6 +45,10 @@ pub unsafe trait MetalangCb
 {
     type MetalangSpec: Metalanguage;
     const META_CB_NUM: crate::ffi::udi_index_t;
+
+    //fn get_buffer<'a>(&self, cb: &'a mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::udi_buf_t> { let _ = cb; None }
+    //fn get_inline_data<'a>(&self, cb: &'a mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::c_void> { let _ = cb; None }
+    fn get_chain(&mut self) -> Option<&mut *mut crate::ffi::udi_cb_t> { None }
 }
 
 macro_rules! impl_metalanguage
@@ -132,6 +136,11 @@ macro_rules! impl_metalanguage
                 }
                 $crate::ffi::udi_index_t($cb_idx)
                 };
+            $(
+            unsafe fn get_chain(&mut self) -> Option<&mut *mut $crate::ffi::udi_cb_t> {
+                Some(&mut self.$chain_fld)
+            }
+            )?
         }
         )*
     };
