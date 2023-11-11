@@ -174,10 +174,17 @@ impl RegVal {
         Self::from_bytes(&[v])
     }
     fn from_u16(v: u16) -> RegVal {
-        Self::from_bytes(&v.to_ne_bytes())
+        Self::from_bytes(&v.to_le_bytes())
+    }
+    fn from_u16_signed(v: u16) -> RegVal {
+        let mut rv = Self::from_bytes(&v.to_le_bytes());
+        if rv.bytes[1] & 0x80 != 0 {
+            rv.bytes[2..32].fill(0xFF);
+        }
+        rv
     }
     fn to_u32(&self) -> u32 {
-        u32::from_ne_bytes(self.bytes[..4].try_into().unwrap())
+        u32::from_le_bytes(self.bytes[..4].try_into().unwrap())
     }
     fn masked(&self, size: u8) -> RegVal {
         assert!(size <= 5);
@@ -191,7 +198,7 @@ impl RegVal {
     fn is_neg(&self, size: u8) -> bool {
         assert!(size <= 5);
         let final_byte = (1 << size) - 1;
-        return self.bytes[final_byte] & 0x80 != 0;
+        self.bytes[final_byte] & 0x80 != 0
     }
 }
 impl ::core::ops::BitOr for RegVal {
@@ -237,7 +244,15 @@ struct PioMemState<'a> {
     registers: [RegVal; 8],
 }
 impl PioMemState<'_> {
-    fn write(&mut self, location_spec: u8, val: RegVal, size: u8) {
+    fn little_to_native(val: &mut RegVal, size: u8) -> usize {
+        let len = 1 << size;
+        if cfg!(target_endian = "big") {
+            val.bytes[..len].reverse();
+        }
+        len
+    }
+    fn write(&mut self, location_spec: u8, mut val: RegVal, size: u8) {
+        let len = Self::little_to_native(&mut val, size);
         let reg = &mut self.registers[ (location_spec & 7) as usize ];
         let ptr = match location_spec & 0x18
             {
@@ -257,7 +272,6 @@ impl PioMemState<'_> {
             _ => unreachable!(),
             };
         unsafe {
-            let len = 1 << size;
             for i in 0 .. len {
                 *ptr.offset(i as _) = val.bytes[i];
             }
@@ -279,6 +293,7 @@ impl PioMemState<'_> {
                     // TODO: Error handling.
                     crate::udi_impl::buf::read(*self.buf, addr as usize, &mut val.bytes[..1 << size]);
                 }
+                Self::little_to_native(&mut val, size);
                 return val;
             },
             ::udi::ffi::pio::UDI_PIO_MEM => {
@@ -294,6 +309,7 @@ impl PioMemState<'_> {
                 val.bytes[i] = *ptr.offset(i as _);
             }
         }
+        Self::little_to_native(&mut val, size);
         val
     }
 }
@@ -381,15 +397,25 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
             match op.pio_op & 0xE0
             {
             IN => {
+                println!("IN {}, #{:#x}", MemRef(op.pio_op & 0x1F), op.operand);
                 let val = io_state.read(op.operand as u32, op.tran_size);
                 state.write(op.pio_op & 0x1F, val, op.tran_size);
                 },
             OUT => {
+                println!("OUT #{:#x}, {}", op.operand, MemRef(op.pio_op & 0x1F));
                 let val = state.read(op.pio_op & 0x1F, op.tran_size);
                 io_state.write(op.operand as u32, val, op.tran_size);
                 },
-            LOAD => todo!("LOAD"),
-            STORE => todo!("STORE"),
+            LOAD => {
+                println!("LOAD R{}, {}", op.operand & 7, MemRef(op.pio_op & 0x1F));
+                let val = state.read(op.pio_op & 0x1F, op.tran_size);
+                state.write(op.operand as u8 & 7, val, op.tran_size);
+                },
+            STORE => {
+                println!("STORE {}, R{}", MemRef(op.pio_op & 0x1F), op.operand & 7);
+                let val = state.read(op.operand as u8 & 7, op.tran_size);
+                state.write(op.pio_op & 0x1F, val, op.tran_size);
+                },
             |0x01..=0x1F
             |0x21..=0x3F
             |0x41..=0x5F
@@ -405,19 +431,20 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
             {
             0x00 ..= 0x7F => unreachable!(),
             LOAD_IMM => {
-                println!("> LOAD_IMM R{} {:#x}", op.pio_op&7, op.operand);
+                println!("LOAD_IMM R{} {:#x}", op.pio_op&7, op.operand);
                 state.write(op.pio_op & 7, RegVal::from_u16(op.operand), op.tran_size);
                 },
             CSKIP => {
                 let val = state.read(op.pio_op & 7, op.tran_size);
-                let cnd = match op.operand
+                let (msg,cnd) = match op.operand
                     {
-                    0 /*Z*/ => val.is_zero(),
-                    1 /*NZ*/ => !val.is_zero(),
-                    2 /*Neg*/ => val.is_neg(op.tran_size),
-                    3 /*NNeg*/ => !val.is_neg(op.tran_size),
+                    0 => ("Z"   ,val.is_zero()),
+                    1 => ("NZ"  , !val.is_zero()),
+                    2 => ("Neg ", val.is_neg(op.tran_size)),
+                    3 => ("NNeg", !val.is_neg(op.tran_size)),
                     _ => todo!("CSKIP"),
                     };
+                println!("CSKIP R{} {}", op.pio_op&7, msg);
                 if cnd {
                     ofs += 1;
                 }
@@ -428,15 +455,20 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
             SHIFT_RIGHT => todo!("SHIFT_RIGHT"),
             AND     => todo!("AND"),
             AND_IMM => {
+                println!("AND_IMM R{}, {:#x}", op.pio_op&7, op.operand);
                 let val = state.read(op.pio_op & 7, op.tran_size);
                 state.write(op.pio_op & 7, val & RegVal::from_u16(op.operand), op.tran_size);
                 },
             OR      => todo!("OR"),
             OR_IMM  => todo!("OR_IMM"),
             XOR         => todo!("XOR"),
-            ADD         => todo!("ADD"),
-            ADD_IMM     => todo!("ADD_IMM"),
-            SUB         => todo!("SUB"),
+            ADD => todo!("ADD"),
+            ADD_IMM => {
+                println!("ADD_IMM R{}, {:#x}", op.pio_op & 7, op.operand);
+                let val = state.read(op.pio_op & 7, op.tran_size);
+                state.write(op.pio_op & 7, val + RegVal::from_u16_signed(op.operand), op.tran_size);
+                },
+            SUB => todo!("SUB"),
             0xF0 ..= 0xFF => unreachable!(),
             |0x81..=0x87|0x89..=0x8F
             |0x91..=0x97|0x99..=0x9F
@@ -456,6 +488,7 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
             // Group C
             LABEL => {},
             BRANCH => {
+                println!("BRANCH {}", op.operand);
                 ofs = find_label(trans_list, op.operand as _)?;
                 // Explicitly skip the `ofs += 1`
                 continue ;
