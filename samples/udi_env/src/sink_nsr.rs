@@ -123,6 +123,8 @@ device 101 1
 parent_bind_ops 1 0 1 2
 message 100 Sink NSR
 message 101 Network Device
+
+region 0
 ");
 ::udi::define_driver! {
     Driver as INIT_INFO_NSR;

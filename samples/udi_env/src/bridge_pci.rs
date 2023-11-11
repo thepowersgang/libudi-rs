@@ -130,13 +130,14 @@ impl ::udi::meta_intr::IntrDispatcher for ::udi::init::RData<Driver>
     }
 }
 
-pub const UDIPROPS: &'static str = "\
-properties_version 0x101\0\
-requires udi_bridge 0x101\0\
-meta 1 udi_bridge\0\
-child_bind_ops 1 0 1\0\
-";
-const META_BIRDGE: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t(1);
+::udi_macros::udiprops!("
+properties_version 0x101
+requires udi_bridge 0x101
+meta 1 udi_bridge
+child_bind_ops 1 0 1
+region 0
+");
+const META_BIRDGE: ::udi::ffi::udi_index_t = udiprops::meta::udi_bridge;
 ::udi::define_driver! {
     Driver as INIT_INFO_PCI;
     ops: {

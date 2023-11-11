@@ -81,6 +81,8 @@ device 101 1 gio_type str uart
 parent_bind_ops 1 0 1 1
 message 100 Sink GIO serial
 message 101 Serial Device
+
+region 0
 ");
 const META_GIO: ::udi::ffi::udi_index_t = udiprops::meta::udi_gio;
 ::udi::define_driver! {

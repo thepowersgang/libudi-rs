@@ -40,7 +40,7 @@ fn main() {
 
     // ----
     register_driver_module(&mut state, unsafe {
-        let udiprops = ::udiprops_parse::load_from_raw_section(bridge_pci::UDIPROPS.as_bytes());
+        let udiprops = ::udiprops_parse::load_from_raw_section(&bridge_pci::udiprops::udiprops);
         ::std::sync::Arc::new( DriverModule::new(&bridge_pci::INIT_INFO_PCI, udiprops) )
     });
     register_driver_module(&mut state, unsafe {
