@@ -183,6 +183,9 @@ impl RegVal {
         }
         rv
     }
+    fn to_u16(&self) -> u16 {
+        u16::from_le_bytes(self.bytes[..2].try_into().unwrap())
+    }
     fn to_u32(&self) -> u32 {
         u32::from_le_bytes(self.bytes[..4].try_into().unwrap())
     }
@@ -221,18 +224,44 @@ impl ::core::ops::BitAnd for RegVal {
         rv
     }
 }
+impl ::core::ops::BitXor for RegVal {
+    type Output = RegVal;
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        let mut rv = RegVal::default();
+        for (d,(a,b)) in rv.bytes.iter_mut().zip( self.bytes.iter().zip(rhs.bytes.iter()) ) {
+            *d = *a ^ *b;
+        }
+        rv
+    }
+}
+fn carrying_add(a: u8, b: u8, carry: bool) -> (u8, bool) {
+    let new_carry2;
+    let (mut rv,new_carry) = a.overflowing_add(b);
+    (rv,new_carry2) = rv.overflowing_add(carry as u8);
+    (rv, new_carry | new_carry2)
+
+    //a.carrying_add(b, carry)
+}
 impl ::core::ops::Add for RegVal {
     type Output = RegVal;
     fn add(self, rhs: Self) -> Self::Output {
         let mut rv = RegVal::default();
         let mut carry = false;
-        for (d,(a,b)) in rv.bytes.iter_mut().zip( self.bytes.iter().zip(rhs.bytes.iter()) ) {
-            let new_carry;
-            let new_carry2;
-            (*d,new_carry) = a.overflowing_add(*b);
-            (*d,new_carry2) = d.overflowing_add(carry as u8);
-            carry = new_carry | new_carry2;
+        for (d,(&a,&b)) in rv.bytes.iter_mut().zip( self.bytes.iter().zip(rhs.bytes.iter()) ) {
+            (*d,carry) = carrying_add(a, b, carry);
             //(*d,carry) = a.carrying_add(*b, carry);
+        }
+        rv
+    }
+}
+impl ::core::ops::Sub for RegVal {
+    type Output = RegVal;
+    fn sub(self, rhs: Self) -> Self::Output {
+        let mut rv = RegVal::default();
+        let mut carry = true;
+        for (d,(&a,&b)) in rv.bytes.iter_mut().zip( self.bytes.iter().zip(rhs.bytes.iter()) ) {
+            (*d,carry) = carrying_add(a, !b, carry);
+            //(*d,carry) = a.carrying_add(!b, carry);
         }
         rv
     }
@@ -370,6 +399,8 @@ impl PioDevState<'_> {
     }
 }
 
+const MAX_OPERATIONS: usize = 1000;
+
 fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_list: &[udi_pio_trans_t], start_label: u8) -> Result<u16,::udi::Error>
 {
     fn find_label(trans_list: &[udi_pio_trans_t], label: u8) -> Result<usize,::udi::Error> {
@@ -387,9 +418,9 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
         }
     }
     let mut ofs = find_label(trans_list, start_label)?;
-    for _ in 0 .. 1000 {
+    for _ in 0 .. MAX_OPERATIONS {
         let op = &trans_list[ofs];
-        println!("pio_trans_inner: OP 0x{:02x} 0x{:04x}", op.pio_op, op.operand);
+        println!("pio_trans_inner: +{} OP 0x{:02x} 0x{:04x}", ofs, op.pio_op, op.operand);
 
         if op.pio_op < 0x80 {
             // Group A
@@ -453,22 +484,51 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
             OUT_IND  => todo!("OUT_IND"),
             SHIFT_LEFT => todo!("SHIFT_LEFT"),
             SHIFT_RIGHT => todo!("SHIFT_RIGHT"),
-            AND     => todo!("AND"),
+            AND => {
+                println!("AND R{}, R{}", op.pio_op & 7, op.operand & 7);
+                let val_l = state.read(op.pio_op & 7, op.tran_size);
+                let val_r = state.read(op.operand as u8 & 7, op.tran_size);
+                state.write(op.pio_op & 7, val_l & val_r, op.tran_size);
+                },
             AND_IMM => {
                 println!("AND_IMM R{}, {:#x}", op.pio_op&7, op.operand);
                 let val = state.read(op.pio_op & 7, op.tran_size);
                 state.write(op.pio_op & 7, val & RegVal::from_u16(op.operand), op.tran_size);
                 },
-            OR      => todo!("OR"),
-            OR_IMM  => todo!("OR_IMM"),
-            XOR         => todo!("XOR"),
-            ADD => todo!("ADD"),
+            OR => {
+                println!("OR R{}, R{}", op.pio_op & 7, op.operand & 7);
+                let val_l = state.read(op.pio_op & 7, op.tran_size);
+                let val_r = state.read(op.operand as u8 & 7, op.tran_size);
+                state.write(op.pio_op & 7, val_l | val_r, op.tran_size);
+                },
+            OR_IMM  => {
+                println!("OR_IMM R{}, {:#x}", op.pio_op&7, op.operand);
+                let val = state.read(op.pio_op & 7, op.tran_size);
+                state.write(op.pio_op & 7, val | RegVal::from_u16(op.operand), op.tran_size);
+                },
+            XOR => {
+                println!("ADD R{}, R{}", op.pio_op & 7, op.operand & 7);
+                let val_l = state.read(op.pio_op & 7, op.tran_size);
+                let val_r = state.read(op.operand as u8 & 7, op.tran_size);
+                state.write(op.pio_op & 7, val_l ^ val_r, op.tran_size);
+                },
+            ADD => {
+                println!("ADD R{}, R{}", op.pio_op & 7, op.operand & 7);
+                let val_l = state.read(op.pio_op & 7, op.tran_size);
+                let val_r = state.read(op.operand as u8 & 7, op.tran_size);
+                state.write(op.pio_op & 7, val_l + val_r, op.tran_size);
+                },
             ADD_IMM => {
                 println!("ADD_IMM R{}, {:#x}", op.pio_op & 7, op.operand);
                 let val = state.read(op.pio_op & 7, op.tran_size);
                 state.write(op.pio_op & 7, val + RegVal::from_u16_signed(op.operand), op.tran_size);
                 },
-            SUB => todo!("SUB"),
+            SUB => {
+                println!("SUB R{}, R{}", op.pio_op & 7, op.operand & 7);
+                let val_l = state.read(op.pio_op & 7, op.tran_size);
+                let val_r = state.read(op.operand as u8 & 7, op.tran_size);
+                state.write(op.pio_op & 7, val_l - val_r, op.tran_size);
+                },
             0xF0 ..= 0xFF => unreachable!(),
             |0x81..=0x87|0x89..=0x8F
             |0x91..=0x97|0x99..=0x9F
@@ -486,11 +546,13 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
             {
             0x00 ..= 0xEF => unreachable!(),
             // Group C
-            LABEL => {},
+            LABEL => {
+                println!("LABEL {}", op.operand);
+                },
             BRANCH => {
                 println!("BRANCH {}", op.operand);
                 ofs = find_label(trans_list, op.operand as _)?;
-                // Explicitly skip the `ofs += 1`
+                // Explicitly skip the `ofs += 1`, so this can branch to label 0 (which doesn't have a label instruction)
                 continue ;
                 },
             REP_IN_IND|REP_OUT_IND => {
@@ -533,8 +595,14 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
             DEBUG   => {},
             // Unallocated
             0xF9..=0xFD => return Err(::udi::Error::from_status(::udi::ffi::UDI_STAT_NOT_UNDERSTOOD as _).unwrap_err()),
-            END    => todo!("END"),
-            END_IMM => return Ok(op.operand),
+            END    => {
+                println!("END R{}", op.operand);
+                return Ok(state.read(op.operand as u8 & 7, op.tran_size).to_u16());
+                },
+            END_IMM => {
+                println!("END_IMM {:#x}", op.operand);
+                return Ok(op.operand)
+                },
             }
         }
         ofs += 1;

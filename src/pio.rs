@@ -176,8 +176,8 @@ pub mod vals {
 		pub const SUB        : u8 = 0xE8;
 	}
 	pub mod ops_group_c {
-		pub const LABEL     : u8 = 0xF0;
-		pub const BRANCH    : u8 = 0xF1;
+		pub const BRANCH    : u8 = 0xF0;
+		pub const LABEL     : u8 = 0xF1;
 		pub const REP_IN_IND: u8 = 0xF2;
 		pub const REP_OUT_IND: u8 = 0xF3;
 		/// Delay for at least `operand` microseconds
