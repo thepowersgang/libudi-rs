@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 
+if [ $# -ne 2 ]; then
+  echo "Usage: $0 <srcdir> <abi>"
+  exit 1
+fi
+
 SRCDIR=$1
 ABI=$2
 UDIPROPS=$SRCDIR/udiprops.txt
