@@ -60,7 +60,11 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
                 let mut tx_cb = self.cb_pool.pop_front().unwrap();
                 tx_cb.op = ::udi::ffi::meta_gio::UDI_GIO_DIR_WRITE;
                 unsafe {
-                    ::udi::buf::Handle::from_raw(tx_cb.data_buf).write(cb.gcb(), 0..5, b"hello").await;
+                    let mut buf = ::udi::buf::Handle::from_raw(tx_cb.data_buf);
+                    buf.write(cb.gcb(), 0..buf.len(), b"hello").await;
+                }
+                // SAFE: Buffer pointer is valid, just used it above
+                unsafe {
                     ::udi::meta_gio::xfer_req(tx_cb);
                 }
                 },
