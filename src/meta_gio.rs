@@ -33,7 +33,11 @@ impl<T> crate::imc::ChannelHandler<MarkerClient> for T
 where
     T: Client
 {
-    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
+    fn channel_bound(&mut self, params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
+        unsafe {
+            let cb = params.parent_bound.bind_cb as *mut ffi::udi_gio_bind_cb_t;
+            ffi::udi_gio_bind_req(cb)
+        }
     }
 }
 future_wrapper!(gio_bind_ack_op => <T as Client>(
@@ -45,7 +49,10 @@ future_wrapper!(gio_bind_ack_op => <T as Client>(
     let size = crate::Error::from_status(status)
         .map(|()| device_size_lo as u64 | (device_size_hi as u64) << 32)
         ;
-    val.bind_ack(cb, size)
+    crate::async_trickery::with_ack(
+        val.bind_ack(cb, size),
+        |cb,()| unsafe { crate::async_trickery::channel_event_complete::<T,ffi::udi_gio_bind_cb_t>(cb, ::udi_sys::UDI_OK as _) }
+        )
 });
 future_wrapper!(gio_unbind_ack_op => <T as Client>(cb: *mut ffi::udi_gio_bind_cb_t) val @ {
     val.unbind_ack(cb)
@@ -87,8 +94,6 @@ impl<T> crate::imc::ChannelHandler<MarkerProvider> for T
 where
     T: Provider
 {
-    fn channel_bound(&mut self, _params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
-    }
 }
 
 future_wrapper!(gio_bind_req_op => <T as Provider>(cb: *mut ffi::udi_gio_bind_cb_t) val @ {

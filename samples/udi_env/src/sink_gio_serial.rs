@@ -45,7 +45,10 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
 {
     type Future_bind_ack<'s> = impl ::core::future::Future<Output=()>;
     fn bind_ack<'s>(&'s mut self, cb: ::udi::cb::CbRef<'s,::udi::ffi::meta_gio::udi_gio_bind_cb_t>, size: ::udi::Result<u64>) -> Self::Future_bind_ack<'s> {
-        async move { todo!("bind_ack") }
+        async move {
+            // TODO: Save the handle
+            todo!("bind_ack({:?})", size)
+        }
     }
 
     type Future_unbind_ack<'s> = impl ::core::future::Future<Output=()>;
