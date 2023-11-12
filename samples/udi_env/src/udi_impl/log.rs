@@ -1,6 +1,6 @@
 
 #[no_mangle]
-unsafe extern "C" fn udi_debug_printf(fmt: *const ::core::ffi::c_char, mut args: ...) {
+pub unsafe extern "C" fn udi_debug_printf(fmt: *const ::core::ffi::c_char, mut args: ...) {
     use ::std::io::Write;
     struct Sink([u8; 64], usize);
     impl super::libc::SnprintfSink for Sink {

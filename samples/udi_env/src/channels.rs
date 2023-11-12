@@ -88,13 +88,16 @@ pub unsafe fn anchor(
 }
 
 /// Call through a channel
-pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::metalang_trait::MetalangCb>(cb: *mut Cb, call: impl FnOnce(&O, *mut Cb))
+/// 
+/// - `name` is the name of the function being called (for debugging)
+/// - `cb` is the control block through which the call is happening
+/// - `call` invokes the callback in the metalanguage ops structure
+pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::metalang_trait::MetalangCb>(name: &'static str, cb: *mut Cb, call: impl FnOnce(&O, *mut Cb))
 {
     // Get the channel currently in the cb, and reverse it
     let gcb = cb as *mut ::udi::ffi::udi_cb_t;
     let ch = ChannelRef::from_handle((*gcb).channel);
     let ch_side = ch.0.sides[!ch.1 as usize].get().unwrap();
-
 
     // Get the scratch as the max of all CB instances for this type
     let driver_module = &*ch_side.driver_instance.module;
@@ -106,8 +109,9 @@ pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::m
         .filter(|cb| cb.meta_cb_num == Cb::META_CB_NUM)
         .map(|cb| cb.scratch_requirement)
         .max();
-    println!("remote_call({},{}): Context = {:p}, scratch_requirement = {:?}",
+    println!("remote_call({}[{}]cb={}): Context = {:p}, scratch_requirement = {:?}",
         ::core::any::type_name::<O>(),
+        name,
         ::core::any::type_name::<Cb>(),
         ch_side.context, scratch_requirement);
 

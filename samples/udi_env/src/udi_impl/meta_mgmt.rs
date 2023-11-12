@@ -37,10 +37,12 @@ pub unsafe extern "C" fn udi_enumerate_ack(cb: *mut udi_enumerate_cb_t, enumerat
 #[no_mangle]
 pub unsafe extern "C" fn udi_devmgmt_ack(cb: *mut udi_mgmt_cb_t, flags: udi_ubit8_t, status: udi_status_t)
 {
+    let instance = crate::channels::get_driver_instance(&(*cb).gcb.channel);
     todo!();
 }
 #[no_mangle]
 pub unsafe extern "C" fn udi_final_cleanup_ack(cb: *mut udi_mgmt_cb_t)
 {
+    let instance = crate::channels::get_driver_instance(&(*cb).gcb.channel);
     todo!();
 }

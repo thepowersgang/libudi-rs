@@ -12,8 +12,7 @@ macro_rules! dispatch_call {
         $(
         #[no_mangle]
         $vis unsafe extern "C" fn $name(cb: *mut $cb_ty $(, $a_name : $a_ty)*) {
-            println!("dispatch_call: -> {}", stringify!($name));
-            crate::channels::remote_call::<$ops_ty,$cb_ty>(cb, move |ops,cb| (ops.$ops_name)(cb $(, $a_name)*));
+            crate::channels::remote_call::<$ops_ty,$cb_ty>(stringify!($name), cb, move |ops,cb| (ops.$ops_name)(cb $(, $a_name)*));
         }
     )+
     };

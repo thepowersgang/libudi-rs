@@ -21,9 +21,6 @@ struct GlobalState {
 }
 
 fn main() {
-
-    //::udi_environment::udi_impl::log::_REF;
-
     let mut state = GlobalState{
         modules: vec![],
         instances: vec![],

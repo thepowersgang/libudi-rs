@@ -189,7 +189,7 @@ impl InstanceInitState
 
     fn next_op_enumerate(&mut self, is_first: bool) -> Op
     {
-        println!("next_op_enumerate");
+        //println!("next_op_enumerate");
         let pri_init = self.instance.module.pri_init;
         let level = if is_first {
             ::udi::ffi::meta_mgmt::UDI_ENUMERATE_START

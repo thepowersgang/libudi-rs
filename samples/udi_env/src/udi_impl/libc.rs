@@ -151,10 +151,6 @@ unsafe extern "C" fn udi_strtou32(mut s: *const c_char, endptr: *mut *mut c_char
 pub unsafe extern "C" fn udi_snprintf(s: *mut c_char, max_bytes: udi_size_t, format: *const c_char, mut args: ...) -> udi_size_t {
     udi_vsnprintf(s, max_bytes, format, args.as_va_list())
 }
-
-pub trait SnprintfSink {
-    fn push(&mut self, byte: u8);
-}
 #[no_mangle]
 unsafe extern "C" fn udi_vsnprintf(s: *mut c_char, max_bytes: udi_size_t, format: *const c_char, ap: ::core::ffi::VaList) -> udi_size_t {
     let dst = ::core::slice::from_raw_parts_mut(s, max_bytes);
@@ -179,6 +175,12 @@ unsafe extern "C" fn udi_vsnprintf(s: *mut c_char, max_bytes: udi_size_t, format
         }
     }
 }
+
+/// Effectively fmt::Write, but simpler
+pub trait SnprintfSink {
+    fn push(&mut self, byte: u8);
+}
+/// The innards of [udi_snprintf]/[udi_vsnprintf]/[super::log::udi_debug_printf]
 pub unsafe fn snprintf_inner(rv: &mut dyn SnprintfSink, format: *const c_char, mut ap: ::core::ffi::VaList)
 {
     let format = ::core::ffi::CStr::from_ptr(format);
