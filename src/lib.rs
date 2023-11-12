@@ -27,6 +27,7 @@ pub mod channel_context;
 pub mod buf;
 pub mod init;
 pub mod cb;
+pub mod mem;
 pub mod layout;
 pub mod libc;
 #[macro_use]
