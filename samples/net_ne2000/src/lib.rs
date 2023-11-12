@@ -113,7 +113,7 @@ impl ::udi::meta_bus::BusDevice for ::udi::init::RData<Driver>
 
 			// Spawn channel
 			self.intr_channel = ::udi::imc::channel_spawn(cb.gcb(), /*interrupt number*/0.into(), OpsList::Irq as _).await;
-			let mut intr_cb = ::udi::cb::alloc::<Cbs::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
+			let mut intr_cb = ::udi::cb::alloc::<CbList::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
 			intr_cb.interrupt_index = 0.into();
 			intr_cb.min_event_pend = 2;
 			intr_cb.preprocessing_handle = self.pio_handles.irq_ack.as_raw();	// NOTE: This transfers ownership
@@ -123,7 +123,7 @@ impl ::udi::meta_bus::BusDevice for ::udi::init::RData<Driver>
 			//::udi::Error::from_status(self.intr_attach_res.wait().await)?;
 
 			for _ in 0 .. 4/*NE2K_NUM_INTR_EVENT_CBS*/ {
-				let intr_event_cb = ::udi::cb::alloc::<Cbs::IntrEvent>(cb.gcb(), self.intr_channel.raw()).await;
+				let intr_event_cb = ::udi::cb::alloc::<CbList::IntrEvent>(cb.gcb(), self.intr_channel.raw()).await;
 				::udi::meta_intr::event_rdy(intr_event_cb);
 			}
 

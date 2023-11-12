@@ -164,7 +164,7 @@ fn _check_parent_bind_ops() {{
     let _ = <
         <super::OpsList::_{ops_idx} as ::udi::ops_markers::Ops>::OpsTy
         as
-        ::udi::ops_markers::ParentBind< <super::Cbs::_{bind_cb_idx} as ::udi::cb::CbDefinition >::Cb >
+        ::udi::ops_markers::ParentBind< <super::CbList::_{bind_cb_idx} as ::udi::cb::CbDefinition >::Cb >
     >::ASSERT;
 }}
 "#)?;

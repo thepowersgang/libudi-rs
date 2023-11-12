@@ -50,7 +50,7 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
             match size {
             Ok(0) => {
                 // Allocate a pool of CBs with 1KiB buffers
-                let mut cbs = ::udi::cb::alloc_batch::<Cbs::_Xfer>(cb.gcb(), 3, Some((1024, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
+                let mut cbs = ::udi::cb::alloc_batch::<CbList::_Xfer>(cb.gcb(), 3, Some((1024, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
                 while let Some(mut xfer_cb) = cbs.pop_front() {
                     xfer_cb.gcb.channel = cb.gcb.channel;
                     self.cb_pool.push_front(xfer_cb);

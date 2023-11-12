@@ -3,6 +3,7 @@
 //! 
 use ::udi_sys::imc::udi_channel_event_cb_t;
 
+/// Channel handle
 pub struct ChannelHandle(::udi_sys::udi_channel_t);
 impl Default for ChannelHandle {
     fn default() -> Self {

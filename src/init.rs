@@ -204,12 +204,15 @@ pub enum MgmtOp
 	Unbind,
 }
 
+/// Region context
 #[repr(C)]
 #[fundamental]
 pub struct RData<T> {
-    pub(crate) init_context: ffi::init::udi_init_context_t,
-	pub(crate) channel_cb: *mut crate::ffi::imc::udi_channel_event_cb_t,
+    init_context: ::udi_sys::init::udi_init_context_t,
+	channel_cb: *mut ::udi_sys::imc::udi_channel_event_cb_t,
 	// NOTE: According to the docs on `udi_primary_init_info_t`, this structure is null-initialised.
+	// So, this field will be `false` on first use
+	// Needed because `usage_ind` can be called multiple times
 	is_init: bool,
     pub inner: T,
 }
@@ -217,7 +220,7 @@ impl<Driver> crate::imc::ChannelInit for RData<Driver> {
 }
 impl<Driver> crate::async_trickery::CbContext for RData<Driver>
 {
-    fn channel_cb_slot(&mut self) -> &mut *mut crate::ffi::imc::udi_channel_event_cb_t {
+    fn channel_cb_slot(&mut self) -> &mut *mut ::udi_sys::imc::udi_channel_event_cb_t {
         &mut self.channel_cb
     }
 }

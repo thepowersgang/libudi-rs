@@ -14,16 +14,19 @@ use ::core::marker::{PhantomData,Unpin};
 use ::core::future::Future;
 use crate::ffi::udi_cb_t;
 
+/// Trait for the `context` field in a CB
 pub trait CbContext {
 	fn channel_cb_slot(&mut self) -> &mut *mut crate::ffi::imc::udi_channel_event_cb_t;
 }
 
+/// Result of a wait operation, stored in scratch
 #[derive(Copy,Clone)]
 pub(crate) enum WaitRes {
 	//Unit,
 	Pointer(*mut ()),
 	Data([usize; 3]),
 }
+
 /// A trait for top-level future types (stored in `scratch`)
 pub(crate) trait AsyncState {
 	fn get_future(self: Pin<&mut Self>) -> Pin<&mut dyn Future<Output=()>>;
@@ -65,7 +68,8 @@ pub(crate) unsafe fn get_rdata_t<T: CbContext, Cb: GetCb>(cb: &Cb) -> &mut T {
 pub(crate) unsafe fn set_channel_cb<T: CbContext>(cb: *mut crate::ffi::imc::udi_channel_event_cb_t) {
 	let slot = get_rdata_t::<T,_>(&*cb).channel_cb_slot();
 	if *slot != ::core::ptr::null_mut() {
-		// Uh-oh
+		// Uh-oh, 
+		panic!("Channel CB was already set");
 	}
 	*slot = cb;
 }
@@ -74,7 +78,8 @@ pub(crate) unsafe fn channel_event_complete<T: CbContext, Cb: GetCb>(cb: *mut Cb
 	let channel_cb = *slot;
 	*slot = ::core::ptr::null_mut();
 	if channel_cb == ::core::ptr::null_mut() {
-		// Uh-oh
+		// Uh-oh, no channel CB set
+		panic!("no channel CB set")
 	}
 	crate::ffi::imc::udi_channel_event_complete(channel_cb, status);
 }
@@ -154,7 +159,7 @@ where
 	}
 }
 
-// An async task state
+/// Top-level async task state (`gcb.scratch`)
 #[repr(C)]
 struct Task<T,Cb> {
 	pd: PhantomData<Cb>,
@@ -220,6 +225,7 @@ impl Task<(),udi_cb_t>
 	}
 }
 
+/// Inner future for [wait_task]
 struct WaitTask<Cb,F1,F2,U>
 {
 	_f1_pd: PhantomData<F1>,
@@ -253,6 +259,7 @@ where
 	}
 }
 
+/// Inner future for [with_ack]
 pub(crate) struct WithAck<Cb, Fut, Res, Ack>
 {
 	f: Fut,
@@ -322,6 +329,8 @@ static VTABLE_CB_T: ::core::task::RawWakerVTable = ::core::task::RawWakerVTable:
 	|_| (),
 	);
 
+/// Trait for a CB type to get the inner GCB
+/// 
 /// SAFETY: `get_gcb` must return the first field of the struct
 pub unsafe trait GetCb: ::core::any::Any + Unpin
 {
@@ -341,6 +350,7 @@ unsafe impl<T: crate::metalang_trait::MetalangCb + ::core::any::Any + Unpin> Get
 	}
 }
 
+/// Obtain the TaskState result given a GCB
 fn get_result(gcb: *const udi_cb_t) -> Option<WaitRes>
 {
 	let state = unsafe { &*((*gcb).scratch as *mut Task<(),udi_cb_t>) };
@@ -376,12 +386,22 @@ pub(crate) fn signal_waiter(gcb: &mut udi_cb_t, res: WaitRes) {
 }
 
 
-/// Define an async trait method
+/// Helper: Define an async trait method
+/// 
+/// Creates a method that returns an associated type (the name of which is after the `as` in the invocation).
+/// 
+/// ```ignore
+/// trait Foo
+/// {
+///   ::udi::async_method!(fn bar(&mut self, arg: u8) -> u16 as Future_bar);
+/// }
+/// ```
+#[macro_export]
 macro_rules! async_method {
     (fn $fcn_name:ident(&mut self$(, $a_n:ident: $a_ty:ty)*) -> $ret_ty:ty as $future_name:ident) => {
         #[allow(non_camel_case_types)]
         type $future_name<'s>: ::core::future::Future<Output=$ret_ty>;
-        fn $fcn_name(&mut self$(, $a_n: $a_ty)*) -> Self::$future_name<'_>;
+        fn $fcn_name<'s>(&'s mut self$(, $a_n: $a_ty)*) -> Self::$future_name<'s>;
     };
     (fn $fcn_name:ident(&$lft:lifetime mut self$(, $a_n:ident: $a_ty:ty)*) -> $ret_ty:ty as $future_name:ident) => {
         #[allow(non_camel_case_types)]
@@ -389,25 +409,32 @@ macro_rules! async_method {
         fn $fcn_name<$lft>(&$lft mut self$(, $a_n: $a_ty)*) -> Self::$future_name<$lft>;
     };
 }
-/// Define a FFI wrapper 
+/// Define a FFI wrapper that invokes a future
+/// 
+/// ```ignore
+/// ::udi::future_wrapper!{udi_foo_bar_req => <T as FooTrait>::bar_req(cb: *mut udi_foo_cb_t, arg1: u8)}
+/// ```
+#[macro_export]
 macro_rules! future_wrapper {
     ($name:ident => <$t:ident as $trait:path>::$method:ident($cb:ident: *mut $cb_ty:ty $(, $a_n:ident: $a_ty:ty)*) ) => {
-        future_wrapper!($name => <$t:ty as $trait>::$method($cb: *mut $cb_ty, $(, $a_n: $a_ty)*))
+        $crate::future_wrapper!($name => <$t as $trait>($cb: *mut $cb_ty $(, $a_n: $a_ty)*) val @ {
+			val.$method($cb $(, $a_n)*)
+		});
     };
     ($name:ident => <$t:ident as $trait:path>($cb:ident: *mut $cb_ty:ty $(, $a_n:ident: $a_ty:ty)*) $val:ident @ $b:block ) => {
         unsafe extern "C" fn $name<T: $trait + $crate::async_trickery::CbContext>($cb: *mut $cb_ty$(, $a_n: $a_ty)*)
         {
             let job = {
-				let $val = crate::async_trickery::get_rdata_t::<T,_>(&*$cb);
-				let $cb = unsafe { crate::CbRef::new($cb) };
+				let $val = $crate::async_trickery::get_rdata_t::<T,_>(&*$cb);
+				let $cb = unsafe { $crate::CbRef::new($cb) };
                 $b
                 };
-            crate::async_trickery::init_task(&*$cb, job);
+            $crate::async_trickery::init_task(&*$cb, job);
         }
         mod $name {
             use super::*;
             pub const fn task_size<$t: $trait>() -> usize {
-                crate::async_trickery::task_size_from_closure(|$val: &mut $t, ($cb, $($a_n,)*): (crate::CbRef<$cb_ty>, $($a_ty,)*)| $b)
+                $crate::async_trickery::task_size_from_closure(|$val: &mut $t, ($cb, $($a_n,)*): ($crate::CbRef<$cb_ty>, $($a_ty,)*)| $b)
             }
         }
     };

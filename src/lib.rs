@@ -13,6 +13,7 @@
 // - scratch is where the future should go
 
 use self::async_trickery::WaitRes;
+
 //use self::future_ext::FutureExt;
 #[macro_use]
 mod future_ext;
@@ -21,12 +22,7 @@ mod async_trickery;
 
 #[macro_use]
 pub mod metalang_trait;
-
-pub use cb::CbRef;
-
-pub use ::udi_macros::debug_printf;
-//pub use ::udi_macros::GetLayout;
-pub use ::udi_sys as ffi;
+pub mod channel_context;
 
 pub mod buf;
 pub mod init;
@@ -42,6 +38,14 @@ pub mod meta_bus;
 pub mod meta_intr;
 pub mod meta_gio;
 pub mod meta_nic;
+
+
+pub use ::udi_macros::debug_printf;
+//pub use ::udi_macros::GetLayout;
+pub use ::udi_sys as ffi;
+
+pub use self::cb::CbRef;
+pub use self::channel_context::ChildBind;
 
 pub type Result<T> = ::core::result::Result<T,Error>;
 
@@ -108,10 +112,6 @@ impl ::core::fmt::Debug for Error {
     }
 }
 
-#[cfg(false_)]
-pub fn get_gcb() -> impl ::core::future::Future<Output=&'static ffi::udi_cb_t> {
-	async_trickery::with_cb::<ffi::udi_cb_t,_,_>(|cb| unsafe { &*(cb as *const _) })
-}
 pub fn get_gcb_channel() -> impl ::core::future::Future<Output=ffi::udi_channel_t> {
 	async_trickery::with_cb::<ffi::udi_cb_t,_,_>(|cb| cb.channel)
 }
@@ -124,19 +124,14 @@ pub const fn const_max(a: usize, b: usize) -> usize {
 	if a > b { a } else { b }
 }
 
+/// Marker: Implemented on `CbList` by [define_driver] to indicate that a CB is present in the list
+pub trait HasCb<T: metalang_trait::MetalangCb> {
+}
+
 /// Indicates that this type is just a wrapper around `Inner`, and thus it's valid to
 /// pointer cast between the two
 pub unsafe trait Wrapper<Inner> {
 }
-pub trait HasCb<T: metalang_trait::MetalangCb> {
-}
-impl<T, Drv,Chld> HasCb<T> for ChildBind<Drv,Chld>
-where
-	T: metalang_trait::MetalangCb,
-	Drv: HasCb<T>,
-{
-}
-
 /// Define a set of wrapper types for another type, to separate trait impls
 /// 
 /// ```rust
@@ -182,66 +177,13 @@ pub const fn make_cb_init<T: cb::CbDefinition>(meta_idx: ffi::udi_index_t, scrat
 		scratch_requirement,
 	}
 }
-#[doc(hidden)]
-pub const fn enforce_is_wrapper_for<T, U>()
-where
-	T: Wrapper<U>
-{
-}
 
+/// Hacky structure used in place of a const trait for methods on `udi_*_ops_t` structures
 pub struct OpsStructure<Ops, T, CbList>
 {
 	pd: ::core::marker::PhantomData<(Ops,T,CbList)>,
 }
 
-#[repr(C)]
-#[fundamental]
-pub struct ChildBind<Driver,ChildData>
-{
-	pd: ::core::marker::PhantomData<Driver>,
-	inner: ffi::init::udi_child_chan_context_t,
-	channel_cb: *mut crate::ffi::imc::udi_channel_event_cb_t,
-	child_data: ChildData,
-}
-impl<Driver,ChildData> ChildBind<Driver,ChildData>
-{
-	pub fn child_id(&self) -> ffi::udi_ubit32_t {
-		self.inner.child_id
-	}
-	pub fn dev(&self) -> &Driver {
-		unsafe { & (*(self.inner.rdata as *const crate::init::RData<Driver>)).inner }
-	}
-	pub fn dev_mut(&mut self) -> &mut Driver {
-		unsafe { &mut (*(self.inner.rdata as *mut crate::init::RData<Driver>)).inner }
-	}
-}
-impl<Driver,ChildData> ::core::ops::Deref for ChildBind<Driver,ChildData>
-{
-	type Target = ChildData;
-	fn deref(&self) -> &Self::Target {
-		&self.child_data
-	}
-}
-impl<Driver,ChildData> ::core::ops::DerefMut for ChildBind<Driver,ChildData>
-{
-	fn deref_mut(&mut self) -> &mut Self::Target {
-		&mut self.child_data
-	}
-}
-impl<Driver,ChildData> crate::async_trickery::CbContext for ChildBind<Driver,ChildData>
-{
-    fn channel_cb_slot(&mut self) -> &mut *mut crate::ffi::imc::udi_channel_event_cb_t {
-        &mut self.channel_cb
-    }
-}
-impl<Driver,ChildData> crate::imc::ChannelInit for ChildBind<Driver,ChildData>
-where
-	ChildData: Default,
-{
-    unsafe fn init(&mut self) {
-		::core::ptr::write(&mut self.child_data, ChildData::default())
-	}
-}
 
 pub mod ops_wrapper_markers {
 	/// Indicates that the ops entry is a valid ChildBind
@@ -268,8 +210,24 @@ pub mod ops_markers {
 
 /// Define a UDI driver
 /// 
-/// ```ignore
+/// ```
+/// # #[derive(Default)]
 /// struct Driver;
+/// # impl ::udi::init::Driver for ::udi::init::RData<Driver> {
+/// #  const MAX_ATTRS: u8 = 0;
+/// #  type Future_init<'s> = ::core::future::Pending<()>;
+/// #  fn usage_ind<'s>(&'s mut self, _cb: ::udi::meta_mgmt::CbRefUsage<'s>, _resouce_level: u8) -> Self::Future_init<'s> {
+/// #    ::core::future::pending()
+/// #  }
+/// #  type Future_enumerate<'s> = ::core::future::Pending<(::udi::init::EnumerateResult,::udi::init::AttrSink<'s>)>;
+/// #  fn enumerate_req<'s>(&'s mut self, _cb: ::udi::init::CbRefEnumerate<'s>, level: ::udi::init::EnumerateLevel, mut attrs_out: ::udi::init::AttrSink<'s> ) -> Self::Future_enumerate<'s> {
+/// #    ::core::future::pending()
+/// #  }
+/// #  type Future_devmgmt<'s> = ::core::future::Pending<::udi::Result<u8>>;
+/// #  fn devmgmt_req<'s>(&'s mut self,  _cb: ::udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, _parent_id: ::udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
+/// #    ::core::future::pending()
+/// #  }
+/// # }
 /// ::udi::define_driver!{Driver;
 /// ops: {
 /// 	},
@@ -280,7 +238,6 @@ pub mod ops_markers {
 #[macro_export]
 macro_rules! define_driver
 {
-
 	(
 		$driver:path;
 		ops: {
@@ -305,6 +262,7 @@ macro_rules! define_driver
 			$($cb_name:ident: Meta=$cb_meta:expr, $cb_ty:path),*$(,)?
 		}
 	) => {
+		/// Indexes for the Ops list
 		#[repr(u8)]
 		enum RawOpsList {
 			_Zero,
@@ -315,25 +273,26 @@ macro_rules! define_driver
 			$crate::define_driver!(@indexes $($op_name)*);
 			$(
 				pub const $op_name: $crate::ffi::udi_index_t = $crate::ffi::udi_index_t(super::RawOpsList::$op_name as _);
-				pub struct $op_name { }
+				pub struct $op_name { _inner: () }
 				impl $crate::ops_markers::Ops for $op_name {
 					type OpsTy = $op_op;
 				}
 				$(impl $crate::ops_wrapper_markers::$wrapper for $op_name { const IDX: $crate::ffi::udi_index_t = $op_name; })?
 			)*
 		}
+		/// Indexes for the CB list
 		#[repr(u8)]
-		enum CbList {
+		enum RawCbList {
 			_Zero,
 			$($cb_name,)*
 		}
 		#[allow(non_snake_case)]
-		mod Cbs {
+		mod CbList {
 			$crate::define_driver!(@indexes $($cb_name)*);
 			$(
-				pub struct $cb_name(());
+				pub struct $cb_name { _inner: () }
 				impl $crate::cb::CbDefinition for $cb_name {
-					const INDEX: $crate::ffi::udi_index_t = $crate::ffi::udi_index_t(super::CbList::$cb_name as _);
+					const INDEX: $crate::ffi::udi_index_t = $crate::ffi::udi_index_t(super::RawCbList::$cb_name as _);
 					type Cb = $cb_ty;
 				}
 			)*
@@ -374,7 +333,7 @@ macro_rules! define_driver
 				$crate::ffi::init::udi_ops_init_t::end_of_list()
 			].as_ptr(),
 			cb_init_list: [
-				$( $crate::make_cb_init::<Cbs::$cb_name>($cb_meta, _STATE_SIZE, None), )*
+				$( $crate::make_cb_init::<CbList::$cb_name>($cb_meta, _STATE_SIZE, None), )*
 				$crate::ffi::init::udi_cb_init_t::end_of_list()
 			].as_ptr(),
 			gcb_init_list: ::core::ptr::null(),
@@ -383,7 +342,7 @@ macro_rules! define_driver
 	};
 
 	(@ops_structrure_call $op_ty:ty, $driver:ty $(: $wrapper:ident<_$(,$wrapper_arg:ty)*>)?, $call:ident) => {
-		<$crate::OpsStructure<$op_ty,$crate::define_driver!(@get_wrapper $driver $(: $wrapper<_$(,$wrapper_arg)*>)?),Cbs::List>>::$call
+		<$crate::OpsStructure<$op_ty,$crate::define_driver!(@get_wrapper $driver $(: $wrapper<_$(,$wrapper_arg)*>)?),CbList::List>>::$call
 	};
 	(@get_wrapper $driver:ty: $wrapper:ident<_$(,$wrapper_arg:ty)*> ) => { $crate::$wrapper<$driver$(,$wrapper_arg)*> };
 	(@get_wrapper $driver:ty ) => { $crate::init::RData<$driver> };
