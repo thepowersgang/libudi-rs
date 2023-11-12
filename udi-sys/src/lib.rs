@@ -19,6 +19,7 @@ pub mod meta_bus;
 pub mod meta_intr;
 pub mod meta_gio;
 pub mod meta_nic;
+pub mod meta_usb;
 pub mod libc;
 pub mod layout;
 
