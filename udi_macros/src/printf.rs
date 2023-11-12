@@ -88,12 +88,12 @@ pub fn snprintf(input: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream
     let input_arg = &input.arg_values;
     ::proc_macro::TokenStream::from(::quote::quote!{
         {
-            fn udi_snprintf( buf: &mut [u8], #( #arg_name: #exp_arg_tys ),* ) {
+            fn udi_snprintf( buf: &mut [u8], #( #arg_name: #exp_arg_tys ),* ) -> usize {
                 unsafe {
-                    ::udi::ffi::libc::udi_snprintf( buf.as_ptr(), buf.len(), concat!(#format,"\0").as_ptr() as _ #(, ::udi::libc::SnprintfArg::into_arg(#arg_name) )* );
+                    ::udi::ffi::libc::udi_snprintf( buf.as_mut_ptr() as *mut ::core::ffi::c_char, buf.len(), concat!(#format,"\0").as_ptr() as _ #(, ::udi::libc::SnprintfArg::into_arg(#arg_name) )* )
                 }
             }
-            udi_snprintf( #buf, #(#input_arg),* );
+            udi_snprintf( #buf, #(#input_arg),* )
         }
     })
 }

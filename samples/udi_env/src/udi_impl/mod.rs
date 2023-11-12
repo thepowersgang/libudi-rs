@@ -1,8 +1,4 @@
 
-#[link(name="c_shim")]
-extern "C" {
-}
-
 
 pub mod cb;
 pub mod imc;

@@ -10,6 +10,3 @@ udiprops_parse = { path = "../../udiprops_parse" }
 udi-net_ne2000 = { path = "../net_ne2000" }
 
 libc = "0.2.149"
-
-[build-dependencies]
-cc = "1.0.83"

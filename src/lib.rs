@@ -141,7 +141,7 @@ where
 /// 
 /// ```rust
 /// struct MyType;
-/// define_wrappers!(MyType: MyType1 MyType2)
+/// ::udi::define_wrappers!{MyType: MyType1 MyType2}
 /// ```
 #[macro_export]
 macro_rules! define_wrappers {
@@ -268,9 +268,9 @@ pub mod ops_markers {
 
 /// Define a UDI driver
 /// 
-/// ```rust
+/// ```ignore
 /// struct Driver;
-/// define_driver!{Driver;
+/// ::udi::define_driver!{Driver;
 /// ops: {
 /// 	},
 /// cbs: {
