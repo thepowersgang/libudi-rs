@@ -8,6 +8,10 @@ pub type udi_channel_spawn_call_t = unsafe extern "C" fn(*mut udi_cb_t, udi_chan
 extern "C" {
     pub fn udi_channel_anchor(cb: udi_channel_anchor_call_t, gcb: *mut udi_cb_t, channel: udi_channel_t, ops_idx: udi_index_t, channel_context: *mut c_void);
     pub fn udi_channel_spawn(cb: udi_channel_spawn_call_t, gcb: *mut udi_cb_t, channel: udi_channel_t, spawn_idx: udi_index_t, ops_idx: udi_index_t, channel_context: *mut c_void);
+    pub fn udi_channel_set_context(channel: udi_channel_t, channel_context: *mut c_void);
+    pub fn udi_channel_op_abort(channel: udi_channel_t, orig_cb: *mut udi_cb_t);
+    pub fn udi_channel_close(channel: udi_channel_t);
+    pub fn udi_channel_event_ind(cb: *mut udi_channel_event_cb_t);
     pub fn udi_channel_event_complete(cb: *mut udi_channel_event_cb_t, status: super::udi_status_t);
 }
 

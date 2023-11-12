@@ -23,6 +23,7 @@ pub mod meta_usb;
 pub mod libc;
 pub mod layout;
 pub mod mem;
+pub mod time;
 
 pub use ::core::ffi::c_void;
 
@@ -41,7 +42,13 @@ impl ::core::fmt::Display for udi_index_t {
     }
 }
 
-pub type udi_size_t = usize;
+mod arch {
+	pub type udi_size_t = usize;
+	// IA-32 defines it this way.
+	pub type udi_timestamp_t = u32;
+}
+pub use arch::*;
+
 pub type udi_status_t = u32;
 pub type _udi_handle_t = *mut c_void;
 #[doc(hidden)] #[repr(C)] pub struct _udi_channel_s { inner: () }
