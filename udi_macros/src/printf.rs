@@ -100,8 +100,23 @@ pub fn snprintf(input: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream
 
 fn parse_format_args(input: &::syn::LitStr) -> ::syn::Result< Vec<::syn::Type> >
 {
+    fn err(input: &::syn::LitStr, _it: &::core::str::Chars<'_>, message: ::std::fmt::Arguments) -> ::syn::Error {
+        ::syn::Error::new(input.span(), message)
+    }
     fn nextc(input: &::syn::LitStr, it: &mut ::core::str::Chars<'_>) -> ::syn::Result<char> {
-        it.next().ok_or(::syn::Error::new(input.span(), "Unexpected end of format string"))
+        it.next().ok_or(err(input, it, format_args!("Unexpected end of format string")))
+    }
+    fn parse_num(c: &mut char, input: &::syn::LitStr, it: &mut ::core::str::Chars<'_>) -> ::syn::Result<u32> {
+        let mut rv = 0;
+        if !c.is_ascii_digit() {
+            return Err(err(input, it, format_args!("Expected a number, got {:?}", *c as char)));
+        }
+        while let Some(d) = c.to_digit(10) {
+            rv *= 10;
+            rv += d;
+            *c = nextc(input, it)?;
+        }
+        Ok( rv )
     }
     let mut rv = Vec::new();
     let input_s = input.value();
@@ -130,9 +145,12 @@ fn parse_format_args(input: &::syn::LitStr) -> ::syn::Result< Vec<::syn::Type> >
         }
 
         // Width
-        while let Some(_) = c.to_digit(10) {
-            c = nextc(input, &mut it)?;
+        let _width = if c.is_ascii_digit() {
+            parse_num(&mut c, input, &mut it)?
         }
+        else {
+            0
+        };
 
         rv.push(match c {
             'X'|'x' => ::syn::parse_str("::udi::ffi::udi_ubit32_t").unwrap(),
@@ -159,9 +177,88 @@ fn parse_format_args(input: &::syn::LitStr) -> ::syn::Result< Vec<::syn::Type> >
                 ::syn::parse_str("&::core::ffi::CStr").unwrap()
                 },
             '<' => {
-                while c != '>' {
+                c = nextc(input, &mut it)?;
+                // Comma-separated list of:
+                // - [~]BitNum=Name String
+                // - Start-End=Name String{:Value=Name}
+
+                // A leading comma is valid
+                if c == ',' {
                     c = nextc(input, &mut it)?;
                 }
+
+                loop {
+                    if c == '>' {
+                        break;
+                    }
+                    enum Ty {
+                        Single(u32, bool),
+                        Range(u32,u32),
+                    }
+                    let ty = if c == '~' {
+                        // Single inverted bit
+                        c = nextc(input, &mut it)?;
+                        let bitnum = parse_num(&mut c, input, &mut it)?;
+                        Ty::Single(bitnum, true)
+                    }
+                    else {
+                        let bitnum = parse_num(&mut c, input, &mut it)?;
+                        if c != '-' {
+                            // Single positive bit
+                            Ty::Single(bitnum, false)
+                        }
+                        else {
+                            // Bit range
+                            c = nextc(input, &mut it)?;
+                            let end = parse_num(&mut c, input, &mut it)?;
+                            if !(bitnum <= end) {
+                                return Err(err(input, &it, format_args!("Bit range not correctly ordered ({} > {})", bitnum, end)));
+                            }
+                            Ty::Range(bitnum, end)
+                        }
+                    };
+
+                    match ty {
+                    Ty::Single(_idx, _inv) => {
+                        loop {
+                            if c == '>' || c == ',' {
+                                break;
+                            }
+                            c = nextc(input, &mut it)?;
+                        }
+                    }
+                    Ty::Range(_start, _end) => {
+                        // Consume the name
+                        loop {
+                            if c == '>' || c == ',' || c == ':' {
+                                break;
+                            }
+                            c = nextc(input, &mut it)?;
+                        }
+
+                        while c == ':' {
+                            c = nextc(input, &mut it)?;
+                            let _val = parse_num(&mut c, input, &mut it)?;
+                            if c != '=' {
+                                return Err(err(input, &it, format_args!("Expected '=', got {:?}", c)));
+                            }
+                            c = nextc(input, &mut it)?;
+                            // Consume the name
+                            loop {
+                                if c == '>' || c == ',' || c == ':' {
+                                    break;
+                                }
+                                c = nextc(input, &mut it)?;
+                            }
+                        }
+                    },
+                    }
+                    if c != ',' {
+                        break;
+                    }
+                    c = nextc(input, &mut it)?; // Consume the comma
+                }
+                assert!(c == '>');
                 ::syn::parse_str("::udi::ffi::udi_ubit32_t").unwrap()
                 }
             _ => return Err(::syn::Error::new(input.span(), format!("Invalid formatting fragment `%{}`", c))),
