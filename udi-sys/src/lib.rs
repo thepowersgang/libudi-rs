@@ -1,6 +1,7 @@
 //! Raw UDI C API definitions
 //! 
 #![feature(extern_types)]	// For opaque handle types
+#![feature(c_variadic)]	// For va_list in MEI
 #![no_std]
 
 #![allow(non_camel_case_types)]
@@ -24,6 +25,9 @@ pub mod libc;
 pub mod layout;
 pub mod mem;
 pub mod time;
+pub mod queue;
+pub mod endian;
+pub mod mei;
 
 pub use ::core::ffi::c_void;
 
@@ -75,7 +79,8 @@ pub type udi_sbit32_t = i32;
 pub use layout::udi_layout_t;
 pub use cb::udi_cb_t;
 
-pub type udi_ops_vector_t = *const extern "C" fn();
+pub type udi_op_t = unsafe extern "C" fn();
+pub type udi_ops_vector_t = *const udi_op_t;
 
 #[repr(C)]
 pub struct udi_buf_t
