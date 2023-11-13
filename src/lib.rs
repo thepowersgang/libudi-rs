@@ -187,13 +187,13 @@ macro_rules! define_driver
 			$($op_name:ident: ::$($op_op_mod:ident)::* @ $op_op_name:ident $(: $wrapper:ident<_$(,$wrapper_arg:ty)*>)?),*$(,)?
 		},
 		cbs: {
-			$($cb_name:ident: Meta=$cb_meta:expr, $cb_ty:path),*$(,)?
+			$($cb_name:ident: $(::$cb_ty_mod:ident)* @ $cb_ty_name:ident),*$(,)?
 		}
 	) => {
 		$crate::define_driver!{
 			$driver as #[no_mangle] udi_init_info;
 			ops: { $($op_name: Meta=::$($op_op_mod)::*::metalang_name!(udiprops::meta::), ::$($op_op_mod::)*$op_op_name $(: $wrapper<_$(,$wrapper_arg)*>)? ),* },
-			cbs: { $($cb_name: Meta=$cb_meta, $cb_ty ),* }
+			cbs: { $($cb_name: Meta=$(::$cb_ty_mod)*::metalang_name!(udiprops::meta::), $(::$cb_ty_mod)*::$cb_ty_name ),* }
 		}
 	};
 	(
