@@ -2,6 +2,7 @@
 //! 
 #![feature(extern_types)]	// For opaque handle types
 #![feature(c_variadic)]	// For va_list in MEI
+#![feature(decl_macro)]
 #![no_std]
 
 #![allow(non_camel_case_types)]

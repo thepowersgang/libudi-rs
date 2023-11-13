@@ -184,7 +184,7 @@ macro_rules! define_driver
 	(
 		$driver:path;
 		ops: {
-			$($op_name:ident: Meta=$op_meta:expr, $op_op:path $(: $wrapper:ident<_$(,$wrapper_arg:ty)*>)?),*$(,)?
+			$($op_name:ident: ::$($op_op_mod:ident)::* @ $op_op_name:ident $(: $wrapper:ident<_$(,$wrapper_arg:ty)*>)?),*$(,)?
 		},
 		cbs: {
 			$($cb_name:ident: Meta=$cb_meta:expr, $cb_ty:path),*$(,)?
@@ -192,7 +192,7 @@ macro_rules! define_driver
 	) => {
 		$crate::define_driver!{
 			$driver as #[no_mangle] udi_init_info;
-			ops: { $($op_name: Meta=$op_meta, $op_op $(: $wrapper<_$(,$wrapper_arg)*>)? ),* },
+			ops: { $($op_name: Meta=::$($op_op_mod)::*::metalang_name!(udiprops::meta::), ::$($op_op_mod::)*$op_op_name $(: $wrapper<_$(,$wrapper_arg)*>)? ),* },
 			cbs: { $($cb_name: Meta=$cb_meta, $cb_ty ),* }
 		}
 	};

@@ -1,5 +1,9 @@
 use crate::*;
 
+pub macro metalang_name( $($prefix:ident::)* ) {
+    $($prefix::)*udi_bridge
+}
+
 pub type udi_bus_bind_ack_op_t = unsafe extern "C" fn(*mut udi_bus_bind_cb_t, physio::udi_dma_constraints_t, u8, udi_status_t);
 pub type udi_bus_unbind_ack_op_t = unsafe extern "C" fn(*mut udi_bus_bind_cb_t);
 pub type udi_bus_bind_req_op_t = unsafe extern "C" fn(*mut udi_bus_bind_cb_t);

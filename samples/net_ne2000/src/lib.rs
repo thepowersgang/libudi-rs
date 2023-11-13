@@ -412,11 +412,11 @@ mod udiprops {
 ::udi::define_driver!{Driver;
 	ops: {
 		// TODO: How to enforce the right mapping to metalangs?
-		Dev : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bridge::udi_bus_device_ops_t,
-		Ctrl: Meta=udiprops::meta::udi_nic   , ::udi::ffi::meta_nic::udi_nd_ctrl_ops_t : ChildBind<_,()>,
-		Tx  : Meta=udiprops::meta::udi_nic   , ::udi::ffi::meta_nic::udi_nd_tx_ops_t,
-		Rx  : Meta=udiprops::meta::udi_nic   , ::udi::ffi::meta_nic::udi_nd_rx_ops_t,
-		Irq : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bridge::udi_intr_handler_ops_t,
+		Dev : ::udi::ffi::meta_bridge@udi_bus_device_ops_t,
+		Ctrl: ::udi::ffi::meta_nic@udi_nd_ctrl_ops_t : ChildBind<_,()>,
+		Tx  : ::udi::ffi::meta_nic@udi_nd_tx_ops_t,
+		Rx  : ::udi::ffi::meta_nic@udi_nd_rx_ops_t,
+		Irq : ::udi::ffi::meta_bridge@udi_intr_handler_ops_t,
 		},
 	cbs: {
 		BusBind  : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bridge::udi_bus_bind_cb_t,
