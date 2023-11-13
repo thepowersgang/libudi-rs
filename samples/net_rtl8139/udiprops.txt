@@ -1,0 +1,30 @@
+properties_version 0x101
+supplier 1
+contact 2
+name 3  
+shortname rtl8139
+release 1 v0.1
+
+requires udi 0x101
+requires udi_physio 0x101
+requires udi_bridge 0x101
+requires udi_nic 0x101
+                
+meta 1 udi_bridge
+meta 2 udi_nic  
+                
+parent_bind_ops 1 0 1 1 # bridge, rgn 0, ops 1, cb 1
+child_bind_ops 2 0 2    # meta 2=nic, region 0, ops 2=Ctrl. (TX and RX are set up via this)
+                
+# Realtek 8139
+device 101 1  bus_type string pci  pci_vendor_id ubit32 0x10ec  pci_device_id ubit32 0x8139
+                
+# Messages
+message 1       John Hodge (mutabah)
+message 2       udi@mutabah.net
+message 3       RTL8139 LAN Driver
+
+message 101     Realtek 8139
+ 
+module rtl8139
+region 0

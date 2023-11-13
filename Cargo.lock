@@ -69,6 +69,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "udi-net_rtl8139"
+version = "0.0.0"
+dependencies = [
+ "udi",
+ "udiprops_parse",
+]
+
+[[package]]
 name = "udi-sys"
 version = "0.1.0"
 

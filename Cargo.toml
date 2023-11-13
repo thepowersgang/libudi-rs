@@ -14,6 +14,7 @@ members = [
     "udiprops_parse",
     "udi_macros",
     "tools/fix_elf",
+    "samples/udi_env",
     "samples/net_ne2000",
-    "samples/udi_env"
+    "samples/net_rtl8139",
     ]
