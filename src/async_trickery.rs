@@ -24,6 +24,7 @@ pub trait CbContext {
 pub(crate) enum WaitRes {
 	//Unit,
 	Pointer(*mut ()),
+	PointerResult(crate::Result<*mut ()>),
 	Data([usize; 3]),
 }
 

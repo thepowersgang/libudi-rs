@@ -33,6 +33,7 @@ pub mod layout;
 pub mod libc;
 #[macro_use]
 pub mod imc;
+pub mod physio;
 pub mod pio;
 pub mod log;
 pub mod meta_mgmt;

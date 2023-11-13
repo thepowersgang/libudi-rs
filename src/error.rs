@@ -3,6 +3,7 @@ use ::udi_sys as ffi;
 pub type Result<T> = ::core::result::Result<T,Error>;
 
 /// A wrapper around `udi_status_t` that cannot be `UDI_OK`
+#[derive(Copy,Clone)]
 pub struct Error(::core::num::NonZeroU32);
 impl Error {
 	pub fn into_inner(self) -> ffi::udi_status_t {

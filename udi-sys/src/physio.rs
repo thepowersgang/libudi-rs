@@ -119,6 +119,8 @@ pub const UDI_DMA_ALIGNMENT_BITS    : udi_dma_constraints_attr_t = 101;
 pub const UDI_DMA_DATA_ADDRESSABLE_BITS : udi_dma_constraints_attr_t = 110;
 pub const UDI_DMA_NO_PARTIAL            : udi_dma_constraints_attr_t = 111;
 /* DMA Constraints on the Scatter/Gather List */
+/// The maximum # of elements that can be handled in one scatter/gather list.
+/// For DMA engines without scatter/gather support, this should be set to 1.
 pub const UDI_DMA_SCGTH_MAX_ELEMENTS    : udi_dma_constraints_attr_t = 120;
 pub const UDI_DMA_SCGTH_FORMAT          : udi_dma_constraints_attr_t = 121;
 pub const UDI_DMA_SCGTH_ENDIANNESS      : udi_dma_constraints_attr_t = 122;
