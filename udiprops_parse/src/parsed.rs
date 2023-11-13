@@ -96,7 +96,7 @@ impl ::core::str::FromStr for Version {
     }
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug,PartialEq,Eq,Hash,PartialOrd,Ord,Clone,Copy)]
 pub struct MsgNum(pub u16);
 impl ::core::str::FromStr for MsgNum {
     type Err = ::core::num::ParseIntError;

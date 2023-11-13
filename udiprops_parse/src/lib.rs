@@ -116,8 +116,29 @@ pub fn encode_to_raw(props: &[String]) -> Vec<u8> {
 
 pub fn create_module_body(outfp: &mut dyn ::std::io::Write, props: &[String], emit_linkage: bool) -> ::std::io::Result<()>
 {
-	let mut meta_bindings = ::std::collections::HashMap::new();
-	let mut regions = ::std::collections::HashMap::new();
+    use ::std::collections::HashMap;
+    use ::udi_sys::udi_index_t;
+    struct State<'a,'p> {
+        outfp: &'a mut dyn ::std::io::Write,
+
+        meta_bindings: HashMap<&'p udi_index_t,&'p str>,
+        regions: HashMap<&'p udi_index_t,()>,
+        messages: HashMap<&'p parsed::MsgNum,()>,
+    }
+    impl<'a,'p> State<'a,'p> {
+        pub fn check_metalang(&mut self, linename: &'static str, meta_idx: &udi_index_t) -> ::std::io::Result<()> {
+            if let None = self.meta_bindings.get(meta_idx) {
+                writeln!(self.outfp, r#"compile_error!("`{linename}` references undefined metalang {:?}");"#, meta_idx)?;
+            }
+            Ok( () )
+        }
+        pub fn check_message(&mut self, linename: &'static str, message: &parsed::MsgNum) -> ::std::io::Result<()> {
+            if let None = self.messages.get(message) {
+                writeln!(self.outfp, r#"compile_error!("`{linename}` references undefined message {:?}");"#, message)?;
+            }
+            Ok( () )
+        }
+    }
 
     let parsed: Vec<_> = props.iter()
         .map(|line| match parsed::Entry::parse_line(line)
@@ -129,16 +150,25 @@ pub fn create_module_body(outfp: &mut dyn ::std::io::Write, props: &[String], em
         })
         .collect()
         ;
+    let mut state = State {
+        outfp,
+        meta_bindings: Default::default(),
+        regions: Default::default(),
+        messages: Default::default(),
+    };
 	for ent in parsed.iter()
 	{
         match ent
         {
         parsed::Entry::Metalang { meta_idx, interface_name } => {
-			meta_bindings.insert(meta_idx, interface_name.to_owned());
+			state.meta_bindings.insert(meta_idx, interface_name.to_owned());
             },
+        parsed::Entry::Message(msg_id, _body) => {
+            state.messages.insert(msg_id, ());
+        },
         parsed::Entry::Region { region_idx, attributes } => {
             let _ = attributes;
-            regions.insert(region_idx, ());
+            state.regions.insert(region_idx, ());
             },
         _ => {},
         }
@@ -146,20 +176,32 @@ pub fn create_module_body(outfp: &mut dyn ::std::io::Write, props: &[String], em
 	for ent in parsed.iter()
 	{
         match ent {
+        // - Handled in first pass
         parsed::Entry::Metalang { .. } => {},
         parsed::Entry::Region { .. } => {},
+        parsed::Entry::Message { .. } => {},
+
+        // Check messages
+        parsed::Entry::Supplier(message) => state.check_message("supplier", message)?,
+        parsed::Entry::Contact(message) => state.check_message("contact", message)?,
+        parsed::Entry::Name(message) => state.check_message("name", message)?,
+
+        parsed::Entry::Device { device_name, meta_idx, attributes } => {
+            state.check_message("device", device_name)?;
+            state.check_metalang("device", meta_idx)?;
+            for _ in attributes.clone() {
+            }
+        }
 
         parsed::Entry::ParentBindOps { meta_idx, region_idx, ops_idx, bind_cb_idx } => {
             // - Make sure that the metalang is present
-            if let None = meta_bindings.get(meta_idx) {
-                writeln!(outfp, r#"compile_error!("parent_bind_ops references undefined metalang {}");"#, meta_idx)?;
-            }
+            state.check_metalang("parent_bind_ops", meta_idx)?;
             // - Ensure that the region is defined
-            if let None = regions.get(region_idx) {
-                writeln!(outfp, r#"compile_error!("parent_bind_ops references undefined region {}");"#, region_idx)?;
+            if let None = state.regions.get(region_idx) {
+                writeln!(state.outfp, r#"compile_error!("parent_bind_ops references undefined region {}");"#, region_idx)?;
             }
             // - Emit code that references the `define_driver` structs to make sure that `ops_idx`` binds with `bind_cb_idx`
-            writeln!(outfp, r#"
+            writeln!(state.outfp, r#"
 fn _check_parent_bind_ops() {{
     let _ = <
         <super::OpsList::_{ops_idx} as ::udi::ops_markers::Ops>::OpsTy
@@ -171,15 +213,13 @@ fn _check_parent_bind_ops() {{
             },
         parsed::Entry::ChildBindOps { meta_idx, region_idx, ops_idx } => {
             // - Make sure that the metalang is present
-            if let None = meta_bindings.get(meta_idx) {
-                writeln!(outfp, r#"compile_error!("parent_bind_ops references undefined metalang {}");"#, meta_idx)?;
-            }
+            state.check_metalang("child_bind_ops", meta_idx)?;
             // - Ensure that the region is defined
-            if let None = regions.get(region_idx) {
-                writeln!(outfp, r#"compile_error!("parent_bind_ops references undefined region {}");"#, region_idx)?;
+            if let None = state.regions.get(region_idx) {
+                writeln!(state.outfp, r#"compile_error!("child_bind_ops references undefined region {}");"#, region_idx)?;
             }
             // - Emit code that references the `define_driver` structs to make sure that `ops_idx`` binds with `bind_cb_idx`
-            writeln!(outfp, r#"
+            writeln!(state.outfp, r#"
 fn _check_child_bind_ops() {{
     let _ = <
         <super::OpsList::_{ops_idx} as ::udi::ops_markers::Ops>::OpsTy
@@ -193,9 +233,10 @@ fn _check_child_bind_ops() {{
 		}
 	}
 
+    let outfp = state.outfp;
 	writeln!(outfp, "#[allow(non_upper_case_globals)]")?;
 	writeln!(outfp, "pub mod meta {{")?;
-	for (idx,name) in meta_bindings {
+	for (idx,name) in state.meta_bindings {
 		writeln!(outfp, "pub const {}: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t({});", name, idx.0)?;
 	}
 	writeln!(outfp, "}}")?;
