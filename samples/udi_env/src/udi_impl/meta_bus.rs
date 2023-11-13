@@ -1,8 +1,8 @@
-use ::udi::ffi::meta_bus::{udi_bus_device_ops_t,udi_bus_bridge_ops_t};
-use ::udi::ffi::meta_intr::{udi_intr_handler_ops_t,udi_intr_dispatcher_ops_t};
-use ::udi::ffi::meta_bus::udi_bus_bind_cb_t;
-use ::udi::ffi::meta_intr::{udi_intr_attach_cb_t,udi_intr_detach_cb_t};
-use ::udi::ffi::meta_intr::udi_intr_event_cb_t;
+use ::udi::ffi::meta_bridge::{udi_bus_device_ops_t,udi_bus_bridge_ops_t};
+use ::udi::ffi::meta_bridge::{udi_intr_handler_ops_t,udi_intr_dispatcher_ops_t};
+use ::udi::ffi::meta_bridge::udi_bus_bind_cb_t;
+use ::udi::ffi::meta_bridge::{udi_intr_attach_cb_t,udi_intr_detach_cb_t};
+use ::udi::ffi::meta_bridge::udi_intr_event_cb_t;
 
 dispatch_call!{
     fn udi_bus_bind_req(cb: *mut udi_bus_bind_cb_t)

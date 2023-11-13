@@ -227,7 +227,7 @@ use super::mem;
         CSKIP.B R0 Z;   // if R0!=0
         END.S R0;
         // - No IRQ, quiet quit
-        LOAD_IMM.B R0, ::udi::ffi::meta_intr::UDI_INTR_UNCLAIMED as _;
+        LOAD_IMM.B R0, ::udi::ffi::meta_bridge::UDI_INTR_UNCLAIMED as _;
         LOAD_IMM.B R1, 0;   // scratch offset
         STORE.B [scratch R1], R0;
         END_IMM 0;

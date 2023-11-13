@@ -35,8 +35,7 @@ pub mod imc;
 pub mod pio;
 pub mod log;
 pub mod meta_mgmt;
-pub mod meta_bus;
-pub mod meta_intr;
+pub mod meta_bridge;
 pub mod meta_gio;
 pub mod meta_nic;
 

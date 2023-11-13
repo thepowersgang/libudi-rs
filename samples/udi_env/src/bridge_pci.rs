@@ -75,10 +75,10 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
     }
 }
 
-impl ::udi::meta_bus::BusBridge for ::udi::ChildBind<Driver,()>
+impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,()>
 {
-    type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::Result<(::udi::meta_bus::PreferredEndianness,)>> + 's;
-    fn bus_bind_req<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefBind<'a>) -> Self::Future_bind_req<'a> {
+    type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::Result<(::udi::meta_bridge::PreferredEndianness,)>> + 's;
+    fn bus_bind_req<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefBind<'a>) -> Self::Future_bind_req<'a> {
         async move {
             println!("PCI Bind Request: #{:#x}", self.child_id());
             let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
@@ -88,12 +88,12 @@ impl ::udi::meta_bus::BusBridge for ::udi::ChildBind<Driver,()>
                 .set( (dev_desc.factory)( dev_desc ) )
                 .ok()
                 .expect("Driver instance bound to multiple devices?");
-            Ok((::udi::meta_bus::PreferredEndianness::Little,))
+            Ok((::udi::meta_bridge::PreferredEndianness::Little,))
         }
     }
 
     type Future_unbind_req<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn bus_unbind_req<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefBind<'a>) -> Self::Future_unbind_req<'a> {
+    fn bus_unbind_req<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefBind<'a>) -> Self::Future_unbind_req<'a> {
         async move {
             let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
             assert!(di.device.get().is_some());
@@ -101,7 +101,7 @@ impl ::udi::meta_bus::BusBridge for ::udi::ChildBind<Driver,()>
     }
 
     type Future_intr_attach_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
-    fn intr_attach_req<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefIntrAttach<'a>) -> Self::Future_intr_attach_req<'a> {
+    fn intr_attach_req<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrAttach<'a>) -> Self::Future_intr_attach_req<'a> {
         async move {
             let channel = ::udi::imc::channel_spawn(cb.gcb(), cb.interrupt_index, OpsList::Interrupt as _).await;
             let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
@@ -111,17 +111,17 @@ impl ::udi::meta_bus::BusBridge for ::udi::ChildBind<Driver,()>
     }
 
     type Future_intr_detach_req<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn intr_detach_req<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_req<'a> {
+    fn intr_detach_req<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_req<'a> {
         async move {
             let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
             di.device.get().unwrap().set_interrupt_channel(cb.interrupt_idx, ::udi::imc::ChannelHandle::null());
         }
     }
 }
-impl ::udi::meta_intr::IntrDispatcher for ::udi::init::RData<Driver>
+impl ::udi::meta_bridge::IntrDispatcher for ::udi::init::RData<Driver>
 {
     type Future_intr_event_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn intr_event_rdy<'a>(&'a mut self, cb: ::udi::meta_intr::CbHandleEvent) -> Self::Future_intr_event_rdy<'a> {
+    fn intr_event_rdy<'a>(&'a mut self, cb: ::udi::meta_bridge::CbHandleEvent) -> Self::Future_intr_event_rdy<'a> {
         async move {
             let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
             di.device.get().unwrap()
@@ -141,13 +141,13 @@ const META_BIRDGE: ::udi::ffi::udi_index_t = udiprops::meta::udi_bridge;
 ::udi::define_driver! {
     Driver as INIT_INFO_PCI;
     ops: {
-        Bridge   : Meta=META_BIRDGE, ::udi::ffi::meta_bus::udi_bus_bridge_ops_t : ChildBind<_,()>,
-        Interrupt: Meta=META_BIRDGE, ::udi::ffi::meta_intr::udi_intr_dispatcher_ops_t,
+        Bridge   : Meta=META_BIRDGE, ::udi::ffi::meta_bridge::udi_bus_bridge_ops_t : ChildBind<_,()>,
+        Interrupt: Meta=META_BIRDGE, ::udi::ffi::meta_bridge::udi_intr_dispatcher_ops_t,
     },
     cbs: {
-        BusBind  : Meta=META_BIRDGE, ::udi::ffi::meta_bus::udi_bus_bind_cb_t,
-		_IntrAttach: Meta=META_BIRDGE, ::udi::ffi::meta_intr::udi_intr_attach_cb_t,
-		_IntrDetach: Meta=META_BIRDGE, ::udi::ffi::meta_intr::udi_intr_detach_cb_t,
-		_IntrEvent : Meta=META_BIRDGE, ::udi::ffi::meta_intr::udi_intr_event_cb_t,
+        BusBind  : Meta=META_BIRDGE, ::udi::ffi::meta_bridge::udi_bus_bind_cb_t,
+		_IntrAttach: Meta=META_BIRDGE, ::udi::ffi::meta_bridge::udi_intr_attach_cb_t,
+		_IntrDetach: Meta=META_BIRDGE, ::udi::ffi::meta_bridge::udi_intr_detach_cb_t,
+		_IntrEvent : Meta=META_BIRDGE, ::udi::ffi::meta_bridge::udi_intr_event_cb_t,
     }
 }

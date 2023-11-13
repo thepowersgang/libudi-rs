@@ -131,7 +131,7 @@ impl<'a> DriverModule<'a> {
         Some(match self.get_metalang_name(des_meta_idx)?
         {
         "udi_gio" => &::udi::meta_gio::METALANG_SPEC,
-        "udi_bridge" => &::udi::meta_bus::METALANG_SPEC,
+        "udi_bridge" => &::udi::meta_bridge::METALANG_SPEC,
         "udi_nic" => &::udi::meta_nic::METALANG_SPEC,
         name => todo!("Unknown metalang {:?}", name),
         })

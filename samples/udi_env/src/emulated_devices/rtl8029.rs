@@ -1,7 +1,7 @@
 pub struct Rtl8029 {
     regs: ::std::sync::Mutex<Regs>,
     interrupt_channel: ::std::sync::Mutex<::udi::imc::ChannelHandle>,
-    irq_cbs: ::std::sync::Mutex< ::std::collections::VecDeque<::udi::meta_intr::CbHandleEvent> >,
+    irq_cbs: ::std::sync::Mutex< ::std::collections::VecDeque<::udi::meta_bridge::CbHandleEvent> >,
 }
 impl Rtl8029 {
     pub fn new_boxed() -> Box<Self> {
@@ -19,7 +19,7 @@ impl super::PioDevice for Rtl8029 {
         }
         *self.interrupt_channel.lock().unwrap() = channel;
     }
-    fn push_intr_cb(&self, index: ::udi::ffi::udi_index_t, cb: ::udi::meta_intr::CbHandleEvent) {
+    fn push_intr_cb(&self, index: ::udi::ffi::udi_index_t, cb: ::udi::meta_bridge::CbHandleEvent) {
         assert!(index.0 == 0, "Bad IRQ index");
         self.irq_cbs.lock().unwrap()
             .push_back(cb);

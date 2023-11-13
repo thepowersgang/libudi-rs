@@ -91,14 +91,14 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 		}
     }
 }
-impl ::udi::meta_bus::BusDevice for ::udi::init::RData<Driver>
+impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 {
     type Future_bind_ack<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
     fn bus_bind_ack<'a>(
 		&'a mut self,
-		cb: ::udi::meta_bus::CbRefBind<'a>,
+		cb: ::udi::meta_bridge::CbRefBind<'a>,
 		_dma_constraints: ::udi::ffi::physio::udi_dma_constraints_t,
-		_preferred_endianness: ::udi::meta_bus::PreferredEndianness,
+		_preferred_endianness: ::udi::meta_bridge::PreferredEndianness,
 		_status: ::udi::ffi::udi_status_t
 	) -> Self::Future_bind_ack<'a> {
 		async move {
@@ -117,14 +117,14 @@ impl ::udi::meta_bus::BusDevice for ::udi::init::RData<Driver>
 			intr_cb.interrupt_index = 0.into();
 			intr_cb.min_event_pend = 2;
 			intr_cb.preprocessing_handle = self.pio_handles.irq_ack.as_raw();	// NOTE: This transfers ownership
-			::udi::meta_intr::attach_req(intr_cb);
+			::udi::meta_bridge::attach_req(intr_cb);
 			// TODO: Does this need to wait until the attach ACKs?
 			// - Probably should, just in case the operation fails
 			//::udi::Error::from_status(self.intr_attach_res.wait().await)?;
 
 			for _ in 0 .. 4/*NE2K_NUM_INTR_EVENT_CBS*/ {
 				let intr_event_cb = ::udi::cb::alloc::<CbList::IntrEvent>(cb.gcb(), self.intr_channel.raw()).await;
-				::udi::meta_intr::event_rdy(intr_event_cb);
+				::udi::meta_bridge::event_rdy(intr_event_cb);
 			}
 
 			// Reset the hardware, and get the MAC address
@@ -138,13 +138,13 @@ impl ::udi::meta_bus::BusDevice for ::udi::init::RData<Driver>
     }
 
     type Future_unbind_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn bus_unbind_ack<'a>(&'a mut self, _cb: ::udi::meta_bus::CbRefBind<'a>) -> Self::Future_unbind_ack<'a> {
+    fn bus_unbind_ack<'a>(&'a mut self, _cb: ::udi::meta_bridge::CbRefBind<'a>) -> Self::Future_unbind_ack<'a> {
         async move {
 		}
     }
 
     type Future_intr_attach_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn intr_attach_ack<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefIntrAttach<'a>, status: udi::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'a> {
+    fn intr_attach_ack<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrAttach<'a>, status: udi::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'a> {
         async move {
 			let _ = cb;
 			if status != 0 {
@@ -156,16 +156,16 @@ impl ::udi::meta_bus::BusDevice for ::udi::init::RData<Driver>
     }
 
     type Future_intr_detach_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn intr_detach_ack<'a>(&'a mut self, cb: ::udi::meta_bus::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_ack<'a> {
+    fn intr_detach_ack<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_ack<'a> {
         async move {
 			let _ = cb;
 		}
     }
 }
-impl ::udi::meta_intr::IntrHandler for ::udi::init::RData<Driver>
+impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 {
     type Future_intr_event_ind<'s> = impl ::core::future::Future<Output=()>+'s;
-    fn intr_event_ind<'a>(&'a mut self, cb: ::udi::meta_intr::CbRefEvent<'a>, _flags: u8) -> Self::Future_intr_event_ind<'a> {
+    fn intr_event_ind<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefEvent<'a>, _flags: u8) -> Self::Future_intr_event_ind<'a> {
 		async move {
 			if cb.intr_result & 0x01 != 0 {
 				// RX complete
@@ -412,18 +412,18 @@ mod udiprops {
 ::udi::define_driver!{Driver;
 	ops: {
 		// TODO: How to enforce the right mapping to metalangs?
-		Dev : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bus::udi_bus_device_ops_t,
+		Dev : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bridge::udi_bus_device_ops_t,
 		Ctrl: Meta=udiprops::meta::udi_nic   , ::udi::ffi::meta_nic::udi_nd_ctrl_ops_t : ChildBind<_,()>,
 		Tx  : Meta=udiprops::meta::udi_nic   , ::udi::ffi::meta_nic::udi_nd_tx_ops_t,
 		Rx  : Meta=udiprops::meta::udi_nic   , ::udi::ffi::meta_nic::udi_nd_rx_ops_t,
-		Irq : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_intr::udi_intr_handler_ops_t,
+		Irq : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bridge::udi_intr_handler_ops_t,
 		},
 	cbs: {
-		BusBind  : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bus::udi_bus_bind_cb_t,
-		Intr     : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_intr::udi_intr_attach_cb_t,
-		IntrEvent: Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_intr::udi_intr_event_cb_t,
+		BusBind  : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bridge::udi_bus_bind_cb_t,
+		Intr     : Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bridge::udi_intr_attach_cb_t,
+		IntrEvent: Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bridge::udi_intr_event_cb_t,
 
-		_IntrDetach: Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_intr::udi_intr_detach_cb_t,
+		_IntrDetach: Meta=udiprops::meta::udi_bridge, ::udi::ffi::meta_bridge::udi_intr_detach_cb_t,
 
 		Nic    : Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nic_cb_t,
 		NicBind: Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nic_bind_cb_t,
