@@ -114,7 +114,7 @@ fn parse_int(v: &str) -> Result<u32, ::std::num::ParseIntError> {
     }
 }
 
-#[derive(Debug,Clone)]
+#[derive(Clone)]
 /// A parser for a space-separated list of attributes `<name> <ty> <value>`
 pub struct AttributeList<'a>(::core::str::SplitWhitespace<'a>);
 impl<'a> AttributeList<'a> {
@@ -139,6 +139,17 @@ impl<'a> AttributeList<'a> {
             _ => return Err(format!("Unknown type {:?}", ty)),
             };
         Ok( Some( (name, attr) ) )
+    }
+}
+impl<'a> ::core::fmt::Debug for AttributeList<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("[")?;
+        for i in self.0.clone() {
+            f.write_str(i)?;
+            f.write_str(" ")?;
+        }
+        f.write_str("]")?;
+        Ok(())
     }
 }
 impl<'a> Iterator for AttributeList<'a> {

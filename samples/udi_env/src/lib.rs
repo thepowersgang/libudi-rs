@@ -35,6 +35,11 @@ impl<'a> DriverModule<'a> {
             udiprops: udiprops.clone(),
         };
 
+        for ent in udiprops.clone()
+        {
+            println!("UDIPROPS: {:?}", ent);
+        }
+
         // TODO: Pre-cache/check some entries
         #[cfg(false_)]
         for ent in udiprops.clone()
