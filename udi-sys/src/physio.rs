@@ -106,12 +106,15 @@ extern "C" {
 }
 
 #[repr(C)]
+#[derive(Copy,Clone)]
 pub struct udi_dma_constraints_attr_spec_t
 {
     pub attr_type: udi_dma_constraints_attr_t,
     pub attr_value: udi_ubit32_t,
 }
 
+/// [udi_dma_constraints_attr_set] Make a copy of src_constraints before applying the new attributes.
+pub const UDI_DMA_CONSTRAINTS_COPY : udi_ubit8_t = 1 << 0;
 /* DMA Convenience Attribute Codes */
 pub const UDI_DMA_ADDRESSABLE_BITS  : udi_dma_constraints_attr_t = 100;
 pub const UDI_DMA_ALIGNMENT_BITS    : udi_dma_constraints_attr_t = 101;

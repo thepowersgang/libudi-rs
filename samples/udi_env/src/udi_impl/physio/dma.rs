@@ -1,6 +1,6 @@
 use ::udi::ffi::*;
 
-#[derive(Default)]
+#[derive(Default,Clone)]
 struct ConstaintsReal {
     attrs: Vec<physio::udi_dma_constraints_attr_spec_t>,
 }
@@ -31,6 +31,13 @@ unsafe extern "C" fn udi_dma_constraints_attr_set(
     flags: udi_ubit8_t
     )
 {
+    if flags & physio::UDI_DMA_CONSTRAINTS_COPY != 0 {
+        if !src_constraints.is_null() {
+            let sc = &*(src_constraints as *const ConstaintsReal);
+            let sc = Box::new( sc.clone() );
+            src_constraints = Box::into_raw(sc) as physio::udi_dma_constraints_t;
+        }
+    }
     let attrs = ::core::slice::from_raw_parts(attr_list, list_length as _);
     let status = if attrs.is_empty() {
             UDI_OK
