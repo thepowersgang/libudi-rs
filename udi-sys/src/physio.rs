@@ -11,7 +11,7 @@ pub type udi_dma_constraints_attr_t = udi_ubit8_t;
 
 pub type udi_dma_constraints_attr_set_call_t = unsafe extern "C" fn(gcb: *mut udi_cb_t, new_constraints: udi_dma_constraints_t, status: udi_status_t);
 pub type udi_dma_prepare_call_t = unsafe extern "C" fn(gcb: *mut udi_cb_t, new_dma_handle: udi_dma_handle_t);
-pub type udi_dma_buf_map_call_t = unsafe extern "C" fn(gcb: *mut udi_cb_t, scgth: udi_scgth_t, complete: udi_boolean_t, status: udi_status_t);
+pub type udi_dma_buf_map_call_t = unsafe extern "C" fn(gcb: *mut udi_cb_t, scgth: *mut udi_scgth_t, complete: udi_boolean_t, status: udi_status_t);
 pub type udi_dma_mem_alloc_call_t = unsafe extern "C" fn(gcb: *mut udi_cb_t, 
     new_dma_handle: udi_dma_handle_t,
     mem_ptr: *mut c_void,

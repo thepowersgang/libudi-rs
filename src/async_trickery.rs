@@ -25,7 +25,7 @@ pub(crate) enum WaitRes {
 	//Unit,
 	Pointer(*mut ()),
 	PointerResult(crate::Result<*mut ()>),
-	Data([usize; 3]),
+	Data([usize; 4]),
 }
 
 /// A trait for top-level future types (stored in `scratch`)
