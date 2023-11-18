@@ -3,6 +3,9 @@
 mod pio_ops;
 
 const MTU: usize = 1520;
+const RX_BUF_LENGTH: usize = 0x2000+16;
+const RX_BUF_CAPACITY: usize = RX_BUF_LENGTH+0x3000;	// Extra page, to allow one page past the end
+//const RX_BUF_CAPACITY: usize = RX_BUF_LENGTH+MTU+8;//0x3000;	// Extra page, to allow one page past the end
 
 #[derive(Default)]
 struct Driver
@@ -129,7 +132,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 				);
 				DmaStructures {
 				// Allocate the RX buffer (12KiB - 3 standard pages)
-				rx_buf: alloc_single(3*4096).await,
+				rx_buf: alloc_single(RX_BUF_CAPACITY).await,
 				// DMA information for direct TX of the four TX slots
 				tx_slots: [
 					DmaBuf::prepare(cb.gcb(), &self.inner.dma_constraints, Some(Direction::Out)).await,
@@ -188,12 +191,39 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 		async move {
 			let isr = cb.intr_result;
 			if isr & pio_ops::FLAG_ISR_ROK != 0 {
-				// TODO: RX OK
-				// - Pull a RX CB
-				// - Copy from the RX buffer into it and advance the RX buffer (one PIO operation)
+				// RX OK
+				while let Ok(Some(addr)) = self.inner.pio_handles.rx_check(cb.gcb()).await
+				{
+					// Get the current packet length and flags
+					let (flags, data) = unsafe {
+						let addr = self.dma_handles.as_ref().unwrap().rx_buf.mem_ptr.offset(addr as isize) as *const u8;
+						let flags = *addr.offset(0) as u16 | (*addr.offset(1) as u16) << 8;
+						let raw_len = *addr.offset(1) as u16 | (*addr.offset(2) as u16) << 8;
+						(flags, ::core::slice::from_raw_parts(addr.offset(4), raw_len as usize))
+					};
+					::udi::debug_printf!("RX packet: %u bytes flags=%04x", data.len() as u32, flags as u32);
+					// Pull a RX CB off the queue
+					if flags & 0x0001 != 0 {
+						if let Some(mut rx_cb) = self.rx_cb_queue.pop() {
+							// SAFE: Contract is that this is valid
+							let mut buf = unsafe { ::udi::buf::Handle::from_raw(rx_cb.rx_buf) };
+							buf.write(cb.gcb(), 0..buf.len(), data).await;
+							rx_cb.rx_buf = buf.into_raw();
+							::udi::meta_nic::nsr_rx_ind(rx_cb);
+						}
+						else {
+							// RX underrun, no CBs
+						}
+					}
+
+					// Advance CAPR (header, data, alignment)
+					let delta = (4 + data.len() as u16 + 3) & !4;
+					let _ = self.inner.pio_handles.rx_update(cb.gcb(), delta).await;
+				}
 			}
 			if isr & pio_ops::FLAG_ISR_RER != 0 {
 				::udi::debug_printf!("TODO: Handle RX Error");
+				// Advance the packet?
 			}
 
 			// TX OK or TX Error
@@ -263,14 +293,6 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
         async move {
 			self.dev_mut().channel_tx = ::udi::imc::channel_spawn(cb.gcb(), tx_chan_index, OpsList::Tx as _).await;
 			self.dev_mut().channel_rx = ::udi::imc::channel_spawn(cb.gcb(), rx_chan_index, OpsList::Rx as _).await;
-			::udi::debug_printf!("NIC mac_addr = %02x:%02x:%02x:%02x:%02x:%02x",
-				self.dev().mac_addr[0] as _, self.dev().mac_addr[1] as _, self.dev().mac_addr[2] as _,
-				self.dev().mac_addr[3] as _, self.dev().mac_addr[4] as _, self.dev().mac_addr[5] as _,
-				);
-			{
-				let s = ::core::ffi::CStr::from_bytes_with_nul(b"eth\0").unwrap();
-				::udi::debug_printf!("NIC ether_type = %s", s);
-			}
 			Ok(::udi::meta_nic::NicInfo {
 				media_type: ::udi::ffi::meta_nic::MediaType::UDI_NIC_ETHER,
 				min_pdu_size: 0,

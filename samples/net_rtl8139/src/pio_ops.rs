@@ -13,6 +13,9 @@ pub struct PioHandles {
 
 	tx: ::udi::pio::Handle,
 	get_tsd: ::udi::pio::Handle,
+
+    rx_check: ::udi::pio::Handle,
+    rx_update: ::udi::pio::Handle,
 }
 impl PioHandles {
     pub fn new(gcb: ::udi::CbRef<::udi::ffi::udi_cb_t>) -> impl Future<Output=(Self,::udi::pio::Handle)> + '_ {
@@ -25,6 +28,9 @@ impl PioHandles {
                 disable : pio_map(&DISBALE).await,
                 tx      : pio_map(&TX).await,
                 get_tsd : pio_map(&GET_TSD).await,
+
+                rx_check : pio_map(&RX_CHECK).await,
+                rx_update: pio_map(&RX_UPDATE).await,
             };
             (handles,irq_ack)
         }
@@ -78,6 +84,28 @@ impl PioHandles {
                 Err(e) => Err(e),
                 })
     }
+
+    pub fn rx_check(&'_ self, gcb: Gcb<'_>) -> impl Future<Output=::udi::Result<Option<u16>>> + '_ {
+        ::udi::pio::trans(gcb, &self.rx_check, Default::default(), None, None)
+            .map(|res| match res
+                {
+                Ok(0xFFFF) => Ok(None),
+                Ok(v) => Ok(Some(v)),
+                Err(e) => Err(e),
+                })
+    }
+    pub fn rx_update<'a>(&'a self, gcb: Gcb<'a>, delta: u16) -> impl Future<Output=::udi::Result<()>> + 'a {
+        assert!(delta < 0x2000);
+        async move {
+            let mut mem = MemRxUpdate { delta };
+            ::udi::pio::trans(gcb, &self.rx_update, Default::default(), None, Some(mem.get_ptr()))
+                .map(|res| match res
+                    {
+                    Ok(_) => Ok(()),
+                    Err(e) => Err(e),
+                    }).await
+        }
+    }
 }
 
 
@@ -125,9 +153,9 @@ pub const FLAG_ISR_RER   : u16 = 0x0002;
 pub const FLAG_ISR_ROK   : u16 = 0x0001;
 
 #[repr(C)]
-pub struct MemReset {
+struct MemReset {
     rbstart: u32,
-    pub mac: [u8; 6],
+    mac: [u8; 6],
     _pad: [u8; 2],
 }
 impl MemReset {
@@ -197,10 +225,11 @@ impl MemReset {
     END_IMM 0;
 }
 
-pub struct MemTx {
-    pub addr: u32,
-    pub len: u16,
-    pub index: u8,
+#[repr(C)]
+struct MemTx {
+    addr: u32,
+    len: u16,
+    index: u8,
 }
 impl MemTx {
     /// SAFETY: DMA addresses are included, caller must ensure safe DMA
@@ -238,6 +267,55 @@ impl MemTx {
     ADD.B R0, R7;
     IN_IND.L R0, R0;
     END.S R0;
+}
+
+::udi::define_pio_ops!{pub RX_CHECK =
+    // - Read `CAPR` - if it's equal to `CBA` then the buffer is empty
+    IN.S R0, Regs::Capr as _;
+    ADD_IMM.S R0, 0x10; // Account for a hardware ?bug
+    IN.L R1, Regs::Cba as _;
+    LOAD.L R2, R0;  // Save CAPR for later
+    // CBA - CAPR. If negative then the buffer has wrapped
+    // - Need to handle the final packet, which can extend past the wrap point
+    SUB.L R0, R1;
+    // - If equal, return 0xFFFF immediately (indicating no packet)
+    CSKIP.L R0 NZ;
+    END_IMM 0xFFFF;
+    // Otherwise, return the CAPR value
+    END.S R2;
+}
+#[repr(C)]
+struct MemRxUpdate {
+    delta: u16,
+}
+impl MemRxUpdate {
+    fn get_ptr(&mut self) -> ::udi::pio::MemPtr {
+        // SAFE: Valid
+        unsafe {
+            ::udi::pio::MemPtr::new(
+                ::core::slice::from_raw_parts_mut(self as *mut _ as *mut u8, ::core::mem::size_of::<Self>())
+            )
+        }
+    }
+}
+::udi::define_pio_ops!{pub RX_UPDATE =
+    // Get the byte count
+    LOAD_IMM.S R0, 0;
+    LOAD.S R0, [mem R0];
+    // Get CAPR, and add the offset
+    IN.S R1, Regs::Capr as _;
+    ADD_IMM.S R1, 0x10; // Account for a hardware ?bug
+    ADD.L R1, R0;
+    // Check if it's above the wraparound point
+    LOAD.L R0, R1;
+    ADD_IMM.S R0, -(super::RX_BUF_LENGTH as i16) as u16;
+    // if `R1 - RX_BUF_LENGTH >= 0` then `R1 = 0`
+    CSKIP.S R0 Neg;
+    LOAD_IMM.S R1, 0;
+
+    ADD_IMM.S R1, -0x10i16 as u16; // Account for a hardware ?bug
+    // CAPR = R1
+    OUT.S Regs::Capr as _, R1;
 }
 
 ::udi::define_pio_ops!{pub IRQACK =
