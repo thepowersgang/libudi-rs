@@ -1,3 +1,85 @@
+use ::core::future::Future;
+use ::udi::FutureExt;
+
+type Gcb<'a> = ::udi::CbRef<'a, ::udi::ffi::udi_cb_t>;
+
+// TODO: Move this to within `pio_ops` and use privacy to handle safety
+#[derive(Default)]
+pub struct PioHandles {
+	reset: ::udi::pio::Handle,
+	//irq_ack: ::udi::pio::Handle,
+	enable: ::udi::pio::Handle,
+	disable: ::udi::pio::Handle,
+
+	tx: ::udi::pio::Handle,
+	get_tsd: ::udi::pio::Handle,
+}
+impl PioHandles {
+    pub fn new(gcb: ::udi::CbRef<::udi::ffi::udi_cb_t>) -> impl Future<Output=(Self,::udi::pio::Handle)> + '_ {
+        async move {
+            let pio_map = |trans_list| ::udi::pio::map(gcb, 0/*UDI_PCI_BAR_0*/, 0x00,0x80, trans_list, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0.into());
+            let irq_ack = pio_map(&IRQACK).await;
+            let handles = PioHandles {
+                reset   : pio_map(&RESET).await,
+                enable  : pio_map(&ENABLE).await,
+                disable : pio_map(&DISBALE).await,
+                tx      : pio_map(&TX).await,
+                get_tsd : pio_map(&GET_TSD).await,
+            };
+            (handles,irq_ack)
+        }
+    }
+    /// Reset the card and set RBStart
+    /// 
+    /// SAFETY: rbstart is a DMA address, caller must ensure validity
+    pub unsafe fn reset<'a>(&'a self, gcb: Gcb<'a>, rbstart: u32) -> impl Future<Output=::udi::Result<[u8; 6]>> + 'a {
+        async move {
+            let mut reset_data = MemReset::new(rbstart);
+            ::udi::pio::trans(gcb, &self.reset, Default::default(), None, Some(reset_data.get_ptr())).await?;
+            Ok(reset_data.mac)
+        }
+    }
+
+    pub fn enable<'a>(&'a self, gcb: Gcb<'a>) -> impl Future<Output=::udi::Result<()>> + 'a {
+        ::udi::pio::trans(gcb, &self.enable, ::udi::ffi::udi_index_t(0), None, None)
+            .map(|res| res.map(|_| ()))
+    }
+    pub fn disable<'a>(&'a self, gcb: Gcb<'a>) -> impl Future<Output=()> + 'a {
+        ::udi::pio::trans(gcb, &self.disable, ::udi::ffi::udi_index_t(0), None, None)
+            .map(|res| match res {
+                Ok(_) => (),
+                Err(e) => {
+                    ::udi::debug_printf!("ERROR: Error disabling card - %x", e.into_inner());
+                },
+            })
+    }
+    /// Pass a buffer to the card for TX in the given slot
+    /// 
+    /// SAFETY: Takes DMA addresses, caller must ensure that addresses are valid until TX completes
+    pub unsafe fn tx_packet<'a>(&'a self, gcb: Gcb<'a>, slot: usize, addr: u32, len: u16) -> impl Future<Output=::udi::Result<()>> + 'a {
+        assert!(slot < 4);
+        async move {
+			let mut mem = MemTx {
+				addr,
+				len,
+				index: slot as u8,
+			};
+			::udi::pio::trans(gcb, &self.tx, Default::default(), None, Some(unsafe { mem.get_ptr() })).await?;
+            Ok(())
+        }
+    }
+    /// Get the TSD value for a given TX slot
+    pub fn get_tsd<'a>(&'a self, gcb: Gcb<'a>, slot: usize) -> impl Future<Output=::udi::Result<u32>> + 'a {
+        assert!(slot < 4);
+        ::udi::pio::trans(gcb, &self.get_tsd, (slot as u8).into(), None, None)
+            .map(|res| match res
+                {
+                Ok(tsd) => Ok(tsd as u32),
+                Err(e) => Err(e),
+                })
+    }
+}
+
 
 #[repr(u8)]
 enum Regs {
@@ -29,7 +111,7 @@ pub const FLAG_ISR_TIMEO : u16 = 0x4000;
 pub const FLAG_ISR_LENCHG: u16 = 0x2000;
 /// Rx FIFO Underflow
 pub const FLAG_ISR_FOVW  : u16 = 0x0040;
-/// Packet Underrung
+/// Packet Underrun
 pub const FLAG_ISR_PUN   : u16 = 0x0020;
 /// Rx Buffer Overflow
 pub const FLAG_ISR_RXOVW : u16 = 0x0010;
