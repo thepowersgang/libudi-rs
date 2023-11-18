@@ -252,12 +252,12 @@ macro_rules! define_pio_ops
 	) };
 	// - IN_IND
 	(@expand $($output:expr,)*; IN_IND.$sizecode:ident $reg:ident, $pio_reg:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
-		$($output,)* $crate::define_pio_ops!(@b $sizecode, IN_IND, $reg, $crate::pio::regs::$pio_reg as _), ;
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, IN_IND, $reg, $crate::pio::vals::regs::$pio_reg as _), ;
 		$($rest)*
 	) };
 	// - OUT_IND
 	(@expand $($output:expr,)*; OUT_IND.$sizecode:ident $pio_reg:ident, $reg:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
-		$($output,)* $crate::define_pio_ops!(@b $sizecode, OUT_IND, $reg, $crate::pio::regs::$pio_reg as _), ;
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, OUT_IND, $reg, $crate::pio::vals::regs::$pio_reg as _), ;
 		$($rest)*
 	) };
 	// - SHIFT_LEFT.s Rd, bits
@@ -272,7 +272,7 @@ macro_rules! define_pio_ops
 	) };
 	// - AND.s Rd, Rs
 	(@expand $($output:expr,)*; AND.$sizecode:ident $reg:ident, $rs:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
-		$($output,)* $crate::define_pio_ops!(@b $sizecode, AND, $reg, $crate::pio::regs::$rs as _), ;
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, AND, $reg, $crate::pio::vals::regs::$rs as _), ;
 		$($rest)*
 	) };
 	// - AND_IMM Rd, IMM
@@ -282,7 +282,7 @@ macro_rules! define_pio_ops
 	) };
 	// - OR.s Rd, Rs
 	(@expand $($output:expr,)*; OR.$sizecode:ident $reg:ident, $rs:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
-		$($output,)* $crate::define_pio_ops!(@b $sizecode, OR, $reg, $crate::pio::regs::$rs as _), ;
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, OR, $reg, $crate::pio::vals::regs::$rs as _), ;
 		$($rest)*
 	) };
 	// - OR_IMM.s Rd, IMM
@@ -292,12 +292,12 @@ macro_rules! define_pio_ops
 	) };
 	// - XOR.s Rd, Rs
 	(@expand $($output:expr,)*; XOR.$sizecode:ident $reg:ident, $rs:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
-		$($output,)* $crate::define_pio_ops!(@b $sizecode, XOR, $reg, $crate::pio::regs::$rs as _), ;
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, XOR, $reg, $crate::pio::vals::regs::$rs as _), ;
 		$($rest)*
 	) };
 	// - ADD.s Rd, Rs
 	(@expand $($output:expr,)*; ADD.$sizecode:ident $reg:ident, $rs:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
-		$($output,)* $crate::define_pio_ops!(@b $sizecode, ADD, $reg, $crate::pio::regs::$rs as _), ;
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, ADD, $reg, $crate::pio::vals::regs::$rs as _), ;
 		$($rest)*
 	) };
 	// - ADD_IMM.s Rd, IMM
@@ -307,7 +307,7 @@ macro_rules! define_pio_ops
 	) };
 	// - SUB.s Rd, Rs
 	(@expand $($output:expr,)*; SUB.$sizecode:ident $reg:ident, $rs:ident; $($rest:tt)* ) => { $crate::define_pio_ops!(@expand
-		$($output,)* $crate::define_pio_ops!(@b $sizecode, SUB, $reg, $crate::pio::regs::$rs as _), ;
+		$($output,)* $crate::define_pio_ops!(@b $sizecode, SUB, $reg, $crate::pio::vals::regs::$rs as _), ;
 		$($rest)*
 	) };
 
