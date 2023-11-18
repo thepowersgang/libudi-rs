@@ -2,23 +2,18 @@
 
 mod pio_ops;
 
+#[derive(Default)]
 struct Driver
 {
 	pio_handles: PioHandles,
 	mac_addr: [u8; 6],
 	rx_cb_queue: ::udi::meta_nic::ReadCbQueue,
-}
-impl Default for Driver {
-    fn default() -> Self {
-		Driver {
-			pio_handles: Default::default(),
-			mac_addr: [0; 6],
-			rx_cb_queue: Default::default(),
-		}
-    }
+	dma_constraints: ::udi::physio::dma::DmaConstraints,
 }
 #[derive(Default)]
 struct PioHandles {
+	reset: ::udi::pio::Handle,
+	irq_ack: ::udi::pio::Handle,
 	enable: ::udi::pio::Handle,
 	disable: ::udi::pio::Handle,
 }
@@ -83,12 +78,39 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
     fn bus_bind_ack<'a>(
 		&'a mut self,
 		cb: ::udi::meta_bridge::CbRefBind<'a>,
-		_dma_constraints: ::udi::ffi::physio::udi_dma_constraints_t,
+		dma_constraints: ::udi::ffi::physio::udi_dma_constraints_t,
 		_preferred_endianness: ::udi::meta_bridge::PreferredEndianness,
 		_status: ::udi::ffi::udi_status_t
 	) -> Self::Future_bind_ack<'a> {
 		async move {
-			todo!("bus_bind_ack")
+			let pio_map = |trans_list| ::udi::pio::map(cb.gcb(), 0/*UDI_PCI_BAR_0*/, 0x00,0x20, trans_list, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0.into());
+			self.pio_handles.reset   = pio_map(&pio_ops::RESET).await;
+			self.pio_handles.irq_ack = pio_map(&pio_ops::IRQACK).await;
+			self.pio_handles.enable  = pio_map(&pio_ops::ENABLE).await;
+			self.pio_handles.disable = pio_map(&pio_ops::DISBALE).await;
+
+			self.dma_constraints = unsafe {
+				use ::udi::ffi::physio::udi_dma_constraints_attr_spec_t as Spec;
+				use ::udi::ffi::physio;
+				let mut dc = ::udi::physio::dma::DmaConstraints::from_raw(dma_constraints);
+				dc.set(cb.gcb(), &[
+					// 32-bit device
+					Spec { attr_type: physio::UDI_DMA_ADDRESSABLE_BITS, attr_value: 32 },
+					// Maximum scatter-gather elements = 1 (only one TX slot)
+					Spec { attr_type: physio::UDI_DMA_SCGTH_MAX_ELEMENTS, attr_value: 1 },
+					]).await?;
+				dc
+				};
+			// Reset the card and get the MAC address
+			let rbstart: u32 = todo!("rbstart");
+			{
+				let mut reset_data = [0; 4+6];
+				reset_data[..4].copy_from_slice(&rbstart.to_ne_bytes());
+				::udi::pio::trans(cb.gcb(), &self.inner.pio_handles.reset, Default::default(),
+					None, Some(unsafe { ::udi::pio::MemPtr::new(&mut reset_data)})).await?;
+				self.mac_addr.copy_from_slice(&reset_data[4..]);
+			}
+			Ok( () )
 		}
     }
 
@@ -122,6 +144,10 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
     type Future_intr_event_ind<'s> = impl ::core::future::Future<Output=()>+'s;
     fn intr_event_ind<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefEvent<'a>, _flags: u8) -> Self::Future_intr_event_ind<'a> {
 		async move {
+			let isr = cb.intr_result;
+			if isr & pio_ops::FLAG_ISR_ROK != 0 {
+				// TODO: RX OK
+			}
 		}
     }
 }
