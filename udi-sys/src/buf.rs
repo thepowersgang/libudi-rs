@@ -61,5 +61,11 @@ extern "C" {
         dst_len: udi_size_t,
         path_handle: udi_buf_path_t
     );
+    pub fn udi_buf_read(
+        src_buf: *mut udi_buf_t,
+        src_off: udi_size_t,
+        src_len: udi_size_t,
+        dst_mem: *mut crate::c_void,
+    );
     pub fn udi_buf_free(buf: *mut udi_buf_t);
 }

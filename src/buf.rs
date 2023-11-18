@@ -1,6 +1,7 @@
 //! Buffers (`udi_buf_t`)
 //! 
 //! 
+use ::core::future::Future;
 use crate::ffi::udi_buf_t;
 
 /// An owning buffer handle
@@ -51,7 +52,7 @@ impl Handle
     	cb: crate::CbRef<crate::ffi::udi_cb_t>,
         init_data: &'d [u8],
         path_handle: crate::ffi::buf::udi_buf_path_t
-    ) -> impl ::core::future::Future<Output=Self> + 'd {
+    ) -> impl Future<Output=Self> + 'd {
         crate::async_trickery::wait_task::<_, _,_,_>(
             cb,
             move |cb| unsafe {
@@ -67,7 +68,7 @@ impl Handle
     /// Ensure that this buffer has at least `size` bytes allocated within it
     /// 
     /// If the current size is smaller than `size`, then extra uninitialied bytes are added to the end
-    pub fn ensure_size(&mut self, cb: crate::CbRef<crate::ffi::udi_cb_t>, size: usize) -> impl ::core::future::Future<Output=()> + '_
+    pub fn ensure_size(&mut self, cb: crate::CbRef<crate::ffi::udi_cb_t>, size: usize) -> impl Future<Output=()> + '_
     {
         let self_buf = self.0;
         crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
@@ -110,12 +111,41 @@ impl Handle
             }
         }
     }
+
+    #[cfg(false_)]
+    pub fn copy_from<'a>(
+        &'a mut self,
+        cb: crate::CbRef<crate::ffi::udi_cb_t>,
+        src: &'a Handle,
+        src_range: ::core::ops::Range<usize>,
+        dst_range: ::core::ops::Range<usize>,
+    )
+    {
+        let self_buf = self.0;
+        crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
+            cb,
+            move |gcb| unsafe {
+                crate::ffi::buf::udi_buf_copy(
+                    Self::callback, gcb,
+                    src.0, src_range.start, src_range.end - src_range.start,
+                    self_buf, dst_range.start, dst_range.end - dst_range.start,
+                    crate::ffi::buf::UDI_NULL_PATH_BUF
+                    );
+                },
+            |res| {
+                let crate::WaitRes::Pointer(p) = res else { panic!(""); };
+                // SAFE: Trusting the environemnt to have given us a valid pointer
+                unsafe { self.update_from_raw(p as *mut _); }
+                }
+            )
+    }
+
     /// Write data into a buffer
     pub fn write<'a>(&'a mut self,
     	cb: crate::CbRef<crate::ffi::udi_cb_t>,
         dst: ::core::ops::Range<usize>,
         data: &'a [u8]
-    ) -> impl ::core::future::Future<Output=()> + 'a {
+    ) -> impl Future<Output=()> + 'a {
         let self_buf = self.0;
         crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
             cb,
@@ -134,6 +164,15 @@ impl Handle
                 unsafe { self.update_from_raw(p as *mut _); }
                 }
             )
+    }
+
+    pub fn read(&self, ofs: usize, dst: &mut [u8]) {
+        assert!(ofs <= self.len());
+        assert!(ofs + dst.len() <= self.len());
+        // SAFE: Correct FFI inputs
+        unsafe {
+            crate::ffi::buf::udi_buf_read(self.0, ofs, dst.len(), dst.as_mut_ptr() as _)
+        }
     }
 
     /// Consume and free this buffer
