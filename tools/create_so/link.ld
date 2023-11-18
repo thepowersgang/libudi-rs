@@ -7,7 +7,7 @@ SECTIONS {
     .rodata : {
         *(.rodata .rodata.*)
         UDIPROPS_start = .;
-        *(.udiprops)
+        KEEP( *(.udiprops) )
         UDIPROPS_end = .;
     }
     .data : {
