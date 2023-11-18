@@ -14,9 +14,9 @@
 
 use self::async_trickery::WaitRes;
 
-//use self::future_ext::FutureExt;
+pub use self::future_ext::FutureExt;
 #[macro_use]
-mod future_ext;
+pub mod future_ext;
 #[macro_use]
 mod async_trickery;
 

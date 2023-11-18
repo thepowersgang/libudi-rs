@@ -9,7 +9,7 @@ macro_rules! pin_project {
 	}
 }
 
-/// Extension trait for futures
+/// Extension trait for futures, to reduce the size of state machines slightly (`async` blocks get chunky)
 pub trait FutureExt: Future
 {
 	fn map<F, U>(self, op: F) -> Map<Self,F,U>
