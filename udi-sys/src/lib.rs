@@ -115,3 +115,7 @@ pub enum StatusValues
 	UDI_STAT_ATTR_MISMATCH          = 20,
 }
 pub use StatusValues::*;
+
+extern "C" {
+	pub fn udi_assert(expr: udi_boolean_t);
+}

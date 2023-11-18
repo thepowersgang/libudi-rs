@@ -19,3 +19,10 @@ pub unsafe extern "C" fn udi_debug_printf(fmt: *const ::core::ffi::c_char, mut a
     ::std::io::stdout().write_all(&sink.0[..sink.1]).unwrap();
     println!("");
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn udi_assert(expr: ::udi::ffi::udi_boolean_t) {
+    if !expr.to_bool() {
+        panic!("`udi_assert` failure")
+    }
+}

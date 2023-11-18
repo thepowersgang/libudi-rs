@@ -6,8 +6,9 @@ edition = "2021"
 [lib]
 crate-type = ["staticlib","rlib"]
 test = false    # Tests don't link becuase there's no UDI environment
+#panic = "abort"
 
 [dependencies]
-udi = { path = "../../" }
+udi = { path = "../../", default-features = false }
 [build-dependencies]
 udiprops_parse = { path = "../../udiprops_parse" }

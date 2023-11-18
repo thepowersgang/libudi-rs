@@ -53,7 +53,9 @@ fn main() {
         ::std::sync::Arc::new(DriverModule::new(&driver::udi_init_info, udiprops))
     };
     let _ = driver_module_ne2000;
-    register_driver_module(&mut state, driver_module_ne2000);
+    if let None = ::std::env::args_os().skip(1).next() {
+        register_driver_module(&mut state, driver_module_ne2000);
+    }
 
     for a in ::std::env::args_os().skip(1)
     {

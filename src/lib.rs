@@ -7,6 +7,7 @@
 #![feature(const_mut_refs)]	// Used for getting size of tasks
 #![feature(extern_types)]	// Handle types
 #![feature(fundamental)]
+#![cfg_attr(not(feature="std"),feature(lang_items))]
 
 // A "region" is a thread
 // - rdata is the thread's data, i.e. the drive instance
@@ -304,3 +305,20 @@ macro_rules! define_driver
 	(@indexes_inner =$out:ident ) => { };
 }
 
+
+#[cfg(not(feature="std"))]
+mod panic {
+	#[panic_handler]
+	fn panic_handler(_h: &::core::panic::PanicInfo) -> !
+	{
+		unsafe {
+			//::udi_macros::debug_printf!("PANIC");
+			::udi_sys::udi_assert(::udi_sys::udi_boolean_t(0));
+		}
+		loop {}
+	}
+	#[lang="eh_personality"]
+	fn eh_personality() {
+
+	}
+}

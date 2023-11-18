@@ -157,6 +157,20 @@ unsafe extern "C" fn udi_buf_write(
     
     callback(gcb, dst_buf);
 }
+
+#[no_mangle]
+unsafe extern "C" fn udi_buf_read(
+    src_buf: *mut udi_buf_t,
+    src_off: udi_size_t,
+    src_len: udi_size_t,
+    dst_mem: *mut c_void,
+)
+{
+    let src = get_buf(&src_buf).unwrap().get_slice(src_off, src_len);
+    ::core::ptr::copy_nonoverlapping(src.as_ptr(), dst_mem as *mut u8, src.len());
+}
+
+
 #[no_mangle]
 unsafe extern "C" fn udi_buf_free(buf: *mut udi_buf_t)
 {
