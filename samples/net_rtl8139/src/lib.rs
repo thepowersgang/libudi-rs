@@ -102,6 +102,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 		_status: ::udi::ffi::udi_status_t
 	) -> Self::Future_bind_ack<'a> {
 		async move {
+			::udi::debug_printf!("bus_bind_ack");
 			let (handles,irq_ack) = pio_ops::PioHandles::new(cb.gcb()).await;
 			self.pio_handles = handles;
 
@@ -156,6 +157,14 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 			// Reset the card and get the MAC address
 			// SAFE: Correct DMA address
 			self.mac_addr = unsafe { self.pio_handles.reset(cb.gcb(), rbstart).await? };
+			::udi::debug_printf!("bus_bind_ack: mac_addr = %02X:%02X:%02X:%02X:%02X:%02X",
+				self.mac_addr[0] as _,
+				self.mac_addr[1] as _,
+				self.mac_addr[2] as _,
+				self.mac_addr[3] as _,
+				self.mac_addr[4] as _,
+				self.mac_addr[5] as _,
+				);
 			Ok( () )
 		}
     }

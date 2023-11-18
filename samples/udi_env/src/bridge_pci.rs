@@ -11,6 +11,7 @@ struct EmulatedDevice {
 }
 static DEVICES: &[EmulatedDevice] = &[
     EmulatedDevice { factory: |_| crate::emulated_devices::Rtl8029::new_boxed(), vendor_id: 0x10ec, device_id: 0x8029, class_word: 0 },
+    EmulatedDevice { factory: |_| crate::emulated_devices::rtl8139::Device::new_boxed(), vendor_id: 0x10ec, device_id: 0x8139, class_word: 0 },
     // A "Generic XT-Compatible Serial Controller"
     EmulatedDevice { factory: |_| crate::emulated_devices::XTSerial::new_boxed(), vendor_id: 0x8086, device_id: 0xFFFF, class_word: 0x07_00_00 },
 ];

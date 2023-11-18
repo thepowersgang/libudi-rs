@@ -11,5 +11,7 @@ pub trait PioDevice
 
 mod xt_serial;
 mod rtl8029;
+pub mod rtl8139;
+
 pub use xt_serial::XTSerial;
 pub use rtl8029::Rtl8029;

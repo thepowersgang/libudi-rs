@@ -75,6 +75,7 @@ fn main() {
 
             let udi_init_info = &*(udi_init_info as *const ::udi::ffi::init::udi_init_t);
             let udiprops = ::core::slice::from_raw_parts(udiprops_start as _, udiprops_end as usize - udiprops_start as usize);
+            assert!(udiprops.len() > 0, "UDIPROPS is empty");
 
             let udiprops = ::udiprops_parse::load_from_raw_section(udiprops);
             ::std::sync::Arc::new(DriverModule::new(udi_init_info, udiprops))
