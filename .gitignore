@@ -2,3 +2,4 @@
 /target
 /samples/*/target
 /*.so
+/tools/create_so/libudi.so
