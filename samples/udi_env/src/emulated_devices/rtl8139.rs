@@ -32,109 +32,112 @@ impl super::PioDevice for Device {
     fn pio_read(&self, regset_idx: u32, reg: u32, dst: &mut [u8]) {
         assert!(regset_idx == 0);
         let regs = self.regs.lock().unwrap();
-        fn encode(dst: &mut [u8], name: &str, val: &[u8]) {
-            assert!(dst.len() == val.len(), "Accessing {} with wrong size: {} != {}", name, dst.len(), val.len());
-            dst.copy_from_slice(val);
-        }
-        fn encode_u32(dst: &mut [u8], name: &str, val: u32) {
-            encode(dst, name, &val.to_le_bytes())
-        }
-        fn encode_u16(dst: &mut [u8], name: &str, val: u16) {
-            encode(dst, name, &val.to_le_bytes())
-        }
-        fn encode_u8(dst: &mut [u8], name: &str, val: u8) {
-            encode(dst, name, &val.to_le_bytes())
-        }
         match reg {
         // MAC address
         0..=5 => dst[0] = [0xAB,0xCD,0xEF,0x00,0x01,0x23][reg as usize],
-        regs::TSD0 ..=regs::TSD3  => encode_u32(dst, "TSDn" , regs.tsd [ (reg >> 2) as usize & 3 ]),
-        regs::TSAD0..=regs::TSAD3 => encode_u32(dst, "TSADn", regs.tsad[ (reg >> 2) as usize & 3 ]),
-        regs::RBSTART => encode_u32(dst, "RBSTART", regs.rbstart),
-        regs::CMD => encode_u8(dst, "CMD", regs.cmd),
-        regs::CAPR => encode_u16(dst, "CAPR", regs.capr),
-        regs::CBR => encode_u16(dst, "CBR", regs.cba),
-        regs::IMR => encode_u16(dst, "IMR", regs.imr),
-        regs::ISR => encode_u16(dst, "ISR", regs.isr),
-        regs::TCR => encode_u32(dst, "TCR", regs.tcr),
-        regs::RCR => encode_u32(dst, "RCR", regs.rcr),
-        regs::CONFIG0 => encode_u8(dst, "CONFIG0", 0x00),
-        regs::CONFIG1 => encode_u8(dst, "CONFIG1", regs.config1),
+        regs::TSD0 ..=regs::TSD3  => u32::encode(dst, "TSDn" , regs.tsd [ (reg >> 2) as usize & 3 ]),
+        regs::TSAD0..=regs::TSAD3 => u32::encode(dst, "TSADn", regs.tsad[ (reg >> 2) as usize & 3 ]),
+        regs::RBSTART => u32::encode(dst, "RBSTART", regs.rbstart),
+        regs::CMD => u8::encode(dst, "CMD", regs.cmd),
+        regs::CAPR => u16::encode(dst, "CAPR", regs.capr),
+        regs::CBR => u16::encode(dst, "CBR", regs.cba),
+        regs::IMR => u16::encode(dst, "IMR", regs.imr),
+        regs::ISR => u16::encode(dst, "ISR", regs.isr),
+        regs::TCR => u32::encode(dst, "TCR", regs.tcr),
+        regs::RCR => u32::encode(dst, "RCR", regs.rcr),
+        regs::CONFIG0 => u8::encode(dst, "CONFIG0", 0x00),
+        regs::CONFIG1 => u8::encode(dst, "CONFIG1", regs.config1),
         _ => todo!("Handle reg {:#X}", reg),
         }
     }
 
     fn pio_write(&self, regset_idx: u32, reg: u32, src: &[u8]) {
         assert!(regset_idx == 0);
-        assert!(src.len() == 1);
-        let mut regs = self.regs.lock().unwrap();
-        fn try_into_or<U>(src: &[u8], name: &'static str) -> U
+        fn check_reserved<T>(slot: &mut T, src: &[u8], name: &'static str, mask_rsvd: T, mask_ro: T) -> T
         where
-            for<'a> &'a [u8]: TryInto<U>,
-            for<'a> <&'a [u8] as TryInto<U>>::Error: ::core::fmt::Debug,
-        {
-            match src.try_into()
-            {
-            Ok(v) => v,
-            Err(e) => panic!("Accessing {} with wrong size: {:?}", name, e)
-            }
-        }
-        fn read_u32(src: &[u8], name: &'static str) -> u32 {
-            u32::from_le_bytes(try_into_or(src, name))
-        }
-        fn read_u16(src: &[u8], name: &'static str) -> u16 {
-            u16::from_le_bytes(try_into_or(src, name))
-        }
-        fn read_u8(src: &[u8], name: &'static str) -> u8 {
-            u8::from_le_bytes(try_into_or(src, name))
-        }
-        fn check_reserved<T>(slot: &mut T, new: T, mask_rsvd: T, mask_ro: T, name: &str) -> T
-        where
-            T: Copy,
-            T: Eq,
-            T: ::core::fmt::LowerHex,
+            T: RegVal,
             T: ::core::ops::BitAnd<Output=T>,
             T: ::core::ops::BitOr<Output=T>,
             T: ::core::ops::Not<Output=T>,
         {
+            let new = T::decode(src, name);
             let prev = *slot;
             assert!(new & mask_rsvd == prev & mask_rsvd,
                 "Reserved bits changed in {name} {:#x} != {:#x}", new & mask_rsvd, prev & mask_rsvd);
             *slot = (new & !mask_ro) | (prev & mask_ro);
             prev
         }
+
+        let mut regs = self.regs.lock().unwrap();
         match reg
         {
-        regs::TSD0 ..=regs::TSD3  => regs.tsd [ (reg >> 2) as usize & 3 ] = read_u32(src, "TSDn" ),
-        regs::TSAD0..=regs::TSAD3 => regs.tsad[ (reg >> 2) as usize & 3 ] = read_u32(src, "TSADn"),
-        regs::RBSTART => regs.rbstart = read_u32(src, "RBSTART"),
+        regs::TSD0 ..=regs::TSD3  => regs.tsd [ (reg >> 2) as usize & 3 ] = u32::decode(src, "TSDn" ),
+        regs::TSAD0..=regs::TSAD3 => regs.tsad[ (reg >> 2) as usize & 3 ] = u32::decode(src, "TSADn"),
+        regs::RBSTART => regs.rbstart = u32::decode(src, "RBSTART"),
         regs::CMD => {
-            let new_val = read_u8(src, "CMD");
-            let prev_val = check_reserved(&mut regs.cmd, new_val, 0xE2, 0x01, "CMD");
+            let prev_val = check_reserved(&mut regs.cmd, src, "CMD", 0xE2, 0x01);
             // Reset requested
             if regs.cmd & 0x10 != 0 && prev_val & 0x10 == 0 {
                 regs.reset();
             }
             },
-        regs::CAPR => regs.capr = read_u16(src, "CAPR"),
-        regs::CBR => panic!("Invalid write to CBA"),
-        regs::IMR => regs.imr = read_u16(src, "IMR"),
-        regs::ISR => regs.isr &= !read_u16(src, "ISR"),
+        regs::CAPR => regs.capr = u16::decode(src, "CAPR"),
+        regs::CBR => panic!("Invalid write to CBR"),
+        regs::IMR => regs.imr = u16::decode(src, "IMR"),
+        regs::ISR => regs.isr &= !u16::decode(src, "ISR"),
         regs::TCR => {
-            let new_val = read_u32(src, "TCR");
-            let _ = check_reserved(&mut regs.tcr, new_val, 0x8038_F80E, 0x7C0C_0000, "TCR");
+            let _ = check_reserved(&mut regs.tcr, src, "TCR", 0x8038_F80E, 0x7C0C_0000);
         }
         regs::RCR => {
-            let new_val = read_u32(src, "RCR");
-            let _ = check_reserved(&mut regs.rcr, new_val, 0xF0FC_0040, 0x0000_0000, "RCR");
+            let _ = check_reserved(&mut regs.rcr, src, "RCR", 0xF0FC_0040, 0x0000_0000);
         }
         regs::CONFIG0 => panic!("Invalid write to CONFIG0"),
-        regs::CONFIG1 => regs.config1 = read_u8(src, "CONFIG1"),
+        regs::CONFIG1 => regs.config1 = u8::decode(src, "CONFIG1"),
         _ => todo!("Write reg {:#X}", reg),
         }
     }
 
     fn dma(&self) -> &super::DmaPool { &self.dma }
+}
+
+fn try_into_or<const N: usize>(src: &[u8], name: &'static str) -> [u8; N] {
+    match src.try_into()
+    {
+    Ok(v) => v,
+    Err(_) => panic!("Accessing {} with wrong size: {} != {}", name, src.len(), N),
+    }
+}
+fn encode(dst: &mut [u8], name: &str, val: &[u8]) {
+    assert!(dst.len() == val.len(), "Accessing {} with wrong size: {} != {}", name, dst.len(), val.len());
+    dst.copy_from_slice(val);
+}
+trait RegVal: Copy + Eq + ::core::fmt::LowerHex {
+    fn decode(src: &[u8], name: &'static str) -> Self;
+    fn encode(dst: &mut [u8], name: &str, val: Self);
+}
+impl RegVal for u8 {
+    fn decode(src: &[u8], name: &'static str) -> Self {
+        Self::from_le_bytes(try_into_or(src, name))
+    }
+    fn encode(dst: &mut [u8], name: &str, val: Self) {
+        encode(dst, name, &val.to_le_bytes())
+    }
+}
+impl RegVal for u16 {
+    fn decode(src: &[u8], name: &'static str) -> Self {
+        Self::from_le_bytes(try_into_or(src, name))
+    }
+    fn encode(dst: &mut [u8], name: &str, val: Self) {
+        encode(dst, name, &val.to_le_bytes())
+    }
+}
+impl RegVal for u32 {
+    fn decode(src: &[u8], name: &'static str) -> Self {
+        Self::from_le_bytes(try_into_or(src, name))
+    }
+    fn encode(dst: &mut [u8], name: &str, val: Self) {
+        encode(dst, name, &val.to_le_bytes())
+    }
 }
 
 #[derive(Default)]
@@ -158,6 +161,8 @@ struct Regs
 impl Regs
 {
     fn reset(&mut self) {
+        self.cba = 0;
+        self.capr = 0;
         self.cmd &= !0x10;
     }
 }
