@@ -98,11 +98,12 @@ pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::m
     let gcb = cb as *mut ::udi::ffi::udi_cb_t;
     let ch = ChannelRef::from_handle((*gcb).channel);
     let ch_side = ch.0.sides[!ch.1 as usize].get().unwrap();
-
+    
     // Get the scratch as the max of all CB instances for this type
     let driver_module = &*ch_side.driver_instance.module;
-    let Some(meta_idx) = driver_module.get_metalang_by_name(<Cb::MetalangSpec as ::udi::metalang_trait::Metalanguage>::name()) else {
-        panic!("No metalang `{}` in driver?!", <Cb::MetalangSpec as ::udi::metalang_trait::Metalanguage>::name());
+    let meta_name = <Cb::MetalangSpec as ::udi::metalang_trait::Metalanguage>::name();
+    let Some(meta_idx) = driver_module.get_metalang_by_name(meta_name) else {
+        panic!("No metalang `{}` in driver ({driver_module:p}) '{}'?!", meta_name, driver_module.name());
     };
     let scratch_requirement = driver_module.cbs.iter()
         .filter(|cb| cb.meta_idx == meta_idx)

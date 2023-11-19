@@ -29,18 +29,31 @@ unsafe impl crate::async_trickery::GetCb for udi_channel_event_cb_t {
 }
 
 /// Spawn a new channel
-pub fn channel_spawn(
+/// 
+/// - `cb` is the current task control block
+/// - `context` is the current context structure, used to determine the correct context for the ops on the channel
+///   - It is a bug (checked with an assertion) for this pointer to be different to `cb.context`
+/// - `spawn_idx` is an index used to match channel pairs together
+// TODO: Is there a safety hazard here if `spawn_idx` is for the wrong ops type
+// - For my impl, there's checks that the ops vector matches.
+pub fn channel_spawn<Ops>(
 	cb: crate::CbRef<::udi_sys::udi_cb_t>,
+    context: &impl AsRef<Ops::Context>,
     spawn_idx: ::udi_sys::udi_index_t,
-    ops_idx: ::udi_sys::udi_index_t,
-) -> impl ::core::future::Future<Output=ChannelHandle> {
+) -> impl ::core::future::Future<Output=ChannelHandle>
+where
+    Ops: crate::ops_markers::Ops,
+{
+    let expected_context = context as *const _;
+    let channel_context = context.as_ref() as *const _;
 	extern "C" fn callback(gcb: *mut ::udi_sys::udi_cb_t, handle: ::udi_sys::udi_channel_t) {
 		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }
 	}
 	crate::async_trickery::wait_task::<::udi_sys::udi_cb_t, _,_,_>(
         cb,
 		move |cb| unsafe {
-            ::udi_sys::imc::udi_channel_spawn(callback, cb as *const _ as *mut _, (*cb).channel, spawn_idx, ops_idx, (*cb).context)
+            assert!( (*cb).context == expected_context as *mut _, "BUG: `channel_spawn` was passed a context that doesn't match input CB" );
+            ::udi_sys::imc::udi_channel_spawn(callback, cb as *const _ as *mut _, (*cb).channel, spawn_idx, Ops::INDEX, channel_context as *mut _)
 			},
 		|res| {
 			let crate::WaitRes::Pointer(p) = res else { panic!(""); };

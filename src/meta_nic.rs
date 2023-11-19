@@ -9,6 +9,9 @@ pub fn nsr_rx_ind(rx_cb: crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>) {
 pub fn nsr_tx_rdy(cb: crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>) {
     unsafe { ffi::udi_nsr_tx_rdy(cb.into_raw()) }
 }
+pub fn nd_rx_rdy(cb: crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>) {
+    unsafe { ffi::udi_nd_rx_rdy(cb.into_raw()) }
+}
 
 macro_rules! def_cb {
     (unsafe $ref_name:ident => $t:ty : $cb_num:expr) => {
@@ -33,8 +36,8 @@ impl_metalanguage!{
         3 => ffi::udi_nic_ctrl_cb_t,
         4 => ffi::udi_nic_status_cb_t,
         5 => ffi::udi_nic_info_cb_t,
-        6 => ffi::udi_nic_tx_cb_t,
-        7 => ffi::udi_nic_rx_cb_t,
+        6 => ffi::udi_nic_tx_cb_t : BUF tx_buf : CHAIN chain,
+        7 => ffi::udi_nic_rx_cb_t : BUF rx_buf : CHAIN chain,
         ;
 }
 

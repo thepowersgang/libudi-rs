@@ -112,7 +112,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 			self.pio_handles.irq_ack = pio_map(&pio_ops::IRQACK).await;
 
 			// Spawn channel
-			self.intr_channel = ::udi::imc::channel_spawn(cb.gcb(), /*interrupt number*/0.into(), OpsList::Irq as _).await;
+			self.intr_channel = ::udi::imc::channel_spawn::<OpsList::Irq>(cb.gcb(), self, /*interrupt number*/0.into()).await;
 			let mut intr_cb = ::udi::cb::alloc::<CbList::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
 			intr_cb.interrupt_index = 0.into();
 			intr_cb.min_event_pend = 2;
@@ -226,8 +226,8 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
     fn bind_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicBind<'a>, tx_chan_index: udi::ffi::udi_index_t, rx_chan_index: udi::ffi::udi_index_t) -> Self::Future_bind_req<'a> {
         async move {
 			::udi::debug_printf!("NIC bind_req: %p %p", &*self, self.dev());
-			self.dev_mut().channel_tx = ::udi::imc::channel_spawn(cb.gcb(), tx_chan_index, OpsList::Tx as _).await;
-			self.dev_mut().channel_rx = ::udi::imc::channel_spawn(cb.gcb(), rx_chan_index, OpsList::Rx as _).await;
+			self.dev_mut().channel_tx = ::udi::imc::channel_spawn::<OpsList::Tx>(cb.gcb(), self, tx_chan_index).await;
+			self.dev_mut().channel_rx = ::udi::imc::channel_spawn::<OpsList::Rx>(cb.gcb(), self, rx_chan_index).await;
 			::udi::debug_printf!("NIC mac_addr = %02x:%02x:%02x:%02x:%02x:%02x",
 				self.dev().mac_addr[0] as _, self.dev().mac_addr[1] as _, self.dev().mac_addr[2] as _,
 				self.dev().mac_addr[3] as _, self.dev().mac_addr[4] as _, self.dev().mac_addr[5] as _,
@@ -341,8 +341,8 @@ impl ::udi::meta_nic::NdRx for ::udi::init::RData<Driver>
 {
 	type Future_rx_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
     fn rx_rdy<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_rx_rdy<'a> {
+		self.rx_cb_queue.push(cb);
         async move {
-			self.rx_cb_queue.push(cb);
 		}
     }
 }

@@ -2,7 +2,10 @@ use super::{udi_size_t, udi_buf_t, udi_cb_t};
 
 
 pub type udi_tagtype_t = super::udi_ubit32_t;
-pub type udi_buf_path_t = super::_udi_handle_t;
+extern "C" {
+    pub type udi_buf_path_s;
+}
+pub type udi_buf_path_t = *mut udi_buf_path_s;
 pub const UDI_NULL_PATH_BUF: udi_buf_path_t = ::core::ptr::null_mut();
 
 pub type udi_buf_copy_call_t = extern "C" fn(gcb: *mut udi_cb_t, new_dst_buf: *mut udi_buf_t);

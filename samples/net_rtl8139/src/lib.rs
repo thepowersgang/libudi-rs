@@ -106,7 +106,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 			let (handles,irq_ack) = pio_ops::PioHandles::new(cb.gcb()).await;
 			self.pio_handles = handles;
 
-			self.intr_channel = ::udi::imc::channel_spawn(cb.gcb(), /*interrupt number*/0.into(), OpsList::Irq as _).await;
+			self.intr_channel = ::udi::imc::channel_spawn::<OpsList::Irq>(cb.gcb(), self, /*interrupt number*/0.into()).await;
 			let mut intr_cb = ::udi::cb::alloc::<CbList::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
 			intr_cb.interrupt_index = 0.into();
 			intr_cb.min_event_pend = 2;
@@ -301,8 +301,16 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 	type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::Result<::udi::meta_nic::NicInfo>> + 's;
     fn bind_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicBind<'a>, tx_chan_index: udi::ffi::udi_index_t, rx_chan_index: udi::ffi::udi_index_t) -> Self::Future_bind_req<'a> {
         async move {
-			self.dev_mut().channel_tx = ::udi::imc::channel_spawn(cb.gcb(), tx_chan_index, OpsList::Tx as _).await;
-			self.dev_mut().channel_rx = ::udi::imc::channel_spawn(cb.gcb(), rx_chan_index, OpsList::Rx as _).await;
+			self.dev_mut().channel_tx = ::udi::imc::channel_spawn::<OpsList::Tx>(cb.gcb(), self, tx_chan_index).await;
+			self.dev_mut().channel_rx = ::udi::imc::channel_spawn::<OpsList::Rx>(cb.gcb(), self, rx_chan_index).await;
+
+			// Create and send 4 TX CBs
+			let mut tx_cbs = ::udi::cb::alloc_batch::<CbList::NicTx>(cb.gcb(), 4, Some((1520, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
+			while let Some(mut tx_cb) = tx_cbs.pop_front() {
+				tx_cb.gcb.channel = self.dev_mut().channel_tx.raw();
+				::udi::meta_nic::nsr_tx_rdy(tx_cb);
+			}
+
 			Ok(::udi::meta_nic::NicInfo {
 				media_type: ::udi::ffi::meta_nic::MediaType::UDI_NIC_ETHER,
 				min_pdu_size: 0,
@@ -417,8 +425,8 @@ impl ::udi::meta_nic::NdRx for ::udi::init::RData<Driver>
 {
 	type Future_rx_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
     fn rx_rdy<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_rx_rdy<'a> {
+		self.rx_cb_queue.push(cb);
         async move {
-			self.rx_cb_queue.push(cb);
 		}
     }
 }

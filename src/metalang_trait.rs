@@ -96,7 +96,7 @@ macro_rules! impl_metalanguage
                         $(
                         unsafe fn get_chain<'a>(&self, cb: &'a mut $crate::ffi::udi_cb_t) -> Option<&'a mut *mut $crate::ffi::udi_cb_t> {
                             let cb = &mut *(cb as *mut $crate::ffi::udi_cb_t as *mut $cb_ty);
-                            Some(&mut cb.$chain_fld)
+                            Some(&mut *( &mut cb.$chain_fld as *mut *mut $cb_ty as *mut *mut $crate::ffi::udi_cb_t))
                         }
                         )?
                     }
@@ -137,8 +137,8 @@ macro_rules! impl_metalanguage
                 $crate::ffi::udi_index_t($cb_idx)
                 };
             $(
-            unsafe fn get_chain(&mut self) -> Option<&mut *mut $crate::ffi::udi_cb_t> {
-                Some(&mut self.$chain_fld)
+            fn get_chain(&mut self) -> Option<&mut *mut $crate::ffi::udi_cb_t> {
+                Some( unsafe { &mut *( &mut self.$chain_fld as *mut *mut Self as *mut *mut $crate::ffi::udi_cb_t) } )
             }
             )?
         }

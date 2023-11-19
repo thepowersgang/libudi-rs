@@ -69,7 +69,7 @@ impl<'a> DriverModule<'a> {
                 return self.get_message(n).unwrap_or("BADMSG");
             }
         }
-        return "?";
+        return "-noname-";
     }
 
     fn get_region_index(&self, region_idx: ::udi::ffi::udi_index_t) -> Option<usize> {

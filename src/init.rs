@@ -216,6 +216,11 @@ pub struct RData<T> {
 	is_init: bool,
     pub inner: T,
 }
+impl<Driver> AsRef<RData<Driver>> for RData<Driver> {
+    fn as_ref(&self) -> &RData<Driver> {
+        self
+    }
+}
 impl<Driver> crate::imc::ChannelInit for RData<Driver> {
 }
 impl<Driver> crate::async_trickery::CbContext for RData<Driver>

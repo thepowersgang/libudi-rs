@@ -135,6 +135,8 @@ pub mod ops_markers {
 	/// Trait for an entry in `OpsList` created by [super::define_driver]
 	pub trait Ops {
 		type OpsTy;
+		type Context;
+		const INDEX: ::udi_sys::udi_index_t;
 	}
 	/// Trait for `udi_*_ops_t` structures indicating that they expect to be a parent binding with the given
 	/// cb.
@@ -215,12 +217,15 @@ macro_rules! define_driver
 		}
 		#[allow(non_snake_case, non_upper_case_globals)]
 		mod OpsList {
+			use super::*;
 			$crate::define_driver!(@indexes $($op_name)*);
 			$(
-				pub const $op_name: $crate::ffi::udi_index_t = $crate::ffi::udi_index_t(super::RawOpsList::$op_name as _);
-				pub struct $op_name { _inner: () }
+				pub(super) const $op_name: $crate::ffi::udi_index_t = $crate::ffi::udi_index_t(super::RawOpsList::$op_name as _);
+				pub(super) struct $op_name { _inner: () }
 				impl $crate::ops_markers::Ops for $op_name {
 					type OpsTy = $op_op;
+					type Context = $crate::define_driver!(@get_wrapper $driver $(: $wrapper<_$(,$wrapper_arg)*>)?);
+					const INDEX: $crate::ffi::udi_index_t = $op_name;
 				}
 				$(impl $crate::ops_wrapper_markers::$wrapper for $op_name { const IDX: $crate::ffi::udi_index_t = $op_name; })?
 			)*

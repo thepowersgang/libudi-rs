@@ -104,7 +104,7 @@ impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,()>
     type Future_intr_attach_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
     fn intr_attach_req<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrAttach<'a>) -> Self::Future_intr_attach_req<'a> {
         async move {
-            let channel = ::udi::imc::channel_spawn(cb.gcb(), cb.interrupt_index, OpsList::Interrupt as _).await;
+            let channel = ::udi::imc::channel_spawn::<OpsList::Interrupt>(cb.gcb(), self, cb.interrupt_index).await;
             let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
             di.device.get().unwrap().set_interrupt_channel(cb.interrupt_index, channel);
             Ok( () )

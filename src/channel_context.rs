@@ -23,6 +23,11 @@ impl<Driver,ChildData> ChildBind<Driver,ChildData>
 		unsafe { &mut (*(self.inner.rdata as *mut crate::init::RData<Driver>)).inner }
 	}
 }
+impl<Driver,ChildData> AsRef<crate::init::RData<Driver>> for ChildBind<Driver,ChildData> {
+	fn as_ref(&self) -> &crate::init::RData<Driver> {
+		unsafe { & (*(self.inner.rdata as *const crate::init::RData<Driver>)) }
+	}
+}
 impl<Driver,ChildData> ::core::ops::Deref for ChildBind<Driver,ChildData>
 {
 	type Target = ChildData;

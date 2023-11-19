@@ -2,6 +2,8 @@
 struct Driver {
     ch_rx: ::udi::imc::ChannelHandle,
     ch_tx: ::udi::imc::ChannelHandle,
+
+    tx_cbs: ::udi::cb::Chain<::udi::ffi::meta_nic::udi_nic_tx_cb_t>,
 }
 
 impl ::udi::init::Driver for ::udi::init::RData<Driver>
@@ -52,8 +54,8 @@ impl ::udi::meta_nic::NsrControl for ::udi::init::RData<Driver>
                 rx: 1.into(),
                 tx: 2.into(),
             };
-            self.ch_rx = ::udi::imc::channel_spawn(cb.gcb(), rv.rx, OpsList::Rx).await;
-            self.ch_tx = ::udi::imc::channel_spawn(cb.gcb(), rv.tx, OpsList::Tx).await;
+            self.ch_rx = ::udi::imc::channel_spawn::<OpsList::Rx>(cb.gcb(), self, rv.rx).await;
+            self.ch_tx = ::udi::imc::channel_spawn::<OpsList::Tx>(cb.gcb(), self, rv.tx).await;
             rv
         }
     }
@@ -62,7 +64,18 @@ impl ::udi::meta_nic::NsrControl for ::udi::init::RData<Driver>
     fn bind_ack<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicBind<'a>, res: ::udi::Result<()>) -> Self::Future_bind_ack<'a> {
         async move {
             match res {
-            Ok(()) => println!("--- SINK_NSR: New device, MAC: {:x?}", &cb.mac_addr[..cb.mac_addr_len as usize]),
+            Ok(()) => {
+                println!("--- SINK_NSR: New device, MAC: {:x?}", &cb.mac_addr[..cb.mac_addr_len as usize]);
+
+                // Allocate a collection of RX CBs and hand them to the device
+                let mut rx_cbs = ::udi::cb::alloc_batch::<CbList::_NicRx>(cb.gcb(), 6, Some((1520, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
+                while let Some(mut rx_cb) = rx_cbs.pop_front() {
+                    rx_cb.gcb.channel = self.ch_rx.raw();
+                    ::udi::meta_nic::nd_rx_rdy(rx_cb);
+                }
+
+                // TODO: Send a test packet
+                },
             Err(e) => println!("Error: {:?}", e),
             }
         }
@@ -96,8 +109,9 @@ impl ::udi::meta_nic::NsrControl for ::udi::init::RData<Driver>
 impl ::udi::meta_nic::NsrTx for ::udi::init::RData<Driver>
 {
     type Future_tx_rdy<'s> = impl ::core::future::Future<Output=()>;
-    fn tx_rdy<'a>(&'a mut self, _cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_tx_rdy<'a> {
-        async move { todo!("tx_rdy") }
+    fn tx_rdy<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_tx_rdy<'a> {
+        self.tx_cbs.push_front(cb);
+        async move {}
     }
 }
 impl ::udi::meta_nic::NsrRx for ::udi::init::RData<Driver>
