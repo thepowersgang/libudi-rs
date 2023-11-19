@@ -29,6 +29,7 @@ impl RealUdiBuf {
         &mut slice[..len]
     }
 
+    /// Delete data within a range
     fn delete_at(&mut self, off: udi_size_t, count: udi_size_t) {
         assert!(off <= self.len());
         assert!(count <= self.len());
@@ -38,6 +39,7 @@ impl RealUdiBuf {
         self.inner.truncate(new_len);
         self.raw.buf_size = new_len;
     }
+    /// Insert zeros (undefined) at the given offset
     fn reserve_at(&mut self, off: udi_size_t, count: udi_size_t) {
         assert!(off <= self.len());
         let old_len = self.len();
@@ -86,7 +88,26 @@ pub unsafe fn read(buf_ptr: *mut udi_buf_t, off: usize, dst: &mut [u8]) -> Optio
         None
     }
 }
+/// Write to a buffer, resizing using zeros if ranges don't match in size
+pub unsafe fn write(buf_ptr: &mut *mut udi_buf_t, dst: ::core::ops::Range<usize>, src: &[u8]) {
+    let p = get_buf_mut(buf_ptr);
+    let dst_len = dst.end - dst.start;
+    if dst_len < src.len() {
+        p.reserve_at(dst.end, src.len() - dst_len);
+    }
+    else if src.len() < dst_len {
+        p.delete_at(dst.start + src.len(), dst_len - src.len());
+    }
+    else {
+        // No size change
+    }
+    p.get_slice_mut(dst.start, src.len()).copy_from_slice(src);
+}
 
+/// [udi_buf_copy] logically replaces dst_len bytes of data starting at offset
+/// dst_offset in dst_buf with a copy of src_len bytes of data starting at
+/// src_offset in src_buf. When the data has been copied, the callback
+/// routine is called.
 #[no_mangle]
 unsafe extern "C" fn udi_buf_copy(
     callback: udi_buf_copy_call_t,
@@ -104,10 +125,6 @@ unsafe extern "C" fn udi_buf_copy(
     let src = get_buf(&src_buf).unwrap().get_slice(src_off, src_len);
     udi_buf_write(callback, gcb, src.as_ptr() as *const c_void, src.len(), dst_buf, dst_off, dst_len, _path_handle);
 }
-/// [udi_buf_copy] logically replaces dst_len bytes of data starting at offset
-/// dst_offset in dst_buf with a copy of src_len bytes of data starting at
-/// src_offset in src_buf. When the data has been copied, the callback
-/// routine is called.
 #[no_mangle]
 unsafe extern "C" fn udi_buf_write(
     callback: udi_buf_copy_call_t,

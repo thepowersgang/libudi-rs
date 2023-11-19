@@ -1,10 +1,22 @@
 use ::udi::ffi::*;
 
 #[derive(Default,Clone)]
-struct ConstaintsReal {
+pub struct ConstaintsReal {
     attrs: Vec<physio::udi_dma_constraints_attr_spec_t>,
 }
 impl ConstaintsReal {
+    pub unsafe fn from_ref(constraints: &physio::udi_dma_constraints_t) -> &Self {
+        &*(*constraints as *const ConstaintsReal)
+    }
+
+    pub fn get(&self, attr_type: physio::udi_dma_constraints_attr_t) -> Option<u32> {
+        match self.attrs.binary_search_by_key(&attr_type, |v| v.attr_type)
+        {
+        Ok(pos) => Some(self.attrs[pos].attr_value),
+        Err(_) => None,
+        }
+    }
+
     fn set_constraint(&mut self, attr_type: physio::udi_dma_constraints_attr_t, attr_value: u32) {
         match self.attrs.binary_search_by_key(&attr_type, |v| v.attr_type)
         {
