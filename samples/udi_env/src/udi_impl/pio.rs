@@ -384,7 +384,7 @@ impl PioDevState<'_> {
             let dst = &mut rv.bytes[..1 << size];
             self.dev.pio_read(self.regset_idx, self.base_offset + reg, dst);
             match self.data_translation {
-            DataTranslation::NeverSwap => assert!(size == 0),
+            DataTranslation::NeverSwap => assert!(size == 0, "NeverSwap with non-byte IO access"),
             DataTranslation::BigEndian => dst.reverse(),
             DataTranslation::LittleEndian => {},
             }
@@ -400,7 +400,7 @@ impl PioDevState<'_> {
         {
             let src = &mut val.bytes[..1 << size];
             match self.data_translation {
-            DataTranslation::NeverSwap => assert!(size == 0),
+            DataTranslation::NeverSwap => assert!(size == 0, "NeverSwap with non-byte IO access"),
             DataTranslation::BigEndian => src.reverse(),
             DataTranslation::LittleEndian => {},
             }

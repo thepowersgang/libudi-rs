@@ -37,14 +37,14 @@ struct DmaInfo {
     scgth: ffi::udi_scgth_t,
 }
 impl DmaInfo {
-    fn alloc(device: &dyn crate::emulated_devices::PioDevice, _constraints: &super::dma_constraints::ConstaintsReal, data_size: usize) -> DmaInfo {
-        let data_handle = device.dma_alloc(data_size);
+    fn alloc(device: &dyn crate::emulated_devices::PioDevice, _constraints: &super::dma_constraints::ConstaintsReal, data_size: usize) -> Option<DmaInfo> {
+        let data_handle = device.dma().allocate(data_size)?;
         let scgth_data = vec![
             ffi::udi_scgth_element_32_t { block_busaddr: data_handle.addr(), block_length: data_handle.len(), },
         ].into_boxed_slice();
-        DmaInfo {
+        Some(DmaInfo {
             data_handle,
-            scgth_handle: device.dma_alloc(::core::mem::size_of_val(&*scgth_data)),
+            scgth_handle: device.dma().allocate(::core::mem::size_of_val(&*scgth_data)).expect("Unable to allocate scgth handle"),
             scgth: ffi::udi_scgth_t {
                 scgth_num_elements: scgth_data.len() as _,
                 scgth_format: ffi::UDI_SCGTH_32,
@@ -54,7 +54,7 @@ impl DmaInfo {
                 },
                 scgth_elements: ffi::udi_scgth_t_scgth_elements { el32p: Box::into_raw(scgth_data) as *mut _ },
             }
-        }
+        })
     }
 }
 
@@ -83,6 +83,7 @@ unsafe extern "C" fn udi_dma_prepare(
     flags: udi_ubit8_t
 )
 {
+    println!("-- udi_dma_prepare");
     let instance = crate::channels::get_driver_instance( &(*gcb).channel );
     let _device = &**instance.device.get().expect("Calling `udi_dma_prepare` with no device");
     let constraints = super::dma_constraints::ConstaintsReal::from_ref(&constraints);
@@ -111,6 +112,7 @@ unsafe extern "C" fn udi_dma_buf_map(
     flags: udi_ubit8_t
 )
 {
+    println!("-- udi_dma_buf_map");
     let dma_handle = &mut *(dma_handle as *mut DmaHandleInner);
     let instance = crate::channels::get_driver_instance( &(*gcb).channel );
     let device = &**instance.device.get().unwrap();
@@ -140,7 +142,14 @@ unsafe extern "C" fn udi_dma_buf_map(
         backing.dir = dir;
     }
 
-    dma_handle.dma_info = Some(DmaInfo::alloc(device, &backing.constraints, range.end - range.start));
+    dma_handle.dma_info = Some(match DmaInfo::alloc(device, &backing.constraints, range.end - range.start)
+        {
+        Some(dma_info) => dma_info,
+        None => {
+            callback(gcb, ::core::ptr::null_mut(), ::udi::ffi::FALSE, ::udi::ffi::UDI_STAT_RESOURCE_UNAVAIL as _);
+            return;
+            }
+        });
 
     let scgth = &mut dma_handle.dma_info.as_mut().unwrap().scgth as *mut _;
     let complete = ::udi::ffi::TRUE;
@@ -153,6 +162,7 @@ unsafe extern "C" fn udi_dma_buf_unmap(
     new_buf_size: udi_size_t
 ) -> *mut udi_buf_t
 {
+    println!("-- udi_dma_buf_unmap");
     let dma_handle = &mut *(dma_handle as *mut DmaHandleInner);
     let BackingData::Buffer(ref mut backing) = dma_handle.backing else {
         panic!("udi_dma_buf_unmap on non-buf DMA handle")
@@ -180,6 +190,7 @@ unsafe extern "C" fn udi_dma_mem_alloc(
     max_gap: udi_size_t
 )
 {
+    println!("-- udi_dma_mem_alloc");
     let instance = crate::channels::get_driver_instance( &(*gcb).channel );
     let dev = instance.device.get().expect("Calling `udi_dma_mem_alloc` with no registered device");
     let constraints = super::dma_constraints::ConstaintsReal::from_ref(&constraints);
@@ -194,7 +205,11 @@ unsafe extern "C" fn udi_dma_mem_alloc(
         todo!("udi_dma_mem_alloc: Handle returning single_element")
     }
     let total_size = (element_size + pad) * nelements as usize;
-    let dma_info = DmaInfo::alloc(&**dev, constraints, total_size);
+    let dma_info = match DmaInfo::alloc(&**dev, constraints, total_size)
+        {
+        Some(dma_info) => dma_info,
+        None => todo!("Error handling in `udi_dma_mem_alloc`"),
+        };
 
     let mem_ptr = ::libc::malloc(total_size);
 
@@ -207,6 +222,7 @@ unsafe extern "C" fn udi_dma_mem_alloc(
         dma_info: Some(dma_info),
     });
     let scgth = &mut rv.dma_info.as_mut().unwrap().scgth as *mut _;
+    println!("scgth={:p}", scgth);
     let rv = Box::into_raw(rv) as ffi::udi_dma_handle_t;
 
     callback(gcb, rv, mem_ptr, pad, ::udi::ffi::TRUE, scgth, ::udi::ffi::FALSE);

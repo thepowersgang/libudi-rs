@@ -395,14 +395,14 @@ impl DmaAlloc {
                     ::udi_sys::physio::udi_dma_mem_alloc(callback, gcb, constraints.0, flags, nelements, element_size, max_gap)
                 },
                 |res| {
-                    let crate::async_trickery::WaitRes::Data(d) = res else { panic!() };
-                    let single_element = d[3] & 1 != 0;
-                    let must_swap = d[3] & 2 != 0;
-                    let gap_size = d[3] >> 2;
+                    let crate::async_trickery::WaitRes::Data([new_ptr, mem_ptr, scgth, gap_flags]) = res else { panic!() };
+                    let single_element = gap_flags & 1 != 0;
+                    let must_swap = gap_flags & 2 != 0;
+                    let gap_size = gap_flags >> 2;
                     DmaAlloc {
-                        handle: DmaHandle(d[0] as _),
-                        scgth: unsafe { ScGth::from_raw(d[1] as _) },
-                        mem_ptr: d[2] as _,
+                        handle: DmaHandle(new_ptr as _),
+                        scgth: unsafe { ScGth::from_raw(scgth as _) },
+                        mem_ptr: mem_ptr as _,
                         gap_size: if single_element { None } else { Some(gap_size) },
                         must_swap }
                     },
@@ -472,7 +472,7 @@ impl<'a> ScGth<'a> {
             match self.0.scgth_format {
             ffi::UDI_SCGTH_32 => ScgthRaw::Bits32( ::core::slice::from_raw_parts(self.0.scgth_elements.el32p, len) ),
             ffi::UDI_SCGTH_64 => ScgthRaw::Bits64( ::core::slice::from_raw_parts(self.0.scgth_elements.el64p, len) ),
-            _ => panic!("Malformed `scgth_format` {}", self.0.scgth_format),
+            _ => panic!("Malformed `scgth_format` {} ({:p})", self.0.scgth_format, self.0),
             }
         }
     }
