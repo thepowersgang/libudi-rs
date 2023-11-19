@@ -378,7 +378,7 @@ struct PioDevState<'a> {
 impl PioDevState<'_> {
     fn read(&self, reg: u32, size: u8) -> RegVal {
         assert!(size <= 5);
-        assert!(self.base_offset + reg + 1 << size <= self.length);
+        assert!(reg + (1 << size) <= self.length);
         let mut rv = RegVal::default();
         {
             let dst = &mut rv.bytes[..1 << size];
@@ -395,7 +395,7 @@ impl PioDevState<'_> {
     fn write(&mut self, reg: u32, mut val: RegVal, size: u8) {
         assert!(size <= 5);
         println!("PIO Write {:#x}+{} = {:?}", reg, 1<<size, &val.bytes[..1<<size]);
-        assert!(self.base_offset + reg + 1 << size <= self.length);
+        assert!(reg + (1 << size) <= self.length);
 
         {
             let src = &mut val.bytes[..1 << size];

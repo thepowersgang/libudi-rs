@@ -20,7 +20,9 @@ pub struct PioHandles {
 impl PioHandles {
     pub fn new(gcb: ::udi::CbRef<::udi::ffi::udi_cb_t>) -> impl Future<Output=(Self,::udi::pio::Handle)> + '_ {
         async move {
-            let pio_map = |trans_list| ::udi::pio::map(gcb, 0/*UDI_PCI_BAR_0*/, 0x00,0x80, trans_list, 0/*UDI_PIO_LITTLE_ENDIAN*/, 0, 0.into());
+            let pio_map = |trans_list|
+                ::udi::pio::map(gcb, 0/*UDI_PCI_BAR_0*/, 0x00,0xFF, trans_list,
+                    ::udi::ffi::pio::UDI_PIO_LITTLE_ENDIAN, 0, 0.into());
             let irq_ack = pio_map(&IRQACK).await;
             let handles = PioHandles {
                 reset   : pio_map(&RESET).await,
@@ -128,6 +130,7 @@ enum Regs {
     Isr = 0x3E,
     /// Recieve Configuration Register
     Rcr = 0x44,
+    //Config0 = 0x51,
     Config1 = 0x52,
 }
 
@@ -205,12 +208,12 @@ impl MemReset {
     LOAD.L R0, [mem R0];
     OUT.L Regs::RBStart as _, R0;
     LOAD_IMM.B R0, 0;
-    OUT.L Regs::Capr as _ , R0;
-    OUT.L Regs::Cba as _ , R0;
-    // - TX buffers?
+    OUT.S Regs::Capr as _ , R0;
+    //OUT.S Regs::Cba as _ , R0;    // Technically read-only
+
     // - RCR - hw::RCR_DMA_BURST_1024|hw::RCR_BUFSZ_8K16|hw::RCR_FIFO_1024|hw::RCR_OVERFLOW|0x1F
     LOAD_IMM.S R0, ((6<<13)|(0<<11)|(6<<8)|0x80|0x1F);
-    OUT.S Regs::Rcr as _, R0;
+    OUT.L Regs::Rcr as _, R0;
     // - Enable the RX and TX engines
     LOAD_IMM.B R0, 0x0C;
     OUT.B Regs::Cmd as _, R0;
