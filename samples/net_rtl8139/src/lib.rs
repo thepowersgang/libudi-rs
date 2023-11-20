@@ -215,10 +215,8 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 					// Pull a RX CB off the queue
 					if flags & 0x0001 != 0 {
 						if let Some(mut rx_cb) = self.rx_cb_queue.pop() {
-							// SAFE: Contract is that this is valid
-							let mut buf = unsafe { ::udi::buf::Handle::from_raw(rx_cb.rx_buf) };
+							let buf = rx_cb.rx_buf_mut();
 							buf.write(cb.gcb(), 0..buf.len(), data).await;
-							rx_cb.rx_buf = buf.into_raw();
 							::udi::meta_nic::nsr_rx_ind(rx_cb);
 						}
 						else {
@@ -261,7 +259,7 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 						// If there was a buffer associated with the TX slot DMA handle, then pull it out and update in the CB
 						if let Some(buf) = unsafe { dma.tx_slots[slot].buf_unmap(0) }
 						{
-							s.cb.tx_buf = buf.into_raw();
+							*s.cb.tx_buf_mut() = buf;
 						}
 						::udi::meta_nic::nsr_tx_rdy(s.cb);
 					},
@@ -308,7 +306,8 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 			let mut tx_cbs = ::udi::cb::alloc_batch::<CbList::NicTx>(cb.gcb(), 4, Some((1520, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
 			while let Some(mut tx_cb) = tx_cbs.pop_front() {
 				tx_cb.gcb.channel = self.dev_mut().channel_tx.raw();
-				::udi::meta_nic::nsr_tx_rdy(tx_cb);
+				// SAFE: Inner fields are valid
+				::udi::meta_nic::nsr_tx_rdy(unsafe { ::udi::meta_nic::CbHandleNicTx::from_handle(tx_cb) });
 			}
 
 			Ok(::udi::meta_nic::NicInfo {
@@ -363,7 +362,7 @@ impl Driver
 		async move {
 			use ::udi::physio::dma::Direction;
 			// SAFE: Input contract that the buffer is valid
-			let buf = unsafe { ::udi::buf::Handle::from_raw(cb.tx_buf) };
+			let buf = ::core::mem::take(cb.tx_buf_mut());
 			// Save the buffer length for if the `buf_map` call fails
 			let len = buf.len();
 			assert!(len <= MTU, "TX buffer exceeds MTU? {} > {}", len, MTU);
@@ -388,7 +387,7 @@ impl Driver
 					let dst = unsafe { ::core::slice::from_raw_parts_mut(dma.tx_bounce[slot].mem_ptr as *mut u8, len) };
 					buf.read(0, dst);
 					// Return the buffer to the CB (it might have changed)
-					cb.tx_buf = buf.into_raw();
+					*cb.tx_buf_mut() = buf;
 					*dma.tx_bounce[slot].scgth().single_entry_32().expect("Environment bug: TX bounce buffer in multiple chunks")
 				},
 				};
@@ -404,14 +403,23 @@ impl Driver
 impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 {
 	type Future_tx_req<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn tx_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_tx_req<'a> {
+    fn tx_req<'a>(&'a mut self, mut cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_tx_req<'a> {
         async move {
-			match self.inner.tx_inner(cb).await
-			{
-			Ok(()) => {},
-			Err(_) => {
-				// Would be nice to return the CB, but unlikely to happen so meh.
-				},
+			loop {
+				let (cur_cb, next) = cb.unlink();
+				
+				match self.inner.tx_inner(cur_cb).await
+				{
+				Ok(()) => {},
+				Err(_udi_err) => {
+					// Would be nice to return the CB, but unlikely to happen so meh.
+					},
+				}
+
+				match next {
+				Some(next) => cb = next,
+				None => break,
+				}
 			}
 		}
     }

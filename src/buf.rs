@@ -5,9 +5,21 @@ use ::core::future::Future;
 use crate::ffi::udi_buf_t;
 
 /// An owning buffer handle
+#[repr(transparent)]
 pub struct Handle(*mut udi_buf_t);
+impl Default for Handle {
+    fn default() -> Self {
+        Self(::core::ptr::null_mut())
+    }
+}
 impl Handle
 {
+    pub unsafe fn from_ref(raw: &*mut udi_buf_t) -> &Self {
+        &*(raw as *const _ as *const Self)
+    }
+    pub unsafe fn from_mut(raw: &mut *mut udi_buf_t) -> &mut Self {
+        &mut *(raw as *mut _ as *mut Self)
+    }
     /// Construct a buffer handle from a raw pointer
     /// 
     /// UNSAFE: Caller must ensure either ownership or mutable access to `raw` (it can be null)

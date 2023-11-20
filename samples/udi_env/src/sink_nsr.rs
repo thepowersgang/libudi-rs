@@ -70,16 +70,17 @@ impl ::udi::meta_nic::NsrControl for ::udi::init::RData<Driver>
                 // Allocate a collection of RX CBs and hand them to the device
                 let mut rx_cbs = ::udi::cb::alloc_batch::<CbList::_NicRx>(cb.gcb(), 6, Some((1520, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
                 while let Some(mut rx_cb) = rx_cbs.pop_front() {
-                    // TODO: Being able to set the channel (a raw pointer) is technically unsafe
                     rx_cb.gcb.channel = self.ch_rx.raw();
-                    ::udi::meta_nic::nd_rx_rdy(rx_cb);
+                    // SAFE: Correct channel, that's the only thing we've changed
+                    ::udi::meta_nic::nd_rx_rdy(unsafe { ::udi::meta_nic::CbHandleNicRx::from_handle(rx_cb) });
                 }
 
                 // TODO: Send a test packet
-                if let Some(mut tx_cb) = self.tx_cbs.pop_front() {
-                    let mut buf = unsafe { ::udi::buf::Handle::from_raw(tx_cb.tx_buf) };
+                if let Some(tx_cb) = self.tx_cbs.pop_front() {
+                    // SAFE: This CB is valid
+                    let mut tx_cb = unsafe { ::udi::meta_nic::CbHandleNicTx::from_handle(tx_cb) };
+                    let buf = tx_cb.tx_buf_mut();
                     buf.write(cb.gcb(), 0..buf.len(), b"TestPacketContent").await;
-                    tx_cb.tx_buf = buf.into_raw();
                     ::udi::meta_nic::nd_tx_req(tx_cb);
                 }
                 },
@@ -117,7 +118,7 @@ impl ::udi::meta_nic::NsrTx for ::udi::init::RData<Driver>
 {
     type Future_tx_rdy<'s> = impl ::core::future::Future<Output=()>;
     fn tx_rdy<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_tx_rdy<'a> {
-        self.tx_cbs.push_front(cb);
+        self.tx_cbs.push_front(cb.into_handle());
         async move {}
     }
 }

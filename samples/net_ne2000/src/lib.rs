@@ -171,7 +171,7 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 				// RX complete
 				// - Pop a RX CB off the list
 				if let Some(mut rx_cb) = self.rx_cb_queue.pop() {
-					let mut buf = unsafe { ::udi::buf::Handle::from_raw(rx_cb.rx_buf) };
+					let mut buf = rx_cb.rx_buf_mut();
 					// Ensure that it's big enough for an entire packet
 					buf.ensure_size(cb.gcb(), 1520).await;
 					// Pull the packet off the device
@@ -183,7 +183,6 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 					Ok(res) => {
 						// If that succeeded, then set the size and hand to the NSR
 						buf.truncate(res as usize);
-						rx_cb.rx_buf = buf.into_raw();
 						::udi::meta_nic::nsr_rx_ind(rx_cb);
 						},
 					Err(_e) => {
@@ -296,7 +295,8 @@ impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
         async move {
 			// Linked list of cbs for multiple packets
 			loop {
-				let mut buf = unsafe { ::udi::buf::Handle::take_raw(&mut cb.tx_buf) };
+				let (mut cur_cb, next) = cb.unlink();
+				let mut buf = ::core::mem::take(cur_cb.tx_buf_mut());
 
 				let len = (buf.len() as u16).to_ne_bytes();
 				let mut mem_buf = [len[0], len[1], self.tx_next_page];
@@ -305,22 +305,15 @@ impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 				if self.tx_next_page > mem::TX_LAST {
 					self.tx_next_page -= mem::TX_BUF_SIZE;
 				}
-				match ::udi::pio::trans(cb.gcb(), &self.pio_handles.tx, ::udi::ffi::udi_index_t(0), Some(&mut buf), Some(mem_ptr)).await
+				match ::udi::pio::trans(cur_cb.gcb(), &self.pio_handles.tx, ::udi::ffi::udi_index_t(0), Some(&mut buf), Some(mem_ptr)).await
 				{
 				Ok(_) => {},
 				Err(_) => {},
 				}
-				buf.free();
+				*cur_cb.tx_buf_mut() = buf;
+				//buf.free();
 
-				let next = if cb.chain.is_null() {
-					None
-				}
-				else {
-					let n = cb.chain;
-					cb.chain = ::core::ptr::null_mut();
-					Some( unsafe { ::udi::meta_nic::CbHandleNicTx::from_raw(n) } )
-				};
-				::udi::meta_nic::nsr_tx_rdy(cb);
+				::udi::meta_nic::nsr_tx_rdy(cur_cb);
 				if let Some(next) = next {
 					cb = next;
 				}
