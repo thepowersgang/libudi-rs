@@ -71,7 +71,21 @@ impl super::PioDevice for Device {
         let mut regs = self.regs.lock().unwrap();
         match reg
         {
-        regs::TSD0 ..=regs::TSD3  => regs.tsd [ (reg >> 2) as usize & 3 ] = u32::decode(src, "TSDn" ),
+        regs::TSD0 ..=regs::TSD3  => {
+            let idx = (reg >> 2) as usize & 3;
+            let slot = &mut regs.tsd [idx];
+            let prev_val = check_reserved(slot, src, "TSDn", 0x0000_0000, 0xFF00_C000);
+            if prev_val & 0x1FFF != *slot & 0x1FFF {
+                // SIZE was written
+                assert!(*slot & 0x1000 == 0, "Size changed, but OWN didn't clear");
+                let size = *slot & 0xFFF;
+                *slot &= !0xFFF;
+
+                let tsad = regs.tsad[idx];
+                let data = self.dma.read(tsad, size);
+                println!("RTL8139 TX {} {:02x?}", idx, data);
+            }
+            },
         regs::TSAD0..=regs::TSAD3 => regs.tsad[ (reg >> 2) as usize & 3 ] = u32::decode(src, "TSADn"),
         regs::RBSTART => regs.rbstart = u32::decode(src, "RBSTART"),
         regs::CMD => {

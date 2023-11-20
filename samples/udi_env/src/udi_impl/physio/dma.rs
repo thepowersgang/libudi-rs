@@ -58,7 +58,7 @@ impl DmaInfo {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 enum Direction {
     In,
     Out,
@@ -153,6 +153,10 @@ unsafe extern "C" fn udi_dma_buf_map(
 
     let scgth = &mut dma_handle.dma_info.as_mut().unwrap().scgth as *mut _;
     let complete = ::udi::ffi::TRUE;
+
+    unsafe extern "C" fn sync_callback(_: *mut udi_cb_t) {}
+    udi_dma_sync(sync_callback, gcb, dma_handle as *mut _ as *mut _, 0, len, flags);
+
     callback(gcb, scgth, complete, ::udi::ffi::UDI_OK as _);
 }
 
@@ -245,30 +249,30 @@ unsafe extern "C" fn udi_dma_sync(
 
     let dma_info = dma_handle.dma_info.as_mut().expect("Calling `udi_dma_sync` with no DMA mapping");
 
-    let raw_data = match dma_handle.backing {
+    let (raw_data, backing_dir) = match dma_handle.backing {
         BackingData::Buffer(ref mut backing) => {
             assert!(!backing.buf.is_null());
-            todo!("udi_dma_sync with buffer")
+            (crate::udi_impl::buf::get_mut(&mut backing.buf, backing.range.clone()), backing.dir)
         },
         BackingData::RawData(ref mut backing) => {
-            match (&dir, &backing.dir)
-            {
-            // BiDir configured allows a request of anything
-            (_, Direction::BiDir) => {},
-            // - Matching requests
-            (Direction::In, Direction::In) => {},
-            (Direction::Out, Direction::Out) => {},
-            //(Direction::BiDir, Direction::BiDir) => {},
-
-            (Direction::In, Direction::Out)
-            |(Direction::Out, Direction::In)
-            |(Direction::BiDir, Direction::In)
-            |(Direction::BiDir, Direction::Out) =>
-                panic!("`udi_dma_sync` with non-matching directions"),
-            }
-            ::core::slice::from_raw_parts_mut(backing.buffer as *mut u8, backing.size)
+            (::core::slice::from_raw_parts_mut(backing.buffer as *mut u8, backing.size), backing.dir)
         },
     };
+    match (dir, backing_dir)
+    {
+    // BiDir configured allows a request of anything
+    (_, Direction::BiDir) => {},
+    // - Matching requests
+    (Direction::In, Direction::In) => {},
+    (Direction::Out, Direction::Out) => {},
+    //(Direction::BiDir, Direction::BiDir) => {},
+
+    (Direction::In, Direction::Out)
+    |(Direction::Out, Direction::In)
+    |(Direction::BiDir, Direction::In)
+    |(Direction::BiDir, Direction::Out) =>
+        panic!("`udi_dma_sync` with non-matching directions"),
+    }
     let raw_data = &mut raw_data[offset..][..length];
     match dir {
     Direction::In => dma_info.data_handle.read(offset, raw_data),

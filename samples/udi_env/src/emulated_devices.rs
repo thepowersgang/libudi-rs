@@ -82,6 +82,27 @@ impl DmaPool {
         Some(i) => { buffers.remove(i); },
         }
     }
+
+    fn read(&self, addr: u32, len: u32) -> Vec<u8> {
+        let buffers = self.buffers.read().unwrap();
+        let idx = match buffers.binary_search_by_key(&addr, |v| v.base)
+            {
+            Ok(i) => i,
+            Err(i) => i,
+            };
+        assert!(idx < buffers.len());
+        let buf = &buffers[idx];
+        assert!(addr <= buf.base + buf.len);
+        let ofs = addr - buf.base;
+        let space = buf.len - ofs;
+        assert!(len <= space);
+        let mut rv = vec![0; len as usize];
+        // SAFE: Pointer is valid for this length/offset
+        unsafe {
+            ::core::ptr::copy_nonoverlapping(buf.data_ptr.offset(ofs as isize) as _, rv.as_mut_ptr(), len as usize);
+        }
+        rv
+    }
 }
 
 mod xt_serial;

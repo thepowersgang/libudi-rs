@@ -103,6 +103,10 @@ pub unsafe fn write(buf_ptr: &mut *mut udi_buf_t, dst: ::core::ops::Range<usize>
     }
     p.get_slice_mut(dst.start, src.len()).copy_from_slice(src);
 }
+pub unsafe fn get_mut(buf_ptr: &mut *mut udi_buf_t, range: ::core::ops::Range<usize>) -> &mut [u8] {
+    let p = get_buf_mut(buf_ptr);
+    p.get_slice_mut(range.start, range.end - range.start)
+}
 
 /// [udi_buf_copy] logically replaces dst_len bytes of data starting at offset
 /// dst_offset in dst_buf with a copy of src_len bytes of data starting at
