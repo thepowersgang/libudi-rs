@@ -491,8 +491,18 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
                     ofs += 1;
                 }
                 },
-            IN_IND   => todo!("IN_IND"),
-            OUT_IND  => todo!("OUT_IND"),
+            IN_IND => {
+                println!("IN_IND.{s} R{}, R{}", op.pio_op & 7, op.operand & 7);
+                let reg = state.read(op.operand as u8 & 7, op.tran_size).to_u32();
+                let val = io_state.read(reg, op.tran_size);
+                state.write(op.pio_op & 7, val, op.tran_size);
+            }
+            OUT_IND => {
+                println!("OUT_IND.{s} R{}, R{}", op.operand & 7, op.pio_op & 7);
+                let val = state.read(op.pio_op & 7, op.tran_size);
+                let reg = state.read(op.operand as u8 & 7, op.tran_size).to_u32();
+                io_state.write(reg, val, op.tran_size)
+            },
             SHIFT_LEFT => todo!("SHIFT_LEFT"),
             SHIFT_RIGHT => todo!("SHIFT_RIGHT"),
             AND => {
