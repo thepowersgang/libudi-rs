@@ -6,11 +6,17 @@ use crate::ffi::meta_nic as ffi;
 pub fn nsr_rx_ind(rx_cb: crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>) {
     unsafe { ffi::udi_nsr_rx_ind(rx_cb.into_raw()) }
 }
-pub fn nsr_tx_rdy(cb: crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>) {
-    unsafe { ffi::udi_nsr_tx_rdy(cb.into_raw()) }
-}
 pub fn nd_rx_rdy(cb: crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>) {
     unsafe { ffi::udi_nd_rx_rdy(cb.into_raw()) }
+}
+pub fn nd_tx_req(tx_cb: crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>) {
+    unsafe { ffi::udi_nd_tx_req(tx_cb.into_raw()) }
+}
+pub fn nd_exp_tx_req(tx_cb: crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>) {
+    unsafe { ffi::udi_nd_exp_tx_req(tx_cb.into_raw()) }
+}
+pub fn nsr_tx_rdy(cb: crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>) {
+    unsafe { ffi::udi_nsr_tx_rdy(cb.into_raw()) }
 }
 
 macro_rules! def_cb {
@@ -64,6 +70,8 @@ pub type CbHandleNicTx = crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>;
 // SAFE: Follows the contract, gcb is first field
 def_cb!(unsafe CbRefNicRx => ffi::udi_nic_rx_cb_t : 7);
 pub type CbHandleNicRx = crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>;
+
+// TODO: `CbHandleNicTx`/`CbHandleNicRx` could be a wrapper type to provide safe access to fields
 
 /// A queue of RX CBs
 pub struct ReadCbQueue
