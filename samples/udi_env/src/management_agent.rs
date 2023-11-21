@@ -296,7 +296,7 @@ impl InstanceInitState
     pub fn bind_complete(&mut self, cb: *mut ::udi::ffi::imc::udi_channel_event_cb_t, result: ::udi::Result<()>) {
         self.returned_cb = cb as *mut _;
         unsafe {
-            ::libc::free((*cb).params.parent_bound.bind_cb as _);
+            crate::udi_impl::cb::free_internal((*cb).params.parent_bound.bind_cb);
         }
         match self.state {
         DriverState::ParentBind => {

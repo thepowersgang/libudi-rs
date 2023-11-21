@@ -177,6 +177,7 @@ unsafe fn event_ind(channel: ::udi::ffi::udi_channel_t, event: u8, params: ::udi
             context: side.context,
             scratch: ::core::ptr::null_mut(),   // TODO: How?
             // TODO: Set `initiator_context` to something that allows `udi_channel_event_complete` to communicated back
+            // - For init, it's set in `create_driver_instance`
             initiator_context: ::core::ptr::null_mut(),
             origin: ::core::ptr::null_mut(),
         },

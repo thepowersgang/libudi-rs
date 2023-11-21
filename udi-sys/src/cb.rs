@@ -25,6 +25,7 @@ extern "C" {
 		buf_size: udi_size_t,
 		path_handle: udi_buf_path_t
 	);
+	pub fn udi_cb_free(cb: *mut udi_cb_t);
 }
 
 #[repr(C)]

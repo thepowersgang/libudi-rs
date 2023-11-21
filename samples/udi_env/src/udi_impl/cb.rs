@@ -62,6 +62,12 @@ unsafe extern "C" fn udi_cb_alloc_batch(
     callback(gcb, prev_cb);
 }
 
+#[no_mangle]
+unsafe extern "C" fn udi_cb_free(cb: *mut udi_cb_t)
+{
+    free_internal(cb);
+}
+
 // --------------------------------------------------------------------
 
 pub fn alloc(driver_module: &crate::DriverModule, cb_idx: udi_index_t, context: *mut ::udi::ffi::c_void, default_channel: udi_channel_t) -> *mut udi_cb_t
