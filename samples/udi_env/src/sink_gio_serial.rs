@@ -51,22 +51,20 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
             Ok(0) => {
                 // Allocate a pool of CBs with 1KiB buffers
                 let mut cbs = ::udi::cb::alloc_batch::<CbList::_Xfer>(cb.gcb(), 3, Some((1024, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
-                while let Some(mut xfer_cb) = cbs.pop_front() {
-                    xfer_cb.gcb.channel = cb.gcb.channel;
+                while let Some(xfer_cb) = cbs.pop_front() {
+                    // Channel should already be the same one
+                    //xfer_cb.set_channel_raw(cb.gcb.channel);
                     self.cb_pool.push_front(xfer_cb);
                 }
 
                 // TEST: Send some data
                 let mut tx_cb = self.cb_pool.pop_front().unwrap();
-                tx_cb.op = ::udi::ffi::meta_gio::UDI_GIO_DIR_WRITE;
-                unsafe {
-                    let mut buf = ::udi::buf::Handle::from_raw(tx_cb.data_buf);
+                {
+                    tx_cb.set_op(::udi::ffi::meta_gio::UDI_GIO_DIR_WRITE);
+                    let buf = tx_cb.data_buf_mut();
                     buf.write(cb.gcb(), 0..buf.len(), b"hello").await;
                 }
-                // SAFE: Buffer pointer is valid, just used it above
-                unsafe {
-                    ::udi::meta_gio::xfer_req(tx_cb);
-                }
+                ::udi::meta_gio::xfer_req(tx_cb);
                 },
             Ok(_) => {
                 println!("Unexpected non-zero size for a UART");
@@ -112,9 +110,8 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
         async move {
             // Grab a CB and populate it for read
             if let Some(mut xfer_cb) = self.cb_pool.pop_front() {
-                xfer_cb.op = ::udi::ffi::meta_gio::UDI_GIO_OP_READ;
-                xfer_cb.tr_params = ::core::ptr::null_mut();
-                unsafe { ::udi::meta_gio::xfer_req(xfer_cb); }
+                xfer_cb.set_op(::udi::ffi::meta_gio::UDI_GIO_OP_READ);
+                ::udi::meta_gio::xfer_req(xfer_cb);
             }
             else {
 

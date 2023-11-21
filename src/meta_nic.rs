@@ -68,117 +68,77 @@ def_cb!(unsafe CbRefNicInfo => ffi::udi_nic_info_cb_t : 5);
 def_cb!(unsafe CbRefNicTx => ffi::udi_nic_tx_cb_t : 6);
 // SAFE: Follows the contract, gcb is first field
 def_cb!(unsafe CbRefNicRx => ffi::udi_nic_rx_cb_t : 7);
-//pub type CbHandleNicTx = crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>;
-//pub type CbHandleNicRx = crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>;
+pub type CbHandleNicTx = crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>;
+pub type CbHandleNicRx = crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>;
 
-#[repr(transparent)]
-pub struct CbHandleNicTx(*mut ffi::udi_nic_tx_cb_t);
-impl CbHandleNicTx
+impl crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>
 {
-    /// SAFETY: Caller must ensure that the contents of the CB is valid (no invalid pointers)
-    pub unsafe fn from_handle(h: crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>) -> Self {
-        CbHandleNicTx(h.into_raw())
-    }
-    pub fn into_raw(self) -> *mut ffi::udi_nic_tx_cb_t {
-        let CbHandleNicTx(cb) = self;
-        cb
-    }
-    pub fn into_handle(self) -> crate::cb::CbHandle<ffi::udi_nic_tx_cb_t> {
-        unsafe { crate::cb::CbHandle::from_raw(self.into_raw()) }
-    }
-    pub fn gcb(&self) -> crate::cb::CbRef<'_, crate::ffi::udi_cb_t> {
-        unsafe { crate::cb::CbRef::new( self.0 as *mut crate::ffi::udi_cb_t) }
-    }
     /// Put this cb onto the end of the chain formed by `other` (i.e. `push_front`)
     pub fn link_front(&mut self, other: Self) {
         unsafe {
-            let mut cursor = other.0;
+            let other = other.into_raw();
+            let mut cursor = other;
             while ! (*cursor).chain.is_null() {
                 cursor = (*cursor).chain;
             }
-            (*cursor).chain = self.0;
-            self.0 = other.0;
+            (*cursor).chain = ::core::mem::replace(self, Self::from_raw(other)).into_raw();
         }
     }
-    pub fn unlink(self) -> (CbHandleNicTx,Option<CbHandleNicTx>) {
+    pub fn unlink(mut self) -> (Self,Option<Self>) {
         unsafe {
-            if (*self.0).chain.is_null() {
+            let chain = &mut self.get_mut().chain;
+            if chain.is_null() {
                 (self, None)
             }
             else {
-                let next = CbHandleNicTx((*self.0).chain);
-                (*self.0).chain = ::core::ptr::null_mut();
+                let next = CbHandleNicTx::from_raw(::core::mem::replace(chain, ::core::ptr::null_mut()));
                 (self, Some(next))
             }
         }
     }
 
     pub fn tx_buf_ref(&self) -> &crate::buf::Handle {
-        unsafe { crate::buf::Handle::from_ref( &(*self.0).tx_buf ) }
+        unsafe { crate::buf::Handle::from_ref( &self.tx_buf ) }
     }
     pub fn tx_buf_mut(&mut self) -> &mut crate::buf::Handle {
-        unsafe { crate::buf::Handle::from_mut( &mut (*self.0).tx_buf ) }
+        unsafe { crate::buf::Handle::from_mut( &mut self.get_mut().tx_buf ) }
     }
 }
 
-#[repr(transparent)]
-pub struct CbHandleNicRx(*mut ffi::udi_nic_rx_cb_t);
-impl CbHandleNicRx
+impl crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>
 {
-    /// SAFETY: Caller must ensure that the contents of the CB is valid (no invalid pointers)
-    pub unsafe fn from_handle(h: crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>) -> Self {
-        CbHandleNicRx(h.into_raw())
-    }
-    pub fn into_raw(self) -> *mut ffi::udi_nic_rx_cb_t {
-        let CbHandleNicRx(cb) = self;
-        cb
-    }
-    pub fn into_handle(self) -> crate::cb::CbHandle<ffi::udi_nic_rx_cb_t> {
-        unsafe { crate::cb::CbHandle::from_raw(self.into_raw()) }
-    }
-    pub fn gcb(&self) -> crate::cb::CbRef<'_, crate::ffi::udi_cb_t> {
-        unsafe { crate::cb::CbRef::new( self.0 as *mut crate::ffi::udi_cb_t) }
-    }
-
     /// Put this cb onto the end of the chain formed by `other` (i.e. `push_front`)
     pub fn link_front(&mut self, other: Self) {
         unsafe {
-            let mut cursor = other.0;
+            let other = other.into_raw();
+            let mut cursor = other;
             while ! (*cursor).chain.is_null() {
                 cursor = (*cursor).chain;
             }
-            (*cursor).chain = self.0;
-            self.0 = other.0;
+            (*cursor).chain = ::core::mem::replace(self, Self::from_raw(other)).into_raw();
         }
     }
-    pub fn unlink(self) -> (CbHandleNicRx,Option<CbHandleNicRx>) {
+    pub fn unlink(mut self) -> (Self,Option<Self>) {
         unsafe {
-            if (*self.0).chain.is_null() {
+            let chain = &mut self.get_mut().chain;
+            if chain.is_null() {
                 (self, None)
             }
             else {
-                let next = CbHandleNicRx((*self.0).chain);
-                (*self.0).chain = ::core::ptr::null_mut();
+                let next = CbHandleNicRx::from_raw(::core::mem::replace(chain, ::core::ptr::null_mut()));
                 (self, Some(next))
             }
         }
     }
 
     pub fn rx_buf_ref(&self) -> &crate::buf::Handle {
-        unsafe { crate::buf::Handle::from_ref( &(*self.0).rx_buf ) }
+        unsafe { crate::buf::Handle::from_ref( &self.rx_buf ) }
     }
     pub fn rx_buf_mut(&mut self) -> &mut crate::buf::Handle {
-        unsafe { crate::buf::Handle::from_mut( &mut (*self.0).rx_buf ) }
+        unsafe { crate::buf::Handle::from_mut( &mut self.get_mut().rx_buf ) }
     }
 
     //pub fn set_rx_status(&mut self, 
-}
-impl ::core::ops::Deref for CbHandleNicRx {
-    type Target = ffi::udi_nic_rx_cb_t;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &(*self.0) }
-    }
 }
 
 // TODO: `CbHandleNicTx`/`CbHandleNicRx` could be a wrapper type to provide safe access to fields
@@ -203,7 +163,7 @@ impl ReadCbQueue
         }
     }
     pub fn push(&mut self, cb: CbHandleNicRx) {
-        let CbHandleNicRx(cb) = cb;
+        let cb = cb.into_raw();
         if self.head.is_null() {
             self.head = cb;
             self.tail = self.head;
@@ -232,7 +192,7 @@ impl ReadCbQueue
                     // Defensive measure.
                     self.tail = ::core::ptr::null_mut();
                 }
-                Some( CbHandleNicRx(rv) )
+                Some( CbHandleNicRx::from_raw(rv) )
             }
         }
     }
@@ -418,10 +378,10 @@ where
 }
 
 future_wrapper!(nd_tx_req_op => <T as NdTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
-    val.tx_req(CbHandleNicTx(unsafe { cb.into_owned().into_raw() }))
+    val.tx_req(unsafe { cb.into_owned() })
 });
 future_wrapper!(nd_exp_tx_req_op => <T as NdTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
-    val.exp_tx_req(CbHandleNicTx(unsafe { cb.into_owned().into_raw() }))
+    val.exp_tx_req(unsafe { cb.into_owned() })
 });
 map_ops_structure!{
     ffi::udi_nd_tx_ops_t => NdTx,MarkerNdTx {
@@ -445,7 +405,7 @@ where
 }
 
 future_wrapper!(nsr_tx_rdy_op => <T as NsrTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
-    val.tx_rdy(CbHandleNicTx(unsafe { cb.into_owned().into_raw() }))
+    val.tx_rdy(unsafe { cb.into_owned() })
 });
 map_ops_structure!{
     ffi::udi_nsr_tx_ops_t => NsrTx,MarkerNsrTx {
@@ -468,7 +428,7 @@ where
 {
 }
 future_wrapper!(nd_rx_rdy_op => <T as NdRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
-    val.rx_rdy( CbHandleNicRx(cb.to_raw()) )
+    val.rx_rdy( unsafe { cb.into_owned() } )
 });
 map_ops_structure!{
     ffi::udi_nd_rx_ops_t => NdRx,MarkerNdRx {
@@ -491,10 +451,10 @@ where
 {
 }
 future_wrapper!(nsr_rx_ind_op => <T as NsrRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
-    val.rx_ind( CbHandleNicRx(cb.to_raw()) )
+    val.rx_ind( unsafe { cb.into_owned() } )
 });
 future_wrapper!(nsr_exp_rx_ind_op => <T as NsrRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
-    val.exp_rx_ind( CbHandleNicRx(cb.to_raw()) )
+    val.exp_rx_ind( unsafe { cb.into_owned() } )
 });
 map_ops_structure!{
     ffi::udi_nsr_rx_ops_t => NsrRx,MarkerNsrRx {

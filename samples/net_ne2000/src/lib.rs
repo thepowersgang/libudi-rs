@@ -114,9 +114,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 			// Spawn channel
 			self.intr_channel = ::udi::imc::channel_spawn::<OpsList::Irq>(cb.gcb(), self, /*interrupt number*/0.into()).await;
 			let mut intr_cb = ::udi::cb::alloc::<CbList::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
-			intr_cb.interrupt_index = 0.into();
-			intr_cb.min_event_pend = 2;
-			intr_cb.preprocessing_handle = self.pio_handles.irq_ack.as_raw();	// NOTE: This transfers ownership
+			intr_cb.init(0.into(), 2, ::core::mem::take(&mut self.pio_handles.irq_ack));	// NOTE: This transfers ownership
 			::udi::meta_bridge::attach_req(intr_cb);
 			// TODO: Does this need to wait until the attach ACKs?
 			// - Probably should, just in case the operation fails

@@ -10,7 +10,10 @@ impl<'a, T: 'static> Copy for CbRef<'a, T> {
 impl<'a, T: 'static> Clone for CbRef<'a, T> {
     fn clone(&self) -> Self { *self }
 }
-impl<'a, T: 'static> CbRef<'a, T> {
+impl<'a, T: 'static> CbRef<'a, T>
+where
+    T: crate::async_trickery::GetCb
+{
     pub unsafe fn new(p: *mut T) -> Self {
         CbRef(p, ::core::marker::PhantomData)
     }
@@ -39,12 +42,23 @@ impl<'a, T: 'static> ::core::ops::Deref for CbRef<'a,T> {
 
 /// An owning handle to a CB
 pub struct CbHandle<T>(*mut T);
-impl<T> CbHandle<T> {
+impl<T> Drop for CbHandle<T> {
+    fn drop(&mut self) {
+        todo!("What to do when dropping a CbHandle")
+    }
+}
+impl<T> CbHandle<T>
+where
+    T: crate::async_trickery::GetCb
+{
+    /// SAFETY: Caller must ensure that this is the only reference to the CB, to allow mutation
     pub unsafe fn from_raw(v: *mut T) -> Self {
         Self(v)
     }
     pub fn into_raw(self) -> *mut T {
-        self.0
+        let CbHandle(rv) = self;
+        ::core::mem::forget(self);
+        rv
     }
     pub fn gcb(&self) -> CbRef<'_, crate::ffi::udi_cb_t>
     where
@@ -52,18 +66,27 @@ impl<T> CbHandle<T> {
     {
         CbRef(self.0 as *mut _, ::core::marker::PhantomData)
     }
+
+    /// SAFETY: The caller must ensure that all internal pointers stay valid
+    pub unsafe fn get_mut(&mut self) -> &mut T {
+        // SAFE: Owned
+        unsafe { &mut *self.0 }
+    }
+
+    // TODO - Is there a safety requirement for the channel to be matched to the CB
+    // - Might be the same as ensuring the right channel endpoint matching - environment can detect and crash on it.
+    pub fn set_channel(&mut self, channel: &crate::imc::ChannelHandle) {
+        // SAFE: Valid data, and correct pointer values being written
+        unsafe {
+            (*(self.0 as *mut crate::ffi::udi_cb_t)).channel = channel.raw();
+        }
+    }
 }
 impl<T> ::core::ops::Deref for CbHandle<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         // SAFE: Owned
         unsafe { &*self.0 }
-    }
-}
-impl<T> ::core::ops::DerefMut for CbHandle<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFE: Owned
-        unsafe { &mut *self.0 }
     }
 }
 

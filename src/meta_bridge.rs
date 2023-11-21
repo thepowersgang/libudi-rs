@@ -184,12 +184,22 @@ map_ops_structure!{
 pub fn attach_req(cb: super::cb::CbHandle<udi_intr_attach_cb_t>) {
     unsafe { crate::ffi::meta_bridge::udi_intr_attach_req(cb.into_raw()) }
 }
-pub fn event_rdy(cb: super::cb::CbHandle<udi_intr_event_cb_t>) {
+pub fn event_rdy(cb: CbHandleEvent) {
     unsafe { crate::ffi::meta_bridge::udi_intr_event_rdy(cb.into_raw()) }
 }
 
 pub type CbRefEvent<'a> = crate::CbRef<'a, udi_intr_event_cb_t>;
 pub type CbHandleEvent = crate::cb::CbHandle<udi_intr_event_cb_t>;
+
+impl super::cb::CbHandle<udi_intr_attach_cb_t>
+{
+    pub fn init(&mut self, interrupt_index: ::udi_sys::udi_index_t, min_event_pend: u8, preprocessing_handle: crate::pio::Handle) {
+        let cb = unsafe { self.get_mut() };
+        cb.interrupt_index = interrupt_index;
+        cb.min_event_pend = min_event_pend;
+        cb.preprocessing_handle = preprocessing_handle.as_raw();
+    }
+}
 
 pub trait IntrHandler: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit
 {

@@ -108,9 +108,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 
 			self.intr_channel = ::udi::imc::channel_spawn::<OpsList::Irq>(cb.gcb(), self, /*interrupt number*/0.into()).await;
 			let mut intr_cb = ::udi::cb::alloc::<CbList::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
-			intr_cb.interrupt_index = 0.into();
-			intr_cb.min_event_pend = 2;
-			intr_cb.preprocessing_handle = irq_ack.as_raw();	// NOTE: This transfers ownership
+			intr_cb.init(0.into(), 2, irq_ack);
 			::udi::meta_bridge::attach_req(intr_cb);
 
 			self.dma_constraints = unsafe {
@@ -305,9 +303,12 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 			// Create and send 4 TX CBs
 			let mut tx_cbs = ::udi::cb::alloc_batch::<CbList::NicTx>(cb.gcb(), 4, Some((1520, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
 			while let Some(mut tx_cb) = tx_cbs.pop_front() {
-				tx_cb.gcb.channel = self.dev_mut().channel_tx.raw();
-				// SAFE: Inner fields are valid
-				::udi::meta_nic::nsr_tx_rdy(unsafe { ::udi::meta_nic::CbHandleNicTx::from_handle(tx_cb) });
+				// SAFE: Channel is correct for this CB
+				/*unsafe*/ {
+					tx_cb.set_channel(&self.dev_mut().channel_tx);
+				}
+				//tx_cb.gcb.channel = self.dev_mut().channel_tx.raw();
+				::udi::meta_nic::nsr_tx_rdy(tx_cb );
 			}
 
 			Ok(::udi::meta_nic::NicInfo {
@@ -407,7 +408,7 @@ impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
         async move {
 			loop {
 				let (cur_cb, next) = cb.unlink();
-				
+
 				match self.inner.tx_inner(cur_cb).await
 				{
 				Ok(()) => {},

@@ -7,6 +7,7 @@
 #![feature(const_mut_refs)]	// Used for getting size of tasks
 #![feature(extern_types)]	// Handle types
 #![feature(fundamental)]
+#![cfg_attr(not(feature="std"),allow(internal_features))]
 #![cfg_attr(not(feature="std"),feature(lang_items))]
 
 // A "region" is a thread

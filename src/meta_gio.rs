@@ -5,9 +5,8 @@
 use ::udi_sys::meta_gio::*;
 use ::udi_sys::meta_gio as ffi;
 
-/// SAFETY: Caller must ensure that the internal pointers of the cb are valid
-pub unsafe fn xfer_req(cb: crate::cb::CbHandle<ffi::udi_gio_xfer_cb_t>) {
-    ffi::udi_gio_xfer_req(cb.into_raw())
+pub fn xfer_req(cb: crate::cb::CbHandle<ffi::udi_gio_xfer_cb_t>) {
+    unsafe { ffi::udi_gio_xfer_req(cb.into_raw()) }
 }
 
 impl_metalanguage!{
@@ -22,6 +21,28 @@ impl_metalanguage!{
         2 => udi_gio_xfer_cb_t : BUF data_buf,
         3 => udi_gio_event_cb_t,
         ;
+}
+
+impl crate::cb::CbHandle<ffi::udi_gio_xfer_cb_t>
+{
+    pub fn data_buf_mut(&mut self) -> &mut crate::buf::Handle {
+        // SAFE: Valid pointers, validity will be maintained (`get_mut`)
+        unsafe {
+            crate::buf::Handle::from_mut(&mut self.get_mut().data_buf)
+        }
+    }
+
+    pub fn set_op(&mut self, op: u8) {
+        unsafe {
+            self.get_mut().op = op;
+        }
+    }
+    /// Get the `tr_params` pointer - this is allocated by the enviromment during CB allocation, and never modified
+    pub fn tr_params(&mut self) -> *mut ::udi_sys::c_void {
+        unsafe {
+            self.get_mut().tr_params
+        }
+    }
 }
 
 impl crate::ops_markers::ParentBind<::udi_sys::meta_gio::udi_gio_bind_cb_t> for ::udi_sys::meta_gio::udi_gio_client_ops_t {
