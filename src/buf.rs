@@ -3,15 +3,28 @@
 //! 
 use ::core::future::Future;
 use crate::ffi::udi_buf_t;
+use crate::ffi::buf::udi_buf_path_t;
+use crate::ffi::buf::udi_buf_tag_t;
+use crate::ffi::buf::udi_tagtype_t;
 
 /// An owning buffer handle
 #[repr(transparent)]
 pub struct Handle(*mut udi_buf_t);
+
+#[repr(transparent)]
+pub struct Path(udi_buf_path_t);
+
 impl Default for Handle {
     fn default() -> Self {
         Self(::core::ptr::null_mut())
     }
 }
+impl Default for Path {
+    fn default() -> Self {
+        Self(crate::ffi::buf::UDI_NULL_PATH_BUF)
+    }
+}
+
 impl Handle
 {
     pub unsafe fn from_ref(raw: &*mut udi_buf_t) -> &Self {
@@ -46,6 +59,22 @@ impl Handle
     pub fn into_raw(self) -> *mut udi_buf_t {
         let Handle(rv) = self;
         rv
+    }
+
+    /// Get an inclusive range from any range operator
+    pub fn get_range(&self, range: impl ::core::ops::RangeBounds<usize>) -> ::core::ops::Range<usize> {
+        use ::core::ops::Bound;
+        let end_exl = match range.end_bound() {
+            Bound::Excluded(&v) => v,
+            Bound::Included(&v) => v + 1,
+            Bound::Unbounded => self.len(),
+            };
+        let begin_incl = match range.start_bound() {
+            Bound::Excluded(&v) => v + 1,
+            Bound::Included(&v) => v,
+            Bound::Unbounded => 0,
+            };
+        begin_incl .. end_exl
     }
 
     /// Get the buffer length
@@ -103,11 +132,7 @@ impl Handle
                         );
                 }
                 },
-            |res| {
-                let crate::WaitRes::Pointer(p) = res else { panic!(""); };
-                // SAFE: Trusting the environemnt to have given us a valid pointer
-                unsafe { self.update_from_raw(p as *mut _); }
-                }
+            self.cb_update()
             )
     }
     /// Truncate the buffer's length to the specified value
@@ -144,11 +169,7 @@ impl Handle
                     crate::ffi::buf::UDI_NULL_PATH_BUF
                     );
                 },
-            |res| {
-                let crate::WaitRes::Pointer(p) = res else { panic!(""); };
-                // SAFE: Trusting the environemnt to have given us a valid pointer
-                unsafe { self.update_from_raw(p as *mut _); }
-                }
+            self.cb_update()
             )
     }
 
@@ -170,11 +191,7 @@ impl Handle
                     crate::ffi::buf::UDI_NULL_PATH_BUF
                     );
                 },
-            |res| {
-                let crate::WaitRes::Pointer(p) = res else { panic!(""); };
-                // SAFE: Trusting the environemnt to have given us a valid pointer
-                unsafe { self.update_from_raw(p as *mut _); }
-                }
+            self.cb_update()
             )
     }
 
@@ -198,5 +215,104 @@ impl Handle
 
     extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, handle: *mut udi_buf_t) {
         unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }
+    }
+    fn cb_update(&mut self) -> impl FnOnce(crate::async_trickery::WaitRes) + '_ {
+        move |res| {
+            let crate::WaitRes::Pointer(p) = res else { panic!(""); };
+            // SAFE: Trusting the environemnt to have given us a valid pointer
+            unsafe { self.update_from_raw(p as *mut _); }
+            }
+    }
+}
+impl Handle
+{
+    pub fn best_path_buf(&self, path_handles: &[Path], best_fit_array: &mut [u8], last_fit: usize) {
+        assert!(path_handles.len() <= u8::MAX as usize);
+        assert!(path_handles.len() == best_fit_array.len());
+        assert!(last_fit < best_fit_array.len());
+        // SAFE: Valid pointers (although being a little fast and loose with mutability)
+        unsafe {
+            crate::ffi::buf::udi_buf_best_path(self.0, 
+                path_handles.as_ptr() as *const _ as *mut _, path_handles.len() as u8,
+                last_fit as u8, best_fit_array.as_mut_ptr()
+            );
+        }
+    }
+}
+/// Value tags - associated data outside of the buffer itself
+impl Handle
+{
+    pub fn tag_set<'a>(&'a mut self, cb: crate::CbRef<crate::ffi::udi_cb_t>, tags: &'a [udi_buf_tag_t]) -> impl Future<Output=()>+'a {
+        let self_buf = self.0;
+        #[cfg(debug_assertions)]
+        for t in tags {
+            debug_assert!(t.tag_off+t.tag_len <= self.len());
+            debug_assert!(t.tag_type.count_ones() == 1);
+        }
+        crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
+            cb,
+            move |gcb| unsafe {
+                crate::ffi::buf::udi_buf_tag_set(
+                    Self::callback, gcb,
+                    self_buf,
+                    tags.as_ptr() as *mut _, tags.len() as u16
+                    );
+                },
+            self.cb_update()
+            )
+    }
+    pub fn tag_get<'a>(&self, tag_type_mask: udi_tagtype_t, dst: &'a mut [udi_buf_tag_t], skip: usize) -> &'a mut [udi_buf_tag_t] {
+        let len = unsafe {
+            crate::ffi::buf::udi_buf_tag_get(self.0, tag_type_mask, dst.as_mut_ptr(), dst.len() as u16, skip as u16)
+        };
+        &mut dst[..len as usize]
+    }
+    pub fn tag_compute(&mut self, range: ::core::ops::Range<usize>, tag_type: udi_tagtype_t) -> crate::ffi::udi_ubit32_t {
+        debug_assert!(tag_type.count_ones() == 1);
+        debug_assert!(tag_type & crate::ffi::buf::UDI_BUFTAG_VALUES != 0);
+        let off = range.start;
+        let len = range.end - range.start;
+        unsafe {
+            crate::ffi::buf::udi_buf_tag_compute(self.0, off, len, tag_type)
+        }
+    }
+    pub fn tag_apply<'a>(&'a mut self, cb: crate::CbRef<crate::ffi::udi_cb_t>, tag_types_mask: udi_tagtype_t) -> impl Future<Output=()>+'a {
+        debug_assert!(tag_types_mask & crate::ffi::buf::UDI_BUFTAG_UPDATES != 0);
+
+        let self_buf = self.0;
+        crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
+            cb,
+            move |gcb| unsafe {
+                crate::ffi::buf::udi_buf_tag_apply(Self::callback, gcb, self_buf, tag_types_mask);
+                },
+            self.cb_update()
+            )
+    }
+}
+
+impl Path
+{
+    pub fn new(gcb: crate::CbRef<crate::ffi::udi_cb_t>) -> impl Future<Output=Path> {
+        unsafe extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, handle: udi_buf_path_t) {
+            unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }
+        }
+
+        crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
+            gcb,
+            move |gcb| unsafe {
+                crate::ffi::buf::udi_buf_path_alloc(callback, gcb)
+            },
+            move |res| {
+                let crate::async_trickery::WaitRes::Pointer(v) = res else { panic!() };
+                Path(v as udi_buf_path_t)
+            }
+        )
+    }
+}
+impl Drop for Path {
+    fn drop(&mut self) {
+        unsafe {
+            crate::ffi::buf::udi_buf_path_free(::core::mem::replace(&mut self.0, crate::ffi::buf::UDI_NULL_PATH_BUF));
+        }
     }
 }
