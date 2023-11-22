@@ -6,6 +6,9 @@
 #[derive(Debug)]
 pub struct Handle(crate::ffi::pio::udi_pio_handle_t);
 impl Handle {
+	pub unsafe fn from_raw(h: crate::ffi::pio::udi_pio_handle_t) -> Self {
+		Handle(h)
+	}
 	pub fn as_raw(&self) -> crate::ffi::pio::udi_pio_handle_t {
 		self.0
 	}

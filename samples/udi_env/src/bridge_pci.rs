@@ -76,7 +76,12 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
     }
 }
 
-impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,()>
+#[derive(Default)]
+struct ChildState {
+    irq_state: Option<(::udi::imc::ChannelHandle, ::udi::pio::Handle,)>,
+    irq_cbs: ::udi::cb::Chain<::udi::ffi::meta_bridge::udi_intr_event_cb_t>,
+}
+impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,ChildState>
 {
     type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::Result<(::udi::meta_bridge::PreferredEndianness,)>> + 's;
     fn bus_bind_req<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefBind<'a>) -> Self::Future_bind_req<'a> {
@@ -105,28 +110,35 @@ impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,()>
     fn intr_attach_req<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrAttach<'a>) -> Self::Future_intr_attach_req<'a> {
         async move {
             let channel = ::udi::imc::channel_spawn::<OpsList::Interrupt>(cb.gcb(), self, cb.interrupt_index).await;
-            let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
-            di.device.get().unwrap().set_interrupt_channel(cb.interrupt_index, channel);
+            // SAFE: We're trusting the client driver to not provide a bad handle
+            let preproc_handle = unsafe { ::udi::pio::Handle::from_raw(cb.preprocessing_handle) };
+            self.irq_state = Some((channel, preproc_handle));
+            //// SAFE: Channel is valid
+            //let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
+            //di.device.get().unwrap().set_interrupt_channel(cb.interrupt_index, channel, preproc_handle);
             Ok( () )
         }
     }
 
     type Future_intr_detach_req<'s> = impl ::core::future::Future<Output=()> + 's;
     fn intr_detach_req<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_req<'a> {
+        let _ = cb;
         async move {
-            let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
-            di.device.get().unwrap().set_interrupt_channel(cb.interrupt_idx, ::udi::imc::ChannelHandle::null());
+            self.irq_state = None;
+            //let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
+            //di.device.get().unwrap().set_interrupt_channel(cb.interrupt_idx, ::udi::imc::ChannelHandle::null(), ::udi::pio::Handle::default());
         }
     }
 }
-impl ::udi::meta_bridge::IntrDispatcher for ::udi::init::RData<Driver>
+impl ::udi::meta_bridge::IntrDispatcher for ::udi::ChildBind<Driver,ChildState>
 {
     type Future_intr_event_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
     fn intr_event_rdy<'a>(&'a mut self, cb: ::udi::meta_bridge::CbHandleEvent) -> Self::Future_intr_event_rdy<'a> {
+        self.irq_cbs.push_front(cb);
         async move {
-            let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
-            di.device.get().unwrap()
-                .push_intr_cb(0.into(), cb);
+            //let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
+            //di.device.get().unwrap()
+            //    .push_intr_cb(0.into(), cb);
         }
     }
 }
@@ -142,8 +154,8 @@ const META_BIRDGE: ::udi::ffi::udi_index_t = udiprops::meta::udi_bridge;
 ::udi::define_driver! {
     Driver as INIT_INFO_PCI;
     ops: {
-        Bridge   : Meta=META_BIRDGE, ::udi::ffi::meta_bridge::udi_bus_bridge_ops_t : ChildBind<_,()>,
-        Interrupt: Meta=META_BIRDGE, ::udi::ffi::meta_bridge::udi_intr_dispatcher_ops_t,
+        Bridge   : Meta=META_BIRDGE, ::udi::ffi::meta_bridge::udi_bus_bridge_ops_t : ChildBind<_,ChildState>,
+        Interrupt: Meta=META_BIRDGE, ::udi::ffi::meta_bridge::udi_intr_dispatcher_ops_t : ChildBind<_,ChildState>,
     },
     cbs: {
         BusBind  : Meta=META_BIRDGE, ::udi::ffi::meta_bridge::udi_bus_bind_cb_t,
