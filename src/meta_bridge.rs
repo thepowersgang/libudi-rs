@@ -8,6 +8,8 @@ use ::udi_sys::meta_bridge::udi_bus_bind_cb_t;
 pub type CbRefBind<'a> = crate::CbRef<'a, udi_bus_bind_cb_t>;
 pub type CbRefIntrAttach<'a> = crate::CbRef<'a, crate::ffi::meta_bridge::udi_intr_attach_cb_t>;
 pub type CbRefIntrDetach<'a> = crate::CbRef<'a, crate::ffi::meta_bridge::udi_intr_detach_cb_t>;
+pub type CbHandleIntrAttach<'a> = crate::cb::CbHandle<crate::ffi::meta_bridge::udi_intr_attach_cb_t>;
+pub type CbHandleIntrDetach<'a> = crate::cb::CbHandle<crate::ffi::meta_bridge::udi_intr_detach_cb_t>;
 
 
 impl crate::ops_markers::ParentBind<::udi_sys::meta_bridge::udi_bus_bind_cb_t> for ::udi_sys::meta_bridge::udi_bus_device_ops_t {
@@ -51,8 +53,8 @@ pub trait BusDevice: 'static + crate::async_trickery::CbContext + crate::imc::Ch
     );
 
     async_method!(fn bus_unbind_ack(&'a mut self, cb: CbRefBind<'a>) -> () as Future_unbind_ack);
-    async_method!(fn intr_attach_ack(&'a mut self, cb: CbRefIntrAttach<'a>, status: crate::ffi::udi_status_t) -> () as Future_intr_attach_ack);
-    async_method!(fn intr_detach_ack(&'a mut self, cb: CbRefIntrDetach<'a>) -> () as Future_intr_detach_ack);
+    async_method!(fn intr_attach_ack(&'a mut self, cb: CbHandleIntrAttach<'a>, status: crate::ffi::udi_status_t) -> () as Future_intr_attach_ack);
+    async_method!(fn intr_detach_ack(&'a mut self, cb: CbHandleIntrDetach<'a>) -> () as Future_intr_detach_ack);
 }
 struct MarkerBusDevice;
 impl<T> crate::imc::ChannelHandler<MarkerBusDevice> for T
@@ -105,10 +107,10 @@ future_wrapper!(bus_unbind_ack_op => <T as BusDevice>(cb: *mut udi_bus_bind_cb_t
         )
 });
 future_wrapper!(intr_attach_ack_op => <T as BusDevice>(cb: *mut crate::ffi::meta_bridge::udi_intr_attach_cb_t, status: crate::ffi::udi_status_t) val @ {
-    val.intr_attach_ack(cb, status)
+    val.intr_attach_ack(unsafe { cb.into_owned() }, status)
 });
 future_wrapper!(intr_detach_ack_op => <T as BusDevice>(cb: *mut crate::ffi::meta_bridge::udi_intr_detach_cb_t) val @ {
-    val.intr_detach_ack(cb)
+    val.intr_detach_ack(unsafe { cb.into_owned() })
 });
 map_ops_structure!{
     ::udi_sys::meta_bridge::udi_bus_device_ops_t => BusDevice,MarkerBusDevice {

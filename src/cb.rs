@@ -41,10 +41,17 @@ impl<'a, T: 'static> ::core::ops::Deref for CbRef<'a,T> {
 }
 
 /// An owning handle to a CB
-pub struct CbHandle<T>(*mut T);
-impl<T> Drop for CbHandle<T> {
+pub struct CbHandle<T>(*mut T)
+where
+    T: crate::async_trickery::GetCb
+    ;
+impl<T> Drop for CbHandle<T>
+where
+    T: crate::async_trickery::GetCb
+{
     fn drop(&mut self) {
-        todo!("What to do when dropping a CbHandle")
+        unsafe { ::udi_sys::cb::udi_cb_free(self.0 as *mut ::udi_sys::udi_cb_t); }
+        //todo!("What to do when dropping a CbHandle")
     }
 }
 impl<T> CbHandle<T>
@@ -82,7 +89,10 @@ where
         }
     }
 }
-impl<T> ::core::ops::Deref for CbHandle<T> {
+impl<T> ::core::ops::Deref for CbHandle<T>
+where
+    T: crate::async_trickery::GetCb
+{
     type Target = T;
     fn deref(&self) -> &Self::Target {
         // SAFE: Owned
@@ -159,6 +169,7 @@ pub fn alloc<CbDef>(
     ) -> impl ::core::future::Future<Output=CbHandle<CbDef::Cb>>
 where
     CbDef: CbDefinition,
+    CbDef::Cb: crate::async_trickery::GetCb
 {
 	extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, new_cb: *mut crate::ffi::udi_cb_t) {
 		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(new_cb as *mut ())); }

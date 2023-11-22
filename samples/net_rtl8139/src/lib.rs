@@ -174,7 +174,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
     }
 
     type Future_intr_attach_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn intr_attach_ack<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrAttach<'a>, status: udi::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'a> {
+    fn intr_attach_ack<'a>(&'a mut self, cb: ::udi::meta_bridge::CbHandleIntrAttach<'a>, status: udi::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'a> {
         async move {
 			let _ = cb;
 			if status != 0 {
@@ -186,7 +186,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
     }
 
     type Future_intr_detach_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn intr_detach_ack<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_ack<'a> {
+    fn intr_detach_ack<'a>(&'a mut self, cb: ::udi::meta_bridge::CbHandleIntrDetach<'a>) -> Self::Future_intr_detach_ack<'a> {
         async move {
 			let _ = cb;
 		}
