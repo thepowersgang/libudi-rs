@@ -28,19 +28,6 @@ pub(crate) enum WaitRes {
 	Data([usize; 4]),
 }
 
-/// A trait for top-level future types (stored in `scratch`)
-pub(crate) trait AsyncState {
-	fn poll(self: Pin<&mut Self>, cx: &mut ::core::task::Context<'_>) -> ::core::task::Poll<()>;
-}
-impl<F> AsyncState for F
-where
-	F: Future<Output=()>
-{
-	fn poll(self: Pin<&mut Self>, cx: &mut ::core::task::Context<'_>) -> ::core::task::Poll<()> {
-		::core::future::Future::poll(self, cx)
-	}
-}
-
 /// Initialise a task
 /// 
 /// SAFETY: Caller must ensure that `cb`'s `scratch` is valid for this task
@@ -123,16 +110,6 @@ where
 		f2: Some(map_result),
 		_pd: PhantomData,
 	}
-}
-
-/// Wrap a task to call an ack function once it completes
-pub(crate) const fn with_ack<Cb, Fut, Res, Ack>(f: Fut, ack: Ack) -> WithAck<Cb, Fut, Res, Ack>
-where
-	Fut: Future<Output=Res>,
-	Cb: GetCb,
-	Ack: FnOnce(*mut Cb,Res)
-{
-	WithAck { f, ack: Some(ack), _pd: PhantomData }
 }
 
 /// Obtain a value by introspecting the cb
@@ -289,34 +266,6 @@ where
 	}
 }
 
-/// Inner future for [with_ack]
-pub(crate) struct WithAck<Cb, Fut, Res, Ack>
-{
-	f: Fut,
-	ack: Option<Ack>,
-	_pd: PhantomData<(fn(Cb,Res),)>
-}
-impl<Cb, Fut, Res, Ack> Future for WithAck<Cb, Fut, Res, Ack>
-where
-	Fut: Future<Output=Res>,
-	Cb: GetCb,
-	Ack: FnOnce(*mut Cb,Res)
-{
-    type Output = ();
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut ::core::task::Context<'_>) -> Poll<Self::Output> {
-		match pin_project!(self, f).poll(cx)
-		{
-		Poll::Pending => Poll::Pending,
-		Poll::Ready(res) => {
-			let cb = cb_from_waker(cx.waker());
-			unsafe { (self.get_unchecked_mut().ack.take().unwrap())(cb as *const Cb as *mut _, res); }
-			Poll::Ready(())
-			}
-		}
-    }
-}
-
 /// Obtain the GCB (`udi_cb_t`) from a waker
 pub fn gcb_from_waker(waker: &::core::task::Waker) -> &udi_cb_t {
 	let raw_waker = waker.as_raw();
@@ -455,7 +404,7 @@ macro_rules! future_wrapper {
         unsafe extern "C" fn $name<T: $trait + $crate::async_trickery::CbContext>($cb: *mut $cb_ty$(, $a_n: $a_ty)*)
         {
             let job = {
-				let $val = $crate::async_trickery::get_rdata_t::<T,_>(&*$cb);
+				let $val = unsafe { $crate::async_trickery::get_rdata_t::<T,_>(&*$cb) };
 				let $cb = unsafe { $crate::CbRef::new($cb) };
                 $b
                 };
@@ -469,19 +418,25 @@ macro_rules! future_wrapper {
         mod $name {
             use super::*;
             pub const fn task_size<$t: $trait>() -> usize {
-                $crate::async_trickery::task_size_from_closure(|$val: &mut $t, ($cb, $($a_n,)*): ($crate::CbRef<$cb_ty>, $($a_ty,)*)| $b)
+				#[allow(unused_variables)]
+                $crate::async_trickery::task_size_from_closure(
+					|$val: &mut $t, ($cb, $($a_n,)*): ($crate::CbRef<$cb_ty>, $($a_ty,)*)| $b,
+					|$val: &mut $t, $cb: *mut $cb_ty, res| { $( let $res = res; $f )? }
+				)
             }
         }
     };
 }
 /// Get the size of a task using a closure to resolve methods
-pub const fn task_size_from_closure<'a, Cls,Cb,Args,Task>(_cb: Cls) -> usize
+pub const fn task_size_from_closure<'a, Closure,ValTy,Cb,Args,Task,Finally>(_cb: Closure, f: Finally) -> usize
 where
-    Cls: FnOnce(&'a mut Cb, Args) -> Task,
+    Closure: FnOnce(&'a mut ValTy, Args) -> Task,
     Task: 'a,
-    Cb: 'a,
+    ValTy: 'a,
     Task: ::core::future::Future + 'static,
+	Finally: FnOnce(&'a mut ValTy, *mut Cb, Task::Output),
 {
     ::core::mem::forget(_cb);
-    crate::async_trickery::task_size::<Task>()
+    ::core::mem::forget(f);
+	::core::mem::size_of::<self::Task<Cb,Task,Task::Output,Finally>>()
 }
