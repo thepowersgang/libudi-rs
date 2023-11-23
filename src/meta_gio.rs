@@ -82,10 +82,9 @@ future_wrapper!(gio_bind_ack_op => <T as Client>(
     let size = crate::Error::from_status(status)
         .map(|()| device_size_lo as u64 | (device_size_hi as u64) << 32)
         ;
-    crate::async_trickery::with_ack(
-        val.bind_ack(cb, size),
-        |cb,()| unsafe { crate::async_trickery::channel_event_complete::<T,ffi::udi_gio_bind_cb_t>(cb, ::udi_sys::UDI_OK as _) }
-        )
+    val.bind_ack(cb, size)
+} finally( () ) {
+    unsafe { crate::async_trickery::channel_event_complete::<T,ffi::udi_gio_bind_cb_t>(cb, ::udi_sys::UDI_OK as _) }
 });
 future_wrapper!(gio_unbind_ack_op => <T as Client>(cb: *mut ffi::udi_gio_bind_cb_t) val @ {
     val.unbind_ack(cb)
@@ -97,10 +96,9 @@ future_wrapper!(gio_xfer_nak_op => <T as Client>(cb: *mut ffi::udi_gio_xfer_cb_t
     val.xfer_nak(unsafe { cb.into_owned() }, crate::Error::from_status(status))
 });
 future_wrapper!(gio_event_ind_op => <T as Client>(cb: *mut ffi::udi_gio_event_cb_t) val @ {
-    crate::async_trickery::with_ack(
-        val.event_ind(cb),
-        |cb,()| unsafe { ::udi_sys::meta_gio::udi_gio_event_res(cb) }
-        )
+    val.event_ind(cb)
+} finally( () ) {
+    unsafe { ::udi_sys::meta_gio::udi_gio_event_res(cb) }
 });
 map_ops_structure!{
     ffi::udi_gio_client_ops_t => Client,MarkerClient {

@@ -30,33 +30,38 @@ pub(crate) enum WaitRes {
 
 /// A trait for top-level future types (stored in `scratch`)
 pub(crate) trait AsyncState {
-	fn get_future(self: Pin<&mut Self>) -> Pin<&mut dyn Future<Output=()>>;
+	fn poll(self: Pin<&mut Self>, cx: &mut ::core::task::Context<'_>) -> ::core::task::Poll<()>;
 }
 impl<F> AsyncState for F
 where
 	F: Future<Output=()>
 {
-	fn get_future(self: Pin<&mut Self>) -> Pin<&mut dyn Future<Output=()>> {
-		self
+	fn poll(self: Pin<&mut Self>, cx: &mut ::core::task::Context<'_>) -> ::core::task::Poll<()> {
+		::core::future::Future::poll(self, cx)
 	}
 }
 
 /// Initialise a task
 /// 
 /// SAFETY: Caller must ensure that `cb`'s `scratch` is valid for this task
-pub(crate) unsafe fn init_task<Cb: GetCb, T: 'static+AsyncState>(cb: &Cb, inner: T)
+pub(crate) unsafe fn init_task<Cb, T, R, F>(cb: &Cb, inner: T, finally: F)
+where
+	Cb: GetCb,
+	T: 'static + Future<Output=R>,
+	R: 'static,
+	F: 'static + FnMut(*mut Cb, R),
 {
-	::core::ptr::write(cb.get_gcb().scratch as *mut _, Task::<T,Cb>::new(inner));
+	::core::ptr::write(cb.get_gcb().scratch as *mut _, Task::<Cb,T,R,F>::new(inner, finally));
 	run(cb);
 }
 /// Get the size of the task state (for scratch) for a given async state structure
-pub(crate) const fn task_size<T: 'static+AsyncState>() -> usize {
-	::core::mem::size_of::<Task<T,udi_cb_t>>()
+pub(crate) const fn task_size<T: 'static>() -> usize {
+	::core::mem::size_of::<Task<udi_cb_t,T,(),()>>()
 }
 /// Drop a task (due to a channel op_abort event)
 pub(crate) unsafe fn abort_task(cb: *mut udi_cb_t)
 {
-	let task = &mut *((*cb).scratch as *mut Task<(),udi_cb_t>);
+	let task = &mut *((*cb).scratch as *mut TaskStub);
 	let get_inner = task.get_inner;
 	(*(get_inner(task) as *mut dyn TaskTrait)).drop_in_place();
 }
@@ -90,14 +95,13 @@ pub(crate) unsafe fn channel_event_complete<T: CbContext, Cb: GetCb>(cb: *mut Cb
 /// SAFETY: Caller must ensure that the cb is async
 unsafe fn run<Cb: GetCb>(cb: &Cb) {
 	let gcb = cb.get_gcb();
-	let scratch = Pin::new(&mut *( (*gcb).scratch as *mut Task<(),udi_cb_t>));
-	let f = scratch.get_future();
-	
 	let waker = make_waker(gcb);
 	let mut ctxt = ::core::task::Context::from_waker(&waker);
-	match f.poll(&mut ctxt)
+	let mut scratch = Pin::new(&mut *( (*gcb).scratch as *mut TaskStub));
+
+	match scratch.as_mut().poll(&mut ctxt)
 	{
-	Poll::Ready( () ) => {},
+	Poll::Ready( () ) => { },
 	Poll::Pending => {},
 	}
 }
@@ -162,14 +166,15 @@ where
 
 /// Top-level async task state (`gcb.scratch`)
 #[repr(C)]
-struct Task<T,Cb> {
-	pd: PhantomData<Cb>,
+struct Task<Cb,T,R,F> {
+	pd: PhantomData<(Cb,R,)>,
 	/// Current waiting state
 	state: ::core::cell::Cell<TaskState>,
 	/// Effectively the vtable for this task
 	get_inner: unsafe fn(*const Self)->*const dyn TaskTrait,
 	/// Actual task/future data
 	inner: T,
+	finally: ::core::mem::ManuallyDrop<F>,
 }
 #[derive(Default,Copy,Clone)]
 enum TaskState {
@@ -183,17 +188,29 @@ enum TaskState {
 }
 
 trait TaskTrait {
-	unsafe fn get_async<'a>(&'a mut self) -> &'a mut dyn AsyncState;
+	/// Poll the inner future
+	/// 
+	/// SAFETY:
+	/// - `self` must be pinned (i.e. once `poll` is called, it should never move)
+	/// - Once this returns `Poll::Ready`, `self` must be considered invalid (it's dropped)
+	unsafe fn poll<'a>(&mut self, cx: &mut ::core::task::Context<'_>) -> ::core::task::Poll<()>;
 	fn get_cb_type(&self) -> ::core::any::TypeId;
+	/// Early drop the task (for cancellation)
 	unsafe fn drop_in_place(&mut self);
 }
-impl<T: 'static + AsyncState, Cb: GetCb> Task<T, Cb>
+impl<Cb, T, R, F> Task<Cb, T, R, F>
+where
+	Cb: GetCb,
+	T: 'static + Future<Output=R>,
+	R: 'static,
+	F: 'static + FnOnce(*mut Cb, R)
 {
-	fn new(inner: T) -> Self {
+	fn new(inner: T, finally: F) -> Self {
 		Task {
 			pd: PhantomData,
 			state: Default::default(),
 			get_inner: Self::get_inner,
+			finally: ::core::mem::ManuallyDrop::new(finally),
 			inner,
 		}
 	}
@@ -201,13 +218,24 @@ impl<T: 'static + AsyncState, Cb: GetCb> Task<T, Cb>
 		this
 	}
 }
-impl<T,Cb> TaskTrait for Task<T,Cb>
+impl<Cb, T, R, F> TaskTrait for Task<Cb, T, R, F>
 where
-	T: 'static + AsyncState,
-	Cb: GetCb
+	Cb: GetCb,
+	T: 'static + Future<Output=R>,
+	F: 'static + FnOnce(*mut Cb, R)
 {
-    unsafe fn get_async<'a>(&'a mut self) -> &'a mut dyn AsyncState {
-        &mut self.inner
+    unsafe fn poll<'a>(&mut self, cx: &mut ::core::task::Context<'_>) -> ::core::task::Poll<()> {
+        match Pin::new_unchecked(&mut self.inner).poll(cx)
+		{
+		Poll::Ready(res) => {
+			let cb = cb_from_waker::<Cb>(cx.waker());
+			let finally = ::core::ptr::read(&mut *self.finally);
+			self.drop_in_place();
+			(finally)(cb as *const _ as *mut _, res);
+			Poll::Ready(())
+		},
+		Poll::Pending => Poll::Pending,
+		}
     }
     fn get_cb_type(&self) -> ::core::any::TypeId {
         ::core::any::TypeId::of::<Cb>()
@@ -216,13 +244,14 @@ where
 		::core::ptr::drop_in_place(self);
 	}
 }
-impl Task<(),udi_cb_t>
+type TaskStub = Task<udi_cb_t,(),(),()>;
+impl TaskStub
 {
-	pub fn get_future(self: Pin<&mut Self>) -> Pin<&mut dyn Future<Output=()>> {
-		let v = self.get_inner;
+	pub fn poll(self: Pin<&mut Self>, cx: &mut ::core::task::Context<'_>) -> ::core::task::Poll<()> {
+		let get_inner = self.get_inner;
 		let this = unsafe { Pin::get_unchecked_mut(self) };
-		// SAFE: Pin projecting
-		unsafe { Pin::new_unchecked( (*((v)(this as *mut Self as *const Self) as *mut dyn TaskTrait)).get_async() ).get_future() }
+		// SAFE: Pinned
+		unsafe { (*((get_inner)(this as *mut Self as *const Self) as *mut dyn TaskTrait)).poll(cx) }
 	}
 }
 
@@ -312,7 +341,7 @@ pub(crate) fn cb_from_waker<Cb: GetCb>(waker: &::core::task::Waker) -> &Cb {
 	assert!( !gcb.scratch.is_null(), "cb_from_waker with no state?" );
 	// SAFE: Since the waker is from a cb, that cb has/should have been for an active task. The scratch is non-null
 	let cb_type = unsafe {
-		let task = &*(gcb.scratch as *const Task<(),udi_cb_t>);
+		let task = &*(gcb.scratch as *const TaskStub);
 		(*(task.get_inner)(task)).get_cb_type()
 		};
 	assert!(cb_type == ::core::any::TypeId::of::<Cb>(),
@@ -354,7 +383,7 @@ unsafe impl<T: crate::metalang_trait::MetalangCb + ::core::any::Any + Unpin> Get
 /// Obtain the TaskState result given a GCB
 fn get_result(gcb: *const udi_cb_t) -> Option<WaitRes>
 {
-	let state = unsafe { &*((*gcb).scratch as *mut Task<(),udi_cb_t>) };
+	let state = unsafe { &*((*gcb).scratch as *mut TaskStub) };
 	match state.state.replace(TaskState::Waiting)
 	{
 	TaskState::Idle => None,
@@ -371,7 +400,7 @@ fn get_result(gcb: *const udi_cb_t) -> Option<WaitRes>
 
 /// Flag that an operation is complete. This might be run downstream of the main task.
 pub(crate) fn signal_waiter(gcb: &mut udi_cb_t, res: WaitRes) {
-	let scratch = unsafe { &mut *(gcb.scratch as *mut Task<(),udi_cb_t>) };
+	let scratch = unsafe { &mut *(gcb.scratch as *mut TaskStub) };
 	match scratch.state.replace(TaskState::Ready(res))
 	{
 	TaskState::Idle => {
@@ -422,7 +451,7 @@ macro_rules! future_wrapper {
 			val.$method($cb $(, $a_n)*)
 		});
     };
-    ($name:ident => <$t:ident as $trait:path>($cb:ident: *mut $cb_ty:ty $(, $a_n:ident: $a_ty:ty)*) $val:ident @ $b:block ) => {
+    ($name:ident => <$t:ident as $trait:path>($cb:ident: *mut $cb_ty:ty $(, $a_n:ident: $a_ty:ty)*) $val:ident @ $b:block $( finally($res:pat) $f:block )? ) => {
         unsafe extern "C" fn $name<T: $trait + $crate::async_trickery::CbContext>($cb: *mut $cb_ty$(, $a_n: $a_ty)*)
         {
             let job = {
@@ -430,7 +459,12 @@ macro_rules! future_wrapper {
 				let $cb = unsafe { $crate::CbRef::new($cb) };
                 $b
                 };
-            $crate::async_trickery::init_task(&*$cb, job);
+            $crate::async_trickery::init_task(&*$cb, job, |$cb, res| {
+				let $val = unsafe { $crate::async_trickery::get_rdata_t::<T,_>(&*$cb) };
+				let _ = $val;
+				let _ = res;
+				$( let $res = res; $f )?
+			});
         }
         mod $name {
             use super::*;
@@ -446,7 +480,7 @@ where
     Cls: FnOnce(&'a mut Cb, Args) -> Task,
     Task: 'a,
     Cb: 'a,
-    Task: ::core::future::Future<Output=()> + 'static,
+    Task: ::core::future::Future + 'static,
 {
     ::core::mem::forget(_cb);
     crate::async_trickery::task_size::<Task>()

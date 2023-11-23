@@ -53,8 +53,11 @@ pub trait BusDevice: 'static + crate::async_trickery::CbContext + crate::imc::Ch
     );
 
     async_method!(fn bus_unbind_ack(&'a mut self, cb: CbRefBind<'a>) -> () as Future_unbind_ack);
-    async_method!(fn intr_attach_ack(&'a mut self, cb: CbHandleIntrAttach<'a>, status: crate::ffi::udi_status_t) -> () as Future_intr_attach_ack);
-    async_method!(fn intr_detach_ack(&'a mut self, cb: CbHandleIntrDetach<'a>) -> () as Future_intr_detach_ack);
+    async_method!(fn intr_attach_ack(&'a mut self, cb: CbRefIntrAttach<'a>, status: crate::ffi::udi_status_t) -> () as Future_intr_attach_ack);
+    async_method!(fn intr_detach_ack(&'a mut self, cb: CbRefIntrDetach<'a>) -> () as Future_intr_detach_ack);
+
+    fn intr_attach_cb_ret(&mut self, cb: CbHandleIntrAttach) { let _ = cb;}
+    fn intr_detach_cb_ret(&mut self, cb: CbHandleIntrDetach) { let _ = cb;}
 }
 struct MarkerBusDevice;
 impl<T> crate::imc::ChannelHandler<MarkerBusDevice> for T
@@ -95,22 +98,24 @@ future_wrapper!(bus_bind_ack_op => <T as BusDevice>(
         crate::ffi::meta_bridge::UDI_DMA_LITTLE_ENDIAN => PreferredEndianness::Little,
         _ => PreferredEndianness::Any,
         };
-    crate::async_trickery::with_ack(
-        val.bus_bind_ack(cb, dma_constraints, preferred_endianness, status),
-        |cb,res| unsafe { crate::async_trickery::channel_event_complete::<T,udi_bus_bind_cb_t>(cb, crate::Error::to_status(res)) }
-        )
+    val.bus_bind_ack(cb, dma_constraints, preferred_endianness, status)
+} finally(res) {
+    unsafe { crate::async_trickery::channel_event_complete::<T,udi_bus_bind_cb_t>(cb, crate::Error::to_status(res)) }
 });
 future_wrapper!(bus_unbind_ack_op => <T as BusDevice>(cb: *mut udi_bus_bind_cb_t) val @ {
-    crate::async_trickery::with_ack(
-        val.bus_unbind_ack(cb),
-        |cb,_res| unsafe { crate::async_trickery::channel_event_complete::<T,udi_bus_bind_cb_t>(cb, 0 /*res*/) }
-        )
+    val.bus_unbind_ack(cb)
+} finally( () ) {
+    unsafe { crate::async_trickery::channel_event_complete::<T,udi_bus_bind_cb_t>(cb, 0 /*res*/) }
 });
 future_wrapper!(intr_attach_ack_op => <T as BusDevice>(cb: *mut crate::ffi::meta_bridge::udi_intr_attach_cb_t, status: crate::ffi::udi_status_t) val @ {
-    val.intr_attach_ack(unsafe { cb.into_owned() }, status)
+    val.intr_attach_ack(cb, status)
+} finally( () ) {
+    val.intr_attach_cb_ret(unsafe { CbHandleIntrAttach::from_raw(cb) });
 });
 future_wrapper!(intr_detach_ack_op => <T as BusDevice>(cb: *mut crate::ffi::meta_bridge::udi_intr_detach_cb_t) val @ {
-    val.intr_detach_ack(unsafe { cb.into_owned() })
+    val.intr_detach_ack(cb)
+} finally( () ) {
+    val.intr_detach_cb_ret(unsafe { CbHandleIntrDetach::from_raw(cb) });
 });
 map_ops_structure!{
     ::udi_sys::meta_bridge::udi_bus_device_ops_t => BusDevice,MarkerBusDevice {
@@ -127,46 +132,41 @@ map_ops_structure!{
 }
 // --------------------------------------------------------------------
 
-future_wrapper!(bus_bind_req_op => <T as BusBridge>(
-    cb: *mut udi_bus_bind_cb_t
-    ) val @ {
-    crate::async_trickery::with_ack(
-        val.bus_bind_req(cb),
-        |cb,res| unsafe {
-            let (status,dma,endian) = match res
-                {
-                Ok((endian,)) => {
-                    let endian = match endian
-                        {
-                        PreferredEndianness::Any => crate::ffi::meta_bridge::UDI_DMA_ANY_ENDIAN,
-                        PreferredEndianness::Big => crate::ffi::meta_bridge::UDI_DMA_BIG_ENDIAN,
-                        PreferredEndianness::Little => crate::ffi::meta_bridge::UDI_DMA_LITTLE_ENDIAN,
-                        };
-                    (0,crate::ffi::physio::UDI_NULL_DMA_CONSTRAINTS,endian)
-                    },
-                Err(e) => (e.into_inner(),crate::ffi::physio::UDI_NULL_DMA_CONSTRAINTS,0),
-                };
-            crate::ffi::meta_bridge::udi_bus_bind_ack(cb, dma, endian, status)
-        }
-        )
+future_wrapper!(bus_bind_req_op => <T as BusBridge>(cb: *mut udi_bus_bind_cb_t) val @ {
+    val.bus_bind_req(cb)
+} finally(res) {
+    unsafe {
+        let (status,dma,endian) = match res
+            {
+            Ok((endian,)) => {
+                let endian = match endian
+                    {
+                    PreferredEndianness::Any => crate::ffi::meta_bridge::UDI_DMA_ANY_ENDIAN,
+                    PreferredEndianness::Big => crate::ffi::meta_bridge::UDI_DMA_BIG_ENDIAN,
+                    PreferredEndianness::Little => crate::ffi::meta_bridge::UDI_DMA_LITTLE_ENDIAN,
+                    };
+                (0,crate::ffi::physio::UDI_NULL_DMA_CONSTRAINTS,endian)
+                },
+            Err(e) => (e.into_inner(),crate::ffi::physio::UDI_NULL_DMA_CONSTRAINTS,0),
+            };
+        crate::ffi::meta_bridge::udi_bus_bind_ack(cb, dma, endian, status)
+    }
 });
 future_wrapper!(bus_unbind_req_op => <T as BusBridge>(cb: *mut udi_bus_bind_cb_t) val @ {
-    crate::async_trickery::with_ack(
-        val.bus_unbind_req(cb),
-        |cb,_res| unsafe { crate::ffi::meta_bridge::udi_bus_unbind_ack(cb) }
-        )
+    val.bus_unbind_req(cb)
+} finally(res) {
+    let () = res;
+    unsafe { crate::ffi::meta_bridge::udi_bus_unbind_ack(cb) }
 });
 future_wrapper!(intr_attach_req_op => <T as BusBridge>(cb: *mut crate::ffi::meta_bridge::udi_intr_attach_cb_t) val @ {
-    crate::async_trickery::with_ack(
-        val.intr_attach_req(cb),
-        |cb,res| unsafe { crate::ffi::meta_bridge::udi_intr_attach_ack(cb, crate::Error::to_status(res)) }
-        )
+    val.intr_attach_req(cb)
+} finally(res) {
+    unsafe { crate::ffi::meta_bridge::udi_intr_attach_ack(cb, crate::Error::to_status(res)) }
 });
 future_wrapper!(intr_detach_req_op => <T as BusBridge>(cb: *mut crate::ffi::meta_bridge::udi_intr_detach_cb_t) val @ {
-    crate::async_trickery::with_ack(
-        val.intr_detach_req(cb),
-        |cb,_res| unsafe { crate::ffi::meta_bridge::udi_intr_detach_ack(cb) }
-        )
+    val.intr_detach_req(cb)
+} finally( () ) {
+    unsafe { crate::ffi::meta_bridge::udi_intr_detach_ack(cb) }
 });
 map_ops_structure!{
     ::udi_sys::meta_bridge::udi_bus_bridge_ops_t => BusBridge,MarkerBusBridge {
@@ -215,11 +215,10 @@ where
 }
 
 future_wrapper!(intr_event_ind_op => <T as IntrHandler>(cb: *mut udi_intr_event_cb_t, flags: u8) val @ {
-    crate::async_trickery::with_ack(
-        val.intr_event_ind(cb, flags),
-        // Return this CB to the pool on completion
-        |cb,_res| unsafe { crate::ffi::meta_bridge::udi_intr_event_rdy(cb) }
-        )
+    val.intr_event_ind(cb, flags)
+} finally( () ) {
+    // Return this CB to the pool on completion
+    unsafe { crate::ffi::meta_bridge::udi_intr_event_rdy(cb) }
 });
 map_ops_structure!{
     ::udi_sys::meta_bridge::udi_intr_handler_ops_t => IntrHandler,MarkerIntrHandler {

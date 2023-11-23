@@ -252,6 +252,7 @@ fn maybe_child_bind(
     child.is_bound.set(true);
 
     let (channel_parent, channel_child) = ::udi_environment::channels::spawn_raw();
+    println!("channel_parent={channel_parent:p}, channel_child={channel_child:p}");
     unsafe {
         let ops_init = parent.module.get_ops_init(child.ops_idx).unwrap();
         let ops = parent.module.get_meta_ops(ops_init);

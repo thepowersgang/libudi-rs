@@ -5,6 +5,7 @@ mod pio_ops;
 struct Driver
 {
 	pio_handles: PioHandles,
+	parent_channel: ::udi::ffi::udi_channel_t,
 	intr_channel: ::udi::imc::ChannelHandle,
 	channel_tx: ::udi::imc::ChannelHandle,
 	channel_rx: ::udi::imc::ChannelHandle,
@@ -17,6 +18,7 @@ impl Default for Driver {
     fn default() -> Self {    
 		Driver {
 			pio_handles: Default::default(),
+			parent_channel: ::core::ptr::null_mut(),
 			intr_channel: Default::default(),
 			channel_tx: Default::default(),
 			channel_rx: Default::default(),
@@ -111,6 +113,10 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 			self.pio_handles.tx      = pio_map(&pio_ops::TX).await;
 			self.pio_handles.irq_ack = pio_map(&pio_ops::IRQACK).await;
 
+			// Save the channel used to bind to the parent, so we can unbind later on.
+			self.parent_channel = cb.gcb.channel;
+			::udi::debug_printf!("parent_channel=%p", self.parent_channel);
+
 			// Spawn channel
 			self.intr_channel = ::udi::imc::channel_spawn::<OpsList::Irq>(cb.gcb(), self, /*interrupt number*/0.into()).await;
 			let mut intr_cb = ::udi::cb::alloc::<CbList::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
@@ -142,9 +148,9 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
     }
 
     type Future_intr_attach_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn intr_attach_ack<'a>(&'a mut self, cb: ::udi::meta_bridge::CbHandleIntrAttach<'a>, status: udi::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'a> {
+    fn intr_attach_ack<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrAttach<'a>, status: udi::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'a> {
+		let _ = cb;
         async move {
-			let _ = cb;
 			if status != 0 {
 				// TODO: Free the CB and channel?
 			}
@@ -154,9 +160,9 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
     }
 
     type Future_intr_detach_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn intr_detach_ack<'a>(&'a mut self, cb: ::udi::meta_bridge::CbHandleIntrDetach<'a>) -> Self::Future_intr_detach_ack<'a> {
-        async move {
-			let _ = cb;
+    fn intr_detach_ack<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_ack<'a> {
+		let _ = cb;
+		async move {
 		}
     }
 }

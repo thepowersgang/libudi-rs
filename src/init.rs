@@ -246,10 +246,12 @@ impl<Driver> ::core::ops::DerefMut for RData<Driver>
 struct MgmtState<'a, T: Driver> {
 	op: Option<MgmtStateInit<'a, T>>,
 }
-impl<'a, T: 'static+Driver> async_trickery::AsyncState for MgmtState<'a, T> {
-	fn get_future(self: Pin<&mut Self>) -> Pin<&mut dyn Future<Output=()>> {
+impl<'a, T: 'static+Driver> Future for MgmtState<'a, T> {
+	type Output = ();
+	fn poll(self: Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> Poll<()> {
 		// SAFE: Pin projection
-		unsafe { Pin::new_unchecked(Pin::get_unchecked_mut(self).op.as_mut().unwrap()) }
+		let v = unsafe { Pin::new_unchecked(Pin::get_unchecked_mut(self).op.as_mut().unwrap()) };
+		v.poll(cx)
 	}
 }
 struct MgmtStateInit<'a, T: Driver> {
@@ -293,64 +295,59 @@ future_wrapper!{enumerate_req_op => <T as Driver>(cb: *mut udi_enumerate_cb_t, e
 		crate::ffi::meta_mgmt::UDI_ENUMERATE_RELEASE => EnumerateLevel::Release,
 		_ => todo!(),
 		};
-	crate::async_trickery::with_ack(
-		val.enumerate_req(cb, enumeration_level, attrs),
-		// Return this CB to the pool on completion
-		|cb: *mut udi_enumerate_cb_t,(res,attrs)| unsafe {
-			use ffi::udi_index_t;
-			let (res,ops_idx) = match res
-				{
-				EnumerateResult::Ok(child) => {
-					(*cb).child_id = child.child_id;
-					(0,child.ops_idx)
-					},
-				EnumerateResult::Leaf => (1,udi_index_t(0)),
-				EnumerateResult::Done => (2,udi_index_t(0)),
-				EnumerateResult::Rescan => (3,udi_index_t(0)),
-				EnumerateResult::Removed => (4,udi_index_t(0)),
-				EnumerateResult::RemovedSelf => (5,udi_index_t(0)),
-				EnumerateResult::Released => (6,udi_index_t(0)),
-				EnumerateResult::Failed => (255,udi_index_t(0)),
-				};
-			(*cb).attr_valid_length = attrs.dst.offset_from((*cb).attr_list).try_into().expect("BUG: Attr list too long");
-			crate::ffi::meta_mgmt::udi_enumerate_ack(cb, res, ops_idx)
-		}
-		)
+	val.enumerate_req(cb, enumeration_level, attrs)
+} finally( (res,attrs) ) {
+	// Return this CB to the pool on completion
+	unsafe {
+		use ffi::udi_index_t;
+		let (res,ops_idx) = match res
+			{
+			EnumerateResult::Ok(child) => {
+				(*cb).child_id = child.child_id;
+				(0,child.ops_idx)
+				},
+			EnumerateResult::Leaf => (1,udi_index_t(0)),
+			EnumerateResult::Done => (2,udi_index_t(0)),
+			EnumerateResult::Rescan => (3,udi_index_t(0)),
+			EnumerateResult::Removed => (4,udi_index_t(0)),
+			EnumerateResult::RemovedSelf => (5,udi_index_t(0)),
+			EnumerateResult::Released => (6,udi_index_t(0)),
+			EnumerateResult::Failed => (255,udi_index_t(0)),
+			};
+		(*cb).attr_valid_length = attrs.dst.offset_from((*cb).attr_list).try_into().expect("BUG: Attr list too long");
+		crate::ffi::meta_mgmt::udi_enumerate_ack(cb, res, ops_idx)
+	}
 }}
 future_wrapper!{devmgmt_req_op => <T as Driver>(cb: *mut udi_mgmt_cb_t, mgmt_op: crate::ffi::udi_ubit8_t, parent_id: crate::ffi::udi_ubit8_t) val @ {
-	crate::async_trickery::with_ack(
+	let mgmt_op = match mgmt_op
 		{
-			let mgmt_op = match mgmt_op
-				{
-				1 => MgmtOp::PrepareToSuspend,
-				2 => MgmtOp::Suspend,
-				3 => MgmtOp::Shutdown,
-				4 => MgmtOp::ParentSuspend,
-				5 => MgmtOp::Resume,
-				6 => MgmtOp::Unbind,
-				_ => panic!("Unexpected value for `mgmt_op`: {}", mgmt_op),
-				};
-			val.devmgmt_req(cb, mgmt_op, parent_id)
-		},
-		|cb,res: crate::Result<u8>| unsafe {
-			let (status,flags) = match res
-				{
-				Ok(f) => (0,f),
-				Err(e) => (e.into_inner(),0)
-				};
-			crate::ffi::meta_mgmt::udi_devmgmt_ack(cb, flags, status)
-		}
-	)
+		1 => MgmtOp::PrepareToSuspend,
+		2 => MgmtOp::Suspend,
+		3 => MgmtOp::Shutdown,
+		4 => MgmtOp::ParentSuspend,
+		5 => MgmtOp::Resume,
+		6 => MgmtOp::Unbind,
+		_ => panic!("Unexpected value for `mgmt_op`: {}", mgmt_op),
+		};
+	val.devmgmt_req(cb, mgmt_op, parent_id)
+} finally(res) {
+	unsafe {
+		let (status,flags) = match res
+			{
+			Ok(f) => (0,f),
+			Err(e) => (e.into_inner(),0)
+			};
+		crate::ffi::meta_mgmt::udi_devmgmt_ack(cb, flags, status)
+	}
 }}
 future_wrapper!{final_cleanup_req_op => <T as Driver>(cb: *mut udi_mgmt_cb_t) val @ {
-	crate::async_trickery::with_ack(
-		async move {
-			let _ = cb;
-			// SAFE: We're trusting the environment to only call this once per region
-			unsafe { ::core::ptr::drop_in_place(val); }
-		},
-		|cb,_res| unsafe { crate::ffi::meta_mgmt::udi_final_cleanup_ack(cb) }
-	)
+	async move {
+		let _ = cb;
+		// SAFE: We're trusting the environment to only call this once per region
+		unsafe { ::core::ptr::drop_in_place(val); }
+	}
+} finally( () ) {
+	unsafe { crate::ffi::meta_mgmt::udi_final_cleanup_ack(cb) }
 }}
 
 impl<T,CbList> crate::OpsStructure<::udi_sys::meta_mgmt::udi_mgmt_ops_t, RData<T> ,CbList>
@@ -381,7 +378,7 @@ where
 				::core::ptr::write(&mut (*rd).inner, Default::default());
 			}
             let job = MgmtStateInit::<RData<T>> { inner_future: (*rd).usage_ind(crate::CbRef::new(cb), resource_level) };
-            async_trickery::init_task(&*cb, MgmtState { op: Some(job) });
+            async_trickery::init_task(&*cb, MgmtState { op: Some(job) }, |_,_|());
         }
         ffi::meta_mgmt::udi_mgmt_ops_t {
 			usage_ind_op: usage_ind::<T>,

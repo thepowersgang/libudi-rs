@@ -1,6 +1,7 @@
 
 #[derive(Default)]
 struct Driver {
+    parent_channel: Option<::udi::ffi::udi_channel_t>,
     cb_pool: ::udi::cb::Chain<::udi::ffi::meta_gio::udi_gio_xfer_cb_t>,
 }
 impl ::udi::init::Driver for ::udi::init::RData<Driver>
@@ -49,6 +50,8 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
         async move {
             match size {
             Ok(0) => {
+                self.parent_channel = Some(cb.gcb.channel);
+                
                 // Allocate a pool of CBs with 1KiB buffers
                 let mut cbs = ::udi::cb::alloc_batch::<CbList::_Xfer>(cb.gcb(), 3, Some((1024, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
                 while let Some(xfer_cb) = cbs.pop_front() {

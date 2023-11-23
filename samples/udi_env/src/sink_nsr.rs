@@ -2,6 +2,7 @@
 struct Driver {
     ch_rx: ::udi::imc::ChannelHandle,
     ch_tx: ::udi::imc::ChannelHandle,
+    parent_channel: Option<::udi::ffi::udi_channel_t>,
 
     tx_cbs: ::udi::cb::Chain<::udi::ffi::meta_nic::udi_nic_tx_cb_t>,
 }
@@ -71,16 +72,17 @@ impl ::udi::meta_nic::NsrControl for ::udi::init::RData<Driver>
                 let mut rx_cbs = ::udi::cb::alloc_batch::<CbList::_NicRx>(cb.gcb(), 6, Some((1520, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
                 while let Some(mut rx_cb) = rx_cbs.pop_front() {
                     rx_cb.set_channel(&self.ch_rx);
-                    // SAFE: Correct channel, that's the only thing we've changed
                     ::udi::meta_nic::nd_rx_rdy(rx_cb);
                 }
 
-                // TODO: Send a test packet
+                // Send a test packet
                 if let Some(mut tx_cb) = self.tx_cbs.pop_front() {
                     let buf = tx_cb.tx_buf_mut();
                     buf.write(cb.gcb(), 0..buf.len(), b"TestPacketContent").await;
                     ::udi::meta_nic::nd_tx_req(tx_cb);
                 }
+
+                self.parent_channel = Some(cb.gcb.channel);
                 },
             Err(e) => println!("Error: {:?}", e),
             }

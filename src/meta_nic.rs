@@ -226,40 +226,37 @@ where
 
 future_wrapper!(nd_bind_req_op => <T as Control>(cb: *mut ffi::udi_nic_bind_cb_t, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)
     val @ {
-        crate::async_trickery::with_ack(
-            val.bind_req(cb, tx_chan_index, rx_chan_index),
-            |cb: *mut ffi::udi_nic_bind_cb_t, res| unsafe {
-                let status = match res {
-                    Ok(v) => {
-                        let cb = &mut *cb;
-                        cb.media_type = v.media_type as _;
-                        cb.min_pdu_size = v.min_pdu_size;
-                        cb.max_pdu_size = v.max_pdu_size;
-                        cb.rx_hw_threshold = v.rx_hw_threshold;
-                        cb.capabilities = v.capabilities;
-                        cb.max_perfect_multicast = v.max_perfect_multicast;
-                        cb.max_total_multicast = v.max_total_multicast;
-                        cb.mac_addr_len = v.mac_addr_len;
-                        cb.mac_addr = v.mac_addr;
-                        0
-                        },
-                    Err(s) => s.into_inner(),
-                    };
-                ffi::udi_nsr_bind_ack(cb, status)
-                }
-            )
+        val.bind_req(cb, tx_chan_index, rx_chan_index)
+    } finally(res) {
+        unsafe {
+            let status = match res {
+                Ok(v) => {
+                    let cb = &mut *cb;
+                    cb.media_type = v.media_type as _;
+                    cb.min_pdu_size = v.min_pdu_size;
+                    cb.max_pdu_size = v.max_pdu_size;
+                    cb.rx_hw_threshold = v.rx_hw_threshold;
+                    cb.capabilities = v.capabilities;
+                    cb.max_perfect_multicast = v.max_perfect_multicast;
+                    cb.max_total_multicast = v.max_total_multicast;
+                    cb.mac_addr_len = v.mac_addr_len;
+                    cb.mac_addr = v.mac_addr;
+                    0
+                    },
+                Err(s) => s.into_inner(),
+                };
+            ffi::udi_nsr_bind_ack(cb, status)
         }
-    );
+    });
 future_wrapper!(nd_unbind_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t)
     val @ {
         val.unbind_req(cb)
         }
     );
 future_wrapper!(nd_enable_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t) val @ {
-    crate::async_trickery::with_ack(
-        val.enable_req(cb),
-        |cb, res| unsafe { ffi::udi_nsr_enable_ack(cb, crate::Error::to_status(res)) }
-        )
+    val.enable_req(cb)
+} finally(res) {
+    unsafe { ffi::udi_nsr_enable_ack(cb, crate::Error::to_status(res)) }
 });
 future_wrapper!(nd_disable_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t) val @ {
     val.disable_req(cb)
@@ -305,10 +302,9 @@ pub trait NsrControl: 'static + crate::async_trickery::CbContext + crate::imc::C
     async_method!(fn status_ind(&'a mut self, cb: CbRefNicStatus<'a>)->() as Future_status_ind);
 }
 future_wrapper!(nsr_channel_bound => <T as NsrControl>(cb: *mut ffi::udi_nic_bind_cb_t) val @ {
-    crate::async_trickery::with_ack(
-        val.get_bind_channels(cb),
-        |cb,chans| unsafe { ffi::udi_nd_bind_req(cb, chans.tx, chans.rx) },
-    )
+    val.get_bind_channels(cb)
+} finally(chans) {
+    unsafe { ffi::udi_nd_bind_req(cb, chans.tx, chans.rx) }
 });
 struct MarkerNsrControl;
 impl<T> crate::imc::ChannelHandler<MarkerNsrControl> for T
@@ -326,10 +322,9 @@ where
 
 future_wrapper!(nsr_bind_ack_op => <T as NsrControl>(cb: *mut ffi::udi_nic_bind_cb_t, status: ::udi_sys::udi_status_t) val @ {
     let res = crate::Error::from_status(status);
-    crate::async_trickery::with_ack(
-        val.bind_ack(cb, res),
-        |cb,()| unsafe { crate::async_trickery::channel_event_complete::<T,ffi::udi_nic_bind_cb_t>(cb, ::udi_sys::UDI_OK as _) }
-        )
+    val.bind_ack(cb, res)
+} finally( () ) {
+    unsafe { crate::async_trickery::channel_event_complete::<T,ffi::udi_nic_bind_cb_t>(cb, ::udi_sys::UDI_OK as _) }
 });
 future_wrapper!(nsr_unbind_ack_op => <T as NsrControl>(cb: *mut ffi::udi_nic_cb_t, status: ::udi_sys::udi_status_t) val @ {
     val.unbind_ack(cb, crate::Error::from_status(status))
