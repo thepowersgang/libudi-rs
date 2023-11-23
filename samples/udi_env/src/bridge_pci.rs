@@ -133,13 +133,16 @@ impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,ChildState>
 impl ::udi::meta_bridge::IntrDispatcher for ::udi::ChildBind<Driver,ChildState>
 {
     type Future_intr_event_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn intr_event_rdy<'a>(&'a mut self, cb: ::udi::meta_bridge::CbHandleEvent) -> Self::Future_intr_event_rdy<'a> {
-        self.irq_cbs.push_front(cb);
+    fn intr_event_rdy<'a>(&'a mut self, _cb: ::udi::meta_bridge::CbRefEvent) -> Self::Future_intr_event_rdy<'a> {
         async move {
             //let di = unsafe { crate::channels::get_other_instance(&cb.gcb.channel) };
             //di.device.get().unwrap()
             //    .push_intr_cb(0.into(), cb);
         }
+    }
+
+    fn intr_event_ret(&mut self, cb: udi::meta_bridge::CbHandleEvent) {
+        self.irq_cbs.push_front(cb);
     }
 }
 

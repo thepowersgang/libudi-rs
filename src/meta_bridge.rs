@@ -233,7 +233,8 @@ map_ops_structure!{
 /// Interrupte dispatcher trait
 pub trait IntrDispatcher: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit
 {
-    async_method!(fn intr_event_rdy(&'a mut self, cb: CbHandleEvent)->() as Future_intr_event_rdy);
+    async_method!(fn intr_event_rdy(&'a mut self, cb: CbRefEvent)->() as Future_intr_event_rdy);
+    fn intr_event_ret(&mut self, cb: CbHandleEvent);
 }
 struct MarkerIntrDispatcher;
 impl<T> crate::imc::ChannelHandler<MarkerIntrDispatcher> for T
@@ -243,7 +244,9 @@ where
 }
 
 future_wrapper!(intr_event_rdy_op => <T as IntrDispatcher>(cb: *mut udi_intr_event_cb_t) val @ {
-    val.intr_event_rdy(unsafe { cb.into_owned() })
+    val.intr_event_rdy(cb)
+} finally( () ) {
+    val.intr_event_ret(unsafe { crate::cb::CbHandle::from_raw(cb) })
 });
 map_ops_structure!{
     ::udi_sys::meta_bridge::udi_intr_dispatcher_ops_t => IntrDispatcher,MarkerIntrDispatcher {

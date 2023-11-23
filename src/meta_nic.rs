@@ -362,6 +362,9 @@ map_ops_structure!{
 // --------------------------------------------------------------------
 
 pub trait NdTx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
+    // TODO: Safety hazard with passing ownership of `cb`
+    // - If the cb is dropped early, the future will be invalidated.
+    // - But, the CB should only be returned once the TX is complete, which may not happen while `tx_req` is processing
     async_method!(fn tx_req(&'a mut self, cb: CbHandleNicTx)->() as Future_tx_req);
     async_method!(fn exp_tx_req(&'a mut self, cb: CbHandleNicTx)->() as Future_exp_tx_req);
 }
@@ -373,6 +376,7 @@ where
 }
 
 future_wrapper!(nd_tx_req_op => <T as NdTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
+    // NOT SAFE: If this is dropped early, future is invalidated.
     val.tx_req(unsafe { cb.into_owned() })
 });
 future_wrapper!(nd_exp_tx_req_op => <T as NdTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
@@ -400,6 +404,7 @@ where
 }
 
 future_wrapper!(nsr_tx_rdy_op => <T as NsrTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
+    // TODO: Safety hazard
     val.tx_rdy(unsafe { cb.into_owned() })
 });
 map_ops_structure!{
@@ -423,6 +428,7 @@ where
 {
 }
 future_wrapper!(nd_rx_rdy_op => <T as NdRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
+    // TODO: Safety hazard
     val.rx_rdy( unsafe { cb.into_owned() } )
 });
 map_ops_structure!{

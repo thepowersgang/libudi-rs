@@ -83,7 +83,7 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
     }
 
     type Future_xfer_ack<'s> = impl ::core::future::Future<Output=()>;
-    fn xfer_ack<'s>(&'s mut self, cb: ::udi::cb::CbHandle<::udi::ffi::meta_gio::udi_gio_xfer_cb_t>) -> Self::Future_xfer_ack<'s> {
+    fn xfer_ack<'s>(&'s mut self, cb: ::udi::cb::CbRef<'s, ::udi::ffi::meta_gio::udi_gio_xfer_cb_t>) -> Self::Future_xfer_ack<'s> {
         async move {
             match cb.op
             {
@@ -93,19 +93,21 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
             ::udi::ffi::meta_gio::UDI_GIO_OP_WRITE => {},
             _ => todo!("xfer_ack - Unknown operation: {:#x}", cb.op),
             }
-            self.cb_pool.push_front(cb);
         }
     }
 
     type Future_xfer_nak<'s> = impl ::core::future::Future<Output=()>;
-    fn xfer_nak<'s>(&'s mut self, cb: ::udi::cb::CbHandle<::udi::ffi::meta_gio::udi_gio_xfer_cb_t>, res: ::udi::Result<()>) -> Self::Future_xfer_nak<'s> {
+    fn xfer_nak<'s>(&'s mut self, _cb: ::udi::cb::CbRef<'s, ::udi::ffi::meta_gio::udi_gio_xfer_cb_t>, res: ::udi::Result<()>) -> Self::Future_xfer_nak<'s> {
         async move {
             match res {
             Ok(_) => {},
             Err(e) => println!("xfer_nak - Error {:?}", e),
             }
-            self.cb_pool.push_front(cb);
         }
+    }
+
+    fn xfer_ret(&mut self, cb: ::udi::cb::CbHandle<udi::ffi::meta_gio::udi_gio_xfer_cb_t>) {
+        self.cb_pool.push_front(cb);
     }
 
     type Future_event_ind<'s> = impl ::core::future::Future<Output=()>;
