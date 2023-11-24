@@ -55,11 +55,18 @@ impl ManagementState
         match *state
         {
         ManagementStateInner::PreInit => panic!("enumerate_ack when in PreInit"),
-        ManagementStateInner::Init(ref mut is) => is.next_op(instance),
+        ManagementStateInner::Init(ref mut is) => match is.next_op(instance)
+            {
+            Some(op) => Some(op),
+            None => {
+                *state = ManagementStateInner::Initialised;
+                None
+            }
+            }
         ManagementStateInner::Initialised => panic!("enumerate_ack when already initialised"),
         }
     }
-    pub(crate) fn usage_res(&self, _instance: &crate::DriverInstance, cb: *mut ::udi::ffi::meta_mgmt::udi_usage_cb_t) {
+    pub(crate) fn usage_res(&self, _instance: &crate::DriverInstance, cb: ::udi::cb::CbHandle<::udi::ffi::meta_mgmt::udi_usage_cb_t>) {
         let mut state = self.inner.lock().unwrap();
         let is = match *state
             {
@@ -75,9 +82,14 @@ impl ManagementState
             },
         _ => panic!("usage_ind called when not expected"),
         }
-        unsafe { crate::udi_impl::cb::free_internal(cb as *mut _) }
+        drop(cb);
     }
-    pub(crate) fn enumerate_ack(&self, instance: &crate::DriverInstance, cb: *mut ::udi::ffi::meta_mgmt::udi_enumerate_cb_t, enumeration_result: ::udi::init::EnumerateResult) {
+    pub(crate) fn enumerate_ack(
+        &self,
+        instance: &crate::DriverInstance,
+        mut cb: ::udi::cb::CbHandle<::udi::ffi::meta_mgmt::udi_enumerate_cb_t>,
+        enumeration_result: ::udi::init::EnumerateResult
+    ) {
         let mut state = self.inner.lock().unwrap();
         let is = match *state
             {
@@ -88,13 +100,12 @@ impl ManagementState
         let DriverState::EnumChildren { ref mut flagged_complete } = is.state else {
             panic!("`enumerate_ack` called when not expected");
         };
-        //self.returned_cb = cb as *mut _;
 
         match enumeration_result
         {
         udi::init::EnumerateResult::Ok(child_info) => {
             // The driver now owns this pointer
-            unsafe { (*cb).child_data = ::core::ptr::null_mut(); }
+            unsafe { cb.get_mut().child_data = ::core::ptr::null_mut(); }
             let attrs = unsafe { ::core::slice::from_raw_parts((*cb).attr_list, (*cb).attr_valid_length as usize) };
             for a in attrs {
                 let a_name = {
@@ -134,14 +145,41 @@ impl ManagementState
         udi::init::EnumerateResult::Failed => { *flagged_complete = true; },
         }
         unsafe {
-            if ! (*cb).child_data.is_null() {
-                ::libc::free((*cb).child_data as _);
+            if ! cb.child_data.is_null() {
+                ::libc::free(cb.child_data as _);
             }
-            ::libc::free((*cb).attr_list as _);
+            ::libc::free(cb.attr_list as _);
+        }
+        drop(cb);
+    }
+    pub fn devmgmt_ack(
+        &self,
+        instance: &crate::DriverInstance,
+        _cb: ::udi::cb::CbHandle<::udi::ffi::meta_mgmt::udi_mgmt_cb_t>,
+        flags: u8,
+        status: ::udi::Result<()>
+    ) {
+        let _ = instance;
+        match status {
+        Ok( () ) => {
+            todo!("devmgmt_ack: flags={:#x}", flags);
+            }
+        Err(e) => {
+            todo!("devmgmt_ack: Error {:?}", e);
+            }
         }
     }
+    pub fn final_cleanup_ack(
+        &self,
+        instance: &crate::DriverInstance,
+        cb: ::udi::cb::CbHandle<::udi::ffi::meta_mgmt::udi_mgmt_cb_t>,
+    ) {
+        let _ = instance;
+        drop(cb);
+        todo!();
+    }
 
-    pub fn bind_complete(&self, instance: &crate::DriverInstance, cb: *mut ::udi::ffi::imc::udi_channel_event_cb_t, result: ::udi::Result<()>) {
+    pub fn bind_complete(&self, _instance: &crate::DriverInstance, cb: *mut ::udi::ffi::imc::udi_channel_event_cb_t, result: ::udi::Result<()>) {
         let mut state = self.inner.lock().unwrap();
         let is = match *state
             {
