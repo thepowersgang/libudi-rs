@@ -113,7 +113,8 @@ impl ::udi::meta_nic::NsrControl for ::udi::init::RData<Driver>
         async move { todo!("status_ind") }
     }
 }
-impl ::udi::meta_nic::NsrTx for ::udi::init::RData<Driver>
+// SAFE: Just pushes to a list
+unsafe impl ::udi::meta_nic::NsrTx for ::udi::init::RData<Driver>
 {
     type Future_tx_rdy<'s> = impl ::core::future::Future<Output=()>;
     fn tx_rdy<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_tx_rdy<'a> {
@@ -121,7 +122,8 @@ impl ::udi::meta_nic::NsrTx for ::udi::init::RData<Driver>
         async move {}
     }
 }
-impl ::udi::meta_nic::NsrRx for ::udi::init::RData<Driver>
+// SAFE: Panics
+unsafe impl ::udi::meta_nic::NsrRx for ::udi::init::RData<Driver>
 {
     type Future_rx_ind<'s> = impl ::core::future::Future<Output=()>;
     fn rx_ind<'a>(&'a mut self, _cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_rx_ind<'a> {

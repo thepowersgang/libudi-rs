@@ -1,6 +1,17 @@
-///! Network Interface Card Metalanguage
+/*!
+ * Network Interface Card Metalanguage
+ * 
+ * # Safety of Rx/Tx traits
+ * The [NdTx]/[NdRx]/[NsrTx]/[NsrRx] traits are all marked as `unsafe` as they
+ * pass an owning handle to the control block to the method. If this control
+ * block is dropped before the future completes, the future will read freed
+ * memory.
+ * 
+ * The implementation of these methods can avoid UB by storing the cb passed in the
+ * region data after the last async call. This ensures that it will not be reused
+ * until after the future has been cleaned up.
+ */
 use crate::ffi::udi_index_t;
-
 use crate::ffi::meta_nic as ffi;
 
 pub fn nsr_rx_ind(rx_cb: CbHandleNicRx) {
@@ -228,6 +239,7 @@ future_wrapper!(nd_bind_req_op => <T as Control>(cb: *mut ffi::udi_nic_bind_cb_t
     val @ {
         val.bind_req(cb, tx_chan_index, rx_chan_index)
     } finally(res) {
+        // SAFE: Correct FFI and CB access
         unsafe {
             let status = match res {
                 Ok(v) => {
@@ -248,14 +260,13 @@ future_wrapper!(nd_bind_req_op => <T as Control>(cb: *mut ffi::udi_nic_bind_cb_t
             ffi::udi_nsr_bind_ack(cb, status)
         }
     });
-future_wrapper!(nd_unbind_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t)
-    val @ {
-        val.unbind_req(cb)
-        }
-    );
+future_wrapper!(nd_unbind_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t) val @ {
+    val.unbind_req(cb)
+});
 future_wrapper!(nd_enable_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t) val @ {
     val.enable_req(cb)
 } finally(res) {
+    // SAFE: Correct FFIs
     unsafe { ffi::udi_nsr_enable_ack(cb, crate::Error::to_status(res)) }
 });
 future_wrapper!(nd_disable_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t) val @ {
@@ -286,7 +297,7 @@ map_ops_structure!{
 }
 
 // --------------------------------------------------------------------
-
+/// Bind channel indexes between `bind_ack` and `bind_req`
 pub struct BindChannels {
     pub tx: udi_index_t,
     pub rx: udi_index_t,
@@ -304,6 +315,7 @@ pub trait NsrControl: 'static + crate::async_trickery::CbContext + crate::imc::C
 future_wrapper!(nsr_channel_bound => <T as NsrControl>(cb: *mut ffi::udi_nic_bind_cb_t) val @ {
     val.get_bind_channels(cb)
 } finally(chans) {
+    // SAFE: Correct FFI
     unsafe { ffi::udi_nd_bind_req(cb, chans.tx, chans.rx) }
 });
 struct MarkerNsrControl;
@@ -312,8 +324,9 @@ where
     T: NsrControl
 {
     fn channel_bound(&mut self, params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
-        // Start a UDI async using the bind CB
+        // SAFE: We're assuming that the channel is being correctly bound to a parent
         unsafe {
+            // Start a UDI async using the bind CB
             let cb = params.parent_bound.bind_cb as *mut ffi::udi_nic_bind_cb_t;
             nsr_channel_bound::<T>(cb)
         }
@@ -324,6 +337,7 @@ future_wrapper!(nsr_bind_ack_op => <T as NsrControl>(cb: *mut ffi::udi_nic_bind_
     let res = crate::Error::from_status(status);
     val.bind_ack(cb, res)
 } finally( () ) {
+    // SAFE: Owns the cb, correct FFI
     unsafe { crate::async_trickery::channel_event_complete::<T,ffi::udi_nic_bind_cb_t>(cb, ::udi_sys::UDI_OK as _) }
 });
 future_wrapper!(nsr_unbind_ack_op => <T as NsrControl>(cb: *mut ffi::udi_nic_cb_t, status: ::udi_sys::udi_status_t) val @ {
@@ -361,10 +375,12 @@ map_ops_structure!{
 
 // --------------------------------------------------------------------
 
-pub trait NdTx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
-    // TODO: Safety hazard with passing ownership of `cb`
-    // - If the cb is dropped early, the future will be invalidated.
-    // - But, the CB should only be returned once the TX is complete, which may not happen while `tx_req` is processing
+/// SAFETY:
+/// The implementations of `tx_req`/`exp_tx_req` shall ensure that the
+/// cb is not dropped until after the future completes.
+/// 
+/// Failure to do so can lead to crashes. See the module documentation for more details
+pub unsafe trait NdTx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
     async_method!(fn tx_req(&'a mut self, cb: CbHandleNicTx)->() as Future_tx_req);
     async_method!(fn exp_tx_req(&'a mut self, cb: CbHandleNicTx)->() as Future_exp_tx_req);
 }
@@ -376,10 +392,11 @@ where
 }
 
 future_wrapper!(nd_tx_req_op => <T as NdTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
-    // NOT SAFE: If this is dropped early, future is invalidated.
+    // SAFE: Trait is unsafe
     val.tx_req(unsafe { cb.into_owned() })
 });
 future_wrapper!(nd_exp_tx_req_op => <T as NdTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
+    // SAFE: Trait is unsafe
     val.exp_tx_req(unsafe { cb.into_owned() })
 });
 map_ops_structure!{
@@ -393,7 +410,12 @@ map_ops_structure!{
 }
 // --------------------------------------------------------------------
 
-pub trait NsrTx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
+/// SAFETY:
+/// The implementations of `tx_rdy` shall ensure that the cb is not
+/// dropped until after the future completes.
+/// 
+/// Failure to do so can lead to crashes. See the module documentation for more details
+pub unsafe trait NsrTx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
     async_method!(fn tx_rdy(&'a mut self, cb: CbHandleNicTx)->() as Future_tx_rdy);
 }
 struct MarkerNsrTx;
@@ -404,7 +426,7 @@ where
 }
 
 future_wrapper!(nsr_tx_rdy_op => <T as NsrTx>(cb: *mut ffi::udi_nic_tx_cb_t) val @ {
-    // TODO: Safety hazard
+    // SAFE: Trait is unsafe
     val.tx_rdy(unsafe { cb.into_owned() })
 });
 map_ops_structure!{
@@ -418,7 +440,12 @@ map_ops_structure!{
 
 // --------------------------------------------------------------------
 
-pub trait NdRx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
+/// SAFETY:
+/// The implementations of `rx_rdy` shall ensure that the cb is not
+/// dropped until after the future completes.
+/// 
+/// Failure to do so can lead to crashes. See the module documentation for more details
+pub unsafe trait NdRx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
     async_method!(fn rx_rdy(&'a mut self, cb: CbHandleNicRx)->() as Future_rx_rdy);
 }
 struct MarkerNdRx;
@@ -428,7 +455,7 @@ where
 {
 }
 future_wrapper!(nd_rx_rdy_op => <T as NdRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
-    // TODO: Safety hazard
+    // SAFE: The trait is unsafe
     val.rx_rdy( unsafe { cb.into_owned() } )
 });
 map_ops_structure!{
@@ -440,9 +467,18 @@ map_ops_structure!{
     }
 }
 // --------------------------------------------------------------------
-
-pub trait NsrRx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
-    async_method!(fn rx_ind(&'a mut self, cb: CbHandleNicRx)->() as Future_rx_ind);
+/// Network Service Requester - Receive operations
+/// 
+/// SAFETY:
+/// The implementations of `rx_ind`/`exp_rx_ind` shall ensure that the
+/// cb is not dropped until after the future completes.
+/// 
+/// Failure to do so can lead to crashes. See the module documentation for more details
+pub unsafe trait NsrRx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
+    async_method!{
+        /// Indication of a received packet
+        fn rx_ind(&'a mut self, cb: CbHandleNicRx)->() as Future_rx_ind
+    }
     async_method!(fn exp_rx_ind(&'a mut self, cb: CbHandleNicRx)->() as Future_exp_rx_ind);
 }
 struct MarkerNsrRx;
@@ -452,9 +488,11 @@ where
 {
 }
 future_wrapper!(nsr_rx_ind_op => <T as NsrRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
+    // SAFE: Trait is unsafe
     val.rx_ind( unsafe { cb.into_owned() } )
 });
 future_wrapper!(nsr_exp_rx_ind_op => <T as NsrRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
+    // SAFE: Trait is unsafe
     val.exp_rx_ind( unsafe { cb.into_owned() } )
 });
 map_ops_structure!{

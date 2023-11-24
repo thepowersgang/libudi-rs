@@ -377,14 +377,16 @@ pub(crate) fn signal_waiter(gcb: &mut udi_cb_t, res: WaitRes) {
 /// ```
 #[macro_export]
 macro_rules! async_method {
-    (fn $fcn_name:ident(&mut self$(, $a_n:ident: $a_ty:ty)*) -> $ret_ty:ty as $future_name:ident) => {
+    ($(#[$a:meta])* fn $fcn_name:ident(&mut self$(, $a_n:ident: $a_ty:ty)*) -> $ret_ty:ty as $future_name:ident) => {
         #[allow(non_camel_case_types)]
         type $future_name<'s>: ::core::future::Future<Output=$ret_ty>;
+		$( #[$a] )*
         fn $fcn_name<'s>(&'s mut self$(, $a_n: $a_ty)*) -> Self::$future_name<'s>;
     };
-    (fn $fcn_name:ident(&$lft:lifetime mut self$(, $a_n:ident: $a_ty:ty)*) -> $ret_ty:ty as $future_name:ident) => {
+    ($(#[$a:meta])* fn $fcn_name:ident(&$lft:lifetime mut self$(, $a_n:ident: $a_ty:ty)*) -> $ret_ty:ty as $future_name:ident) => {
         #[allow(non_camel_case_types)]
         type $future_name<'s>: ::core::future::Future<Output=$ret_ty>;
+		$( #[$a] )*
         fn $fcn_name<$lft>(&$lft mut self$(, $a_n: $a_ty)*) -> Self::$future_name<$lft>;
     };
 }

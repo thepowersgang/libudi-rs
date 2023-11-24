@@ -292,11 +292,13 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
         async move { todo!() }
     }
 }
-impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
+
+unsafe impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 {
 	type Future_tx_req<'s> = impl ::core::future::Future<Output=()> + 's;
     fn tx_req<'a>(&'a mut self, mut cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_tx_req<'a> {
         async move {
+			let mut rv: Option<::udi::meta_nic::CbHandleNicTx> = None;
 			// Linked list of cbs for multiple packets
 			loop {
 				let (mut cur_cb, next) = cb.unlink();
@@ -317,7 +319,12 @@ impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 				*cur_cb.tx_buf_mut() = buf;
 				//buf.free();
 
-				::udi::meta_nic::nsr_tx_rdy(cur_cb);
+				if let Some(ref mut d) = rv {
+					d.link_front(cur_cb);
+				}
+				else {
+					rv = Some(cur_cb);
+				}
 				if let Some(next) = next {
 					cb = next;
 				}
@@ -325,7 +332,9 @@ impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 					break;
 				}
 			}
-			todo!()
+			if let Some(cb) = rv {
+				::udi::meta_nic::nsr_tx_rdy(cb);
+			}
 		}
     }
 
@@ -334,13 +343,12 @@ impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
         self.tx_req(cb)
     }
 }
-impl ::udi::meta_nic::NdRx for ::udi::init::RData<Driver>
+unsafe impl ::udi::meta_nic::NdRx for ::udi::init::RData<Driver>
 {
 	type Future_rx_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
     fn rx_rdy<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_rx_rdy<'a> {
 		self.rx_cb_queue.push(cb);
-        async move {
-		}
+        async move {}
     }
 }
 

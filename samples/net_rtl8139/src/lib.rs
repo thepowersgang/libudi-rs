@@ -401,7 +401,9 @@ impl Driver
 		}
 	}
 }
-impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
+// SAFE? Not sure if storing in `self.tx_cbs` is fully sound, as it might get completed/used while the CB is processing.
+// - Depends on if the serial-ness of a region is only between async calls
+unsafe impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 {
 	type Future_tx_req<'s> = impl ::core::future::Future<Output=()> + 's;
     fn tx_req<'a>(&'a mut self, mut cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_tx_req<'a> {
@@ -430,7 +432,8 @@ impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
         self.tx_req(cb)
     }
 }
-impl ::udi::meta_nic::NdRx for ::udi::init::RData<Driver>
+// SAFE: Just pushes to a list
+unsafe impl ::udi::meta_nic::NdRx for ::udi::init::RData<Driver>
 {
 	type Future_rx_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
     fn rx_rdy<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_rx_rdy<'a> {
