@@ -66,6 +66,7 @@ impl ::udi::meta_nic::NsrControl for ::udi::init::RData<Driver>
         async move {
             match res {
             Ok(()) => {
+                self.parent_channel = Some(cb.gcb.channel);
                 println!("--- SINK_NSR: New device, MAC: {:x?}", &cb.mac_addr[..cb.mac_addr_len as usize]);
 
                 // Allocate a collection of RX CBs and hand them to the device
@@ -81,8 +82,6 @@ impl ::udi::meta_nic::NsrControl for ::udi::init::RData<Driver>
                     buf.write(cb.gcb(), 0..buf.len(), b"TestPacketContent").await;
                     ::udi::meta_nic::nd_tx_req(tx_cb);
                 }
-
-                self.parent_channel = Some(cb.gcb.channel);
                 },
             Err(e) => println!("Error: {:?}", e),
             }

@@ -18,6 +18,15 @@ struct ChannelInnerSide {
     ops: &'static dyn udi::metalang_trait::MetalangOpsHandler,
     /// Context pointer to use
     context: *mut ::udi::ffi::c_void,
+    //
+    allocated: bool,
+}
+impl Drop for ChannelInnerSide {
+    fn drop(&mut self) {
+        if self.allocated {
+            unsafe { ::libc::free(self.context as *mut _); }
+        }
+    }
 }
 
 /// Inner helper: A reference to a channel w/ side
@@ -84,7 +93,27 @@ pub unsafe fn anchor(
 )
 {
     let cr = ChannelRef::from_handle(channel);
-    cr.0.sides[cr.1 as usize].set(ChannelInnerSide { driver_instance, context, ops }).ok().expect("Anchoring an anchored end");
+    cr.0.sides[cr.1 as usize]
+        .set(ChannelInnerSide { driver_instance, context, allocated: false, ops })
+        .ok().expect("Anchoring an anchored end");
+}
+/// Anchor a channel end, allocating a channel context instead of using a pre-allocated context
+pub unsafe fn anchor_with_context<T: 'static>(
+    channel: ::udi::ffi::udi_channel_t,
+    driver_instance: ::std::sync::Arc<crate::DriverInstance>,
+    ops: &'static dyn udi::metalang_trait::MetalangOpsHandler,
+    size: usize,
+    inner: T,
+)
+{
+    assert!(size >= ::core::mem::size_of::<T>());
+    let context = ::libc::calloc(1, size) as *mut T;
+    ::core::ptr::write(context, inner);
+
+    let cr = ChannelRef::from_handle(channel);
+    cr.0.sides[cr.1 as usize]
+        .set(ChannelInnerSide { driver_instance, context: context as *mut _, allocated: true, ops })
+        .ok().expect("Anchoring an anchored end");
 }
 
 /// Call through a channel

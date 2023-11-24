@@ -201,7 +201,7 @@ impl InstanceInitState
             let cb: *mut ::udi::ffi::meta_mgmt::udi_enumerate_cb_t = self.alloc_cb_raw();
             (*cb).gcb.scratch = ::libc::calloc(1, pri_init.mgmt_scratch_requirement);
             (*cb).attr_list = ::libc::calloc(pri_init.enumeration_attr_list_length as _, ::core::mem::size_of::<udi::ffi::attr::udi_instance_attr_list_t>()) as _;
-            (*cb).child_data = ::libc::malloc(pri_init.child_data_size);
+            (*cb).child_data = if pri_init.child_data_size > 0 { ::libc::malloc(pri_init.child_data_size) } else { ::core::ptr::null_mut() };
             //(*cb).trace_mask = 0;
             //(*cb).meta_idx = 0;
             (

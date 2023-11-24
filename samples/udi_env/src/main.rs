@@ -85,7 +85,9 @@ fn main() {
     }
 
     // TODO: Run device emulation?
-    println!("--- DONE ---")
+    // TODO: Run async tasks for each region
+    println!("--- DONE ---");
+    ::std::process::exit(0);
 }
 
 /// Create an instance for all matching parent instances
@@ -251,24 +253,26 @@ fn maybe_child_bind(
 
     child.is_bound.set(true);
 
-    let (channel_parent, channel_child) = ::udi_environment::channels::spawn_raw();
+    // HACK: Give the child (that is likely to be holding the channel handle) the non-tagged pointer
+    // - So valgrind can see the handle
+    let (channel_child, channel_parent) = ::udi_environment::channels::spawn_raw();
     println!("channel_parent={channel_parent:p}, channel_child={channel_child:p}");
     unsafe {
         let ops_init = parent.module.get_ops_init(child.ops_idx).unwrap();
         let ops = parent.module.get_meta_ops(ops_init);
         let rdata = parent.regions[child.region_idx_real].context;
-        let context = if ops_init.chan_context_size > 0 {
-                assert!(ops_init.chan_context_size >= ::core::mem::size_of::<::udi::ffi::init::udi_child_chan_context_t>());
-                let ccx = ::libc::malloc(ops_init.chan_context_size) as *mut ::udi::ffi::init::udi_child_chan_context_t;
-                (*ccx).rdata = rdata;
-                (*ccx).child_id = child.child_id;
-                println!("udi_child_chan_context_t(s={}): {:p} #{}", ops_init.chan_context_size, rdata, child.child_id);
-                ccx as *mut ::udi::ffi::c_void
-            }
-            else {
-                rdata
-            };
-        ::udi_environment::channels::anchor(channel_parent, parent.clone(), ops, context);
+        if ops_init.chan_context_size > 0 {
+            ::udi_environment::channels::anchor_with_context(
+                channel_parent, parent.clone(), ops, ops_init.chan_context_size,
+                ::udi::ffi::init::udi_child_chan_context_t {
+                    rdata,
+                    child_id: child.child_id,
+                }
+            );
+        }
+        else {
+            ::udi_environment::channels::anchor(channel_parent, parent.clone(), ops, rdata);
+        }
     }
 
     println!("maybe_child_bind: Creating instance of `{}` bound to {} #{}",

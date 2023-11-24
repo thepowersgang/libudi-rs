@@ -4,7 +4,15 @@
 use ::udi_sys::imc::udi_channel_event_cb_t;
 
 /// Channel handle
+#[repr(transparent)]
 pub struct ChannelHandle(::udi_sys::udi_channel_t);
+impl Drop for ChannelHandle {
+    fn drop(&mut self) {
+        if ! self.0.is_null() {
+            todo!("drop ChannelHandle")
+        }
+    }
+}
 impl Default for ChannelHandle {
     fn default() -> Self {
         Self::null()
