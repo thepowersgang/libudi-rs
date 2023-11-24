@@ -1,7 +1,5 @@
 //! Driver initialisation (related to [crate::meta_mgmt])
-use ::core::pin::Pin;
 use ::core::future::Future;
-use ::core::task::Poll;
 
 use crate::async_trickery;
 use crate::ffi;
@@ -243,38 +241,6 @@ impl<Driver> ::core::ops::DerefMut for RData<Driver>
 	}
 }
 
-struct MgmtState<'a, T: Driver> {
-	op: Option<MgmtStateInit<'a, T>>,
-}
-impl<'a, T: 'static+Driver> Future for MgmtState<'a, T> {
-	type Output = ();
-	fn poll(self: Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> Poll<()> {
-		// SAFE: Pin projection
-		let v = unsafe { Pin::new_unchecked(Pin::get_unchecked_mut(self).op.as_mut().unwrap()) };
-		v.poll(cx)
-	}
-}
-struct MgmtStateInit<'a, T: Driver> {
-	inner_future: T::Future_init<'a>,
-}
-impl<'a, T: Driver> Future for MgmtStateInit<'a, T> {
-	type Output = ();
-	fn poll(self: Pin<&mut Self>, cx: &mut ::core::task::Context<'_>) -> Poll<Self::Output> {
-		let self_ = unsafe { Pin::get_unchecked_mut(self) };
-		// SAFE: Pin projecting
-		match unsafe { Pin::new_unchecked(&mut self_.inner_future) }.poll(cx)
-		{
-		Poll::Pending => Poll::Pending,
-		Poll::Ready( () ) => {
-			let cb: &ffi::meta_mgmt::udi_usage_cb_t = async_trickery::cb_from_waker(cx.waker());
-            // SAFE: Correct FFI.
-			unsafe { ffi::meta_mgmt::udi_usage_res(cb as *const _ as *mut _); }
-			Poll::Ready( () )
-			},
-		}
-	}
-}
-
 // TODO: Figure out where we can store state properly
 // - Probably in `context`, as `scratch` is limited and not always available :(
 // - But, what are the rules for `context` being updated?
@@ -357,7 +323,7 @@ where
 {
     pub const fn scratch_requirement() -> usize {
         let rv = 0;
-		let rv = crate::const_max(rv, async_trickery::task_size::<MgmtState<RData<T>>>());
+		let rv = crate::const_max(rv, async_trickery::task_size::< <RData<T> as Driver>::Future_init<'static> >());
 		let rv = crate::const_max(rv, enumerate_req_op::task_size::<RData<T>>());
 		let rv = crate::const_max(rv, devmgmt_req_op::task_size::<RData<T>>());
 		let rv = crate::const_max(rv, final_cleanup_req_op::task_size::<RData<T>>());
@@ -377,8 +343,10 @@ where
 				(*rd).is_init = true;
 				::core::ptr::write(&mut (*rd).inner, Default::default());
 			}
-            let job = MgmtStateInit::<RData<T>> { inner_future: (*rd).usage_ind(crate::CbRef::new(cb), resource_level) };
-            async_trickery::init_task(&*cb, MgmtState { op: Some(job) }, |_,_|());
+			async_trickery::init_task(&*cb,
+				(*rd).usage_ind(crate::CbRef::new(cb), resource_level),
+				|cb,()| ffi::meta_mgmt::udi_usage_res(cb)
+			);
         }
         ffi::meta_mgmt::udi_mgmt_ops_t {
 			usage_ind_op: usage_ind::<T>,
