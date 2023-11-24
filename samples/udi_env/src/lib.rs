@@ -184,6 +184,8 @@ pub struct DriverInstance
 
     device: ::std::sync::OnceLock<Box<dyn crate::emulated_devices::PioDevice>>,
     pio_abort_sequence: ::std::sync::Mutex<Option<(udi_impl::pio::Handle, usize)>>,
+
+    pub management_state: management_agent::ManagementState,
 }
 impl DriverInstance {
     pub fn new(driver_module: Arc<DriverModule<'static>>) -> Self
@@ -200,6 +202,7 @@ impl DriverInstance {
             children: Default::default(),
             device: Default::default(),
             pio_abort_sequence: Default::default(),
+            management_state: Default::default(),
         }
     }
 }
@@ -237,4 +240,20 @@ pub struct DriverChild {
     pub ops_idx: ::udi::ffi::udi_index_t,
     pub region_idx_real: usize,
     pub attrs: Vec<::udi::ffi::attr::udi_instance_attr_list_t>,
+}
+
+pub struct Operation {
+    cb: *mut ::udi::ffi::udi_cb_t,
+    op: Box<dyn FnOnce(*mut ::udi::ffi::udi_cb_t)>,
+}
+impl Operation {
+    pub fn new<Cb>(cb: *mut Cb, op: impl FnOnce(*mut Cb)+'static) -> Self {
+        Operation {
+            cb: cb as *mut _,
+            op: Box::new(move |cb| op(cb as *mut _)),
+        }
+    }
+    pub fn invoke(self) {
+        (self.op)(self.cb);
+    }
 }

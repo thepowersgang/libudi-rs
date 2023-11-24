@@ -284,21 +284,18 @@ fn maybe_child_bind(
 
 fn create_driver_instance<'a>(driver_module: Arc<DriverModule<'static>>, channel_to_parent: Option<::udi::ffi::udi_channel_t>) -> Arc<DriverInstance>
 {
-    // See UDI Spec 10.1.2
-
-    // - Create primary region
     let instance = Arc::new(DriverInstance::new(driver_module));
-    let mut state = ::udi_environment::management_agent::InstanceInitState::new(instance, channel_to_parent);
+    instance.management_state.start_init(channel_to_parent);
     
-    while let Some((cb, fcn)) = state.next_op().take()
+    while let Some(op) = instance.management_state.next_op(&instance)
     {
         unsafe {
-            (*cb).initiator_context = &mut state as *mut _ as *mut ::udi::ffi::c_void;
-            fcn(cb);
+            op.invoke();
 
-            let returned_cb = state.returned_cb().expect("No returned CB?");
-            ::udi_environment::udi_impl::cb::free_internal(returned_cb);
+            //let returned_cb = instance.management_state.returned_cb().expect("No returned CB?");
+            //::udi_environment::udi_impl::cb::free_internal(returned_cb);
         }
     }
-    state.assert_complete()
+
+    instance
 }
