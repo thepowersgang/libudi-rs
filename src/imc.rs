@@ -122,15 +122,26 @@ pub unsafe extern "C" fn channel_event_ind_op<T: ChannelHandler<Marker>, Marker:
     let state: &mut T = crate::async_trickery::get_rdata_t(&*cb);
     match (*cb).event
     {
-    ::udi_sys::imc::UDI_CHANNEL_CLOSED => state.channel_closed(),
+    // Called when the remote end of the channel is closed, this function is expected to close the channel afer `udi_channel_event_complete`
+    ::udi_sys::imc::UDI_CHANNEL_CLOSED => {
+        state.channel_closed();
+        let channel = (*cb).gcb.channel;
+        crate::ffi::imc::udi_channel_event_complete(cb, ::udi_sys::UDI_OK as _);
+        crate::ffi::imc::udi_channel_close(channel);
+        },
+    // Another region has been bound to this via parent or internal bind
+    // Note: Only called for the non-initiating end (for child for a parent-child, and for primary for sec-primary)
     ::udi_sys::imc::UDI_CHANNEL_BOUND => {
         crate::async_trickery::set_channel_cb::<T>(cb);
         crate::imc::ChannelInit::init(state);
         state.channel_bound( &(*cb).params );
+        // no `udi_channel_event_complete` call, it's done by `channel_bound` (maybe indirectly)
         },
+    // Called when an async operation is to be aborted
     ::udi_sys::imc::UDI_CHANNEL_OP_ABORTED => {
         let aborted_cb = (*cb).params.orig_cb;
         crate::async_trickery::abort_task(aborted_cb);
+        crate::ffi::imc::udi_channel_event_complete(cb, ::udi_sys::UDI_OK as _);
         },
     _ => {},
     }

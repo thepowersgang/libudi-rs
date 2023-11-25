@@ -15,6 +15,8 @@ use ::core::future::Future;
 use crate::ffi::udi_cb_t;
 
 /// Trait for the `context` field in a CB
+// TODO: Init is covered for now, but what about deallocation
+// - On unbind it can be dropped, but it's possible to use the same context for multiple channel
 pub trait CbContext {
 	fn maybe_init(&mut self);
 	fn channel_cb_slot(&mut self) -> &mut *mut crate::ffi::imc::udi_channel_event_cb_t;

@@ -60,6 +60,11 @@ unsafe extern "C" fn udi_channel_spawn(
 }
 
 #[no_mangle]
+unsafe extern "C" fn udi_channel_close(channel: udi_channel_t) {
+    todo!("udi_channel_close");
+}
+
+#[no_mangle]
 unsafe extern "C" fn udi_channel_event_complete(cb: *mut udi_channel_event_cb_t, status: udi_status_t)
 {
     match (*cb).event
