@@ -27,6 +27,9 @@ struct Driver
 	cur_tx_slot: u8,
 	/// Information about each TX slot
 	tx_cbs: [Option<TxSlot>; 4],
+
+	intr_bound: bool,
+	bind_complete: bool,
 }
 struct DmaStructures {
 	rx_buf: ::udi::physio::dma::DmaAlloc,
@@ -163,6 +166,13 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 				self.mac_addr[4] as _,
 				self.mac_addr[5] as _,
 				);
+			if self.intr_bound {
+				for _ in 0 .. 4/*NUM_INTR_EVENT_CBS*/ {
+					let intr_event_cb = ::udi::cb::alloc::<CbList::IntrEvent>(cb.gcb(), self.intr_channel.raw()).await;
+					::udi::meta_bridge::event_rdy(intr_event_cb);
+				}
+			}
+			self.bind_complete = true;
 			Ok( () )
 		}
     }
@@ -180,9 +190,12 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 				// uh-oh, error
 			}
 			else {
-				for _ in 0 .. 4/*NUM_INTR_EVENT_CBS*/ {
-					let intr_event_cb = ::udi::cb::alloc::<CbList::IntrEvent>(cb.gcb(), self.intr_channel.raw()).await;
-					::udi::meta_bridge::event_rdy(intr_event_cb);
+				self.intr_bound = true;
+				if self.bind_complete {
+					for _ in 0 .. 4/*NUM_INTR_EVENT_CBS*/ {
+						let intr_event_cb = ::udi::cb::alloc::<CbList::IntrEvent>(cb.gcb(), self.intr_channel.raw()).await;
+						::udi::meta_bridge::event_rdy(intr_event_cb);
+					}
 				}
 			}
 		}
@@ -201,6 +214,7 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
     fn intr_event_ind<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefEvent<'a>, _flags: u8) -> Self::Future_intr_event_ind<'a> {
 		async move {
 			let isr = cb.intr_result;
+			::udi::debug_printf!("intr_event_ind: ISR=0x%04hx", isr);
 			if isr & pio_ops::FLAG_ISR_ROK != 0 {
 				// RX OK
 				while let Ok(Some(addr)) = self.inner.pio_handles.rx_check(cb.gcb()).await
@@ -209,7 +223,7 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 					let (flags, data) = unsafe {
 						let addr = self.dma_handles.as_ref().unwrap().rx_buf.mem_ptr.offset(addr as isize) as *const u8;
 						let flags = *addr.offset(0) as u16 | (*addr.offset(1) as u16) << 8;
-						let raw_len = *addr.offset(1) as u16 | (*addr.offset(2) as u16) << 8;
+						let raw_len = *addr.offset(2) as u16 | (*addr.offset(3) as u16) << 8;
 						(flags, ::core::slice::from_raw_parts(addr.offset(4), raw_len as usize))
 					};
 					::udi::debug_printf!("RX packet: %u bytes flags=%04x", data.len() as u32, flags as u32);
