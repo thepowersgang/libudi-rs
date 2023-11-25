@@ -68,7 +68,7 @@ unsafe extern "C" fn udi_dma_constraints_attr_set(
             }
             UDI_OK
         };
-    callback(gcb, src_constraints, status as _);
+        crate::async_call(gcb, move |gcb| callback(gcb, src_constraints, status as _))
 }
 #[no_mangle]
 unsafe extern "C" fn udi_dma_constraints_attr_reset(

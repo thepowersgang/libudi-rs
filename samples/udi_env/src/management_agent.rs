@@ -63,6 +63,16 @@ impl ManagementAgent
         _ => panic!("`start_init` called multiple times?"),
         }
     }
+    /// Has this module completed initialisation?
+    pub fn is_ready(&self) -> bool {
+        let inner = self.inner.lock().unwrap();
+        match inner.state
+        {
+        ManagementState::PreInit => false,
+        ManagementState::Init(_) => false,
+        ManagementState::Initialised => true,
+        }
+    }
     /// Check if the MA has anything to do
     pub fn poll(&self, instance: &Arc<crate::DriverInstance>) -> NextOp
     {

@@ -37,7 +37,7 @@ unsafe extern "C" fn udi_cb_alloc_dynamic(
 {
     let driver_module = &crate::channels::get_driver_instance(&(*gcb).channel).module;
     let rv = alloc_internal(driver_module, cb_idx, (*gcb).context, default_channel, None, None, Some((inline_size, inline_layout)));
-    callback(gcb, rv);
+    crate::async_call(gcb, move |gcb| callback(gcb, rv))
 }
 
 #[no_mangle]
@@ -59,7 +59,7 @@ unsafe extern "C" fn udi_cb_alloc_batch(
             Some(prev_cb), if with_buf.to_bool() { Some((buf_size, path_handle)) } else { None }, None
         );
     }
-    callback(gcb, prev_cb);
+    crate::async_call(gcb, move |gcb| callback(gcb, prev_cb));
 }
 
 #[no_mangle]

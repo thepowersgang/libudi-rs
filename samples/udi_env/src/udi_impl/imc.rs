@@ -22,7 +22,7 @@ unsafe extern "C" fn udi_channel_anchor(
     let ops_init = driver_instance.module.get_ops_init(ops_idx).unwrap();
     let ops = driver_instance.module.get_meta_ops(ops_init);
     crate::channels::anchor(channel, driver_instance, ops, channel_context);
-    (callback)(gcb, channel);
+    crate::async_call(gcb, move |gcb| callback(gcb, channel))
 }
 
 /// Spawn a new channel
@@ -56,7 +56,7 @@ unsafe extern "C" fn udi_channel_spawn(
         crate::channels::anchor(new_channel, driver_instance, ops, channel_context);
     }
 
-    callback(gcb, new_channel);
+    crate::async_call(gcb, move |gcb| callback(gcb, new_channel))
 }
 
 #[no_mangle]

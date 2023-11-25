@@ -209,6 +209,7 @@ impl DriverInstance {
 pub struct DriverRegion
 {
     pub context: *mut ::udi::ffi::c_void,
+    pub task_queue: ::std::sync::Mutex< ::std::collections::VecDeque<crate::Operation> >,
 }
 impl DriverRegion
 {
@@ -230,6 +231,7 @@ impl DriverRegion
                 }
                 v as *mut ::udi::ffi::c_void
                 },
+            task_queue: Default::default(),
         }
     }
 }
@@ -255,5 +257,17 @@ impl Operation {
     }
     pub fn invoke(self) {
         (self.op)(self.cb);
+    }
+}
+
+unsafe fn async_call(gcb: *mut ::udi::ffi::udi_cb_t, op: impl FnOnce(*mut ::udi::ffi::udi_cb_t)+'static) {
+    // TODO: Check the stack depth, and if it's too deep push onto the region's queue
+    if true {
+        let region = channels::get_region( &(*gcb).channel );
+        region.task_queue.lock().unwrap()
+            .push_back(crate::Operation::new(gcb, op))
+    }
+    else {
+        op(gcb);
     }
 }

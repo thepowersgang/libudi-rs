@@ -102,7 +102,7 @@ unsafe extern "C" fn udi_pio_map(
         serialization_domain,
     });
     let rv = Box::into_raw(rv) as udi_pio_handle_t;
-    callback(gcb, rv)
+    crate::async_call(gcb, move |gcb| callback(gcb, rv))
 }
 #[no_mangle]
 unsafe extern "C" fn udi_pio_unmap(pio_handle: udi_pio_handle_t)
@@ -157,7 +157,7 @@ unsafe extern "C" fn udi_pio_trans(
     if status != 0 {
         println!("PIO Error {:?}", status);
     }
-    callback(gcb, buf, status, retval);
+    crate::async_call(gcb, move |gcb| callback(gcb, buf, status, retval))
 }
 
 #[derive(Default,Copy,Clone)]

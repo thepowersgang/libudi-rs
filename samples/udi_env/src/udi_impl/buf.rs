@@ -249,7 +249,7 @@ unsafe extern "C" fn udi_buf_write(
         dst.get_slice_mut(dst_off, min_len).copy_from_slice(&src[..min_len]);
     }
     
-    callback(gcb, dst_buf);
+    crate::async_call(gcb, move |gcb| callback(gcb, dst_buf))
 }
 
 #[no_mangle]
@@ -307,7 +307,7 @@ unsafe extern "C" fn udi_buf_path_alloc(
 )
 {
     let rv = Box::into_raw(Box::new(RealPath {})) as udi_buf_path_t;
-    callback(gcb, rv);
+    crate::async_call(gcb, move |gcb| callback(gcb, rv))
 }
 #[no_mangle]
 unsafe extern "C" fn udi_buf_path_free(buf_path: udi_buf_path_t)
@@ -362,7 +362,7 @@ unsafe extern "C" fn udi_buf_tag_set(
             }
         }
     }
-    callback(gcb, buf);
+    crate::async_call(gcb, move |gcb| callback(gcb, buf))
 }
 
 #[no_mangle]
@@ -453,7 +453,7 @@ unsafe extern "C" fn udi_buf_tag_apply(
             todo!("udi_buf_tag_apply");
         }
     }
-    callback(gcb, buf);
+    crate::async_call(gcb, move |gcb| callback(gcb, buf))
 }
 
 fn get_current_driver_index() -> u32 {

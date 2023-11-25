@@ -89,37 +89,53 @@ fn main() {
     // - Per-region operations queue
     // - Per-instance management agent
     // - Emulated devices
-    #[cfg(false_)]
-    if false {
-        loop {
-            for inst in &state.instances {
-                match inst.management_state.poll(&inst)
-                {
-                ::udi_environment::management_agent::NextOp::Idle => {},
-                ::udi_environment::management_agent::NextOp::Op(t) => inst.regions[0].task_queue.push_back(t),
-                ::udi_environment::management_agent::NextOp::InitComplete => {
-                    // TODO: Check children for bindings
-                    },
-                }
+    loop {
+        println!("--- LOOP ---");
+        let mut action_happened = false;
+        let mut new_instances = Vec::new();
 
-                for rgn in &inst.regions {
-                    if let Some(t) = rgn.task_queue.pop_front() {
-                        t.invoke();
-                    }
-                }
+        // Check all instances
+        // - Management agent
+        // - Device
+        // - Region actions
+        for inst in &state.instances {
+            use ::udi_environment::management_agent::NextOp;
+            match inst.management_state.poll(&inst)
+            {
+            NextOp::Idle => {},
+            NextOp::Op(t) => inst.regions[0].task_queue.lock().unwrap().push_back(t),
+            NextOp::InitComplete => {
+                assert!(inst.management_state.is_ready());
+                bind_children(&mut new_instances, &state.modules, inst);
+                },
+            }
 
-                if let Some(dev) = inst.device.get() {
-                    if dev.poll() {
-                        // Interrupt generated, need to get the bus bridge to preprocess and dispatch it
-                    }
+            if let Some(dev) = inst.device.get() {
+                dev.poll();
+            }
+
+            for rgn in &inst.regions {
+                let op = rgn.task_queue.lock().unwrap().pop_front();
+                if let Some(t) = op {
+                    action_happened = true;
+                    t.invoke();
                 }
             }
+        }
+        if !new_instances.is_empty() {
+            action_happened = true;
+        }
+        state.instances.extend(new_instances.into_iter());
+        if !action_happened {
+            break;
         }
     }
 
     println!("--- DONE ---");
     ::std::process::exit(0);
 }
+
+
 
 /// Create an instance for all matching parent instances
 fn register_driver_module(state: &mut GlobalState, driver_module: Arc<DriverModule<'static>>)
@@ -163,34 +179,43 @@ fn register_driver_module(state: &mut GlobalState, driver_module: Arc<DriverModu
     // For all new instances
     for parent in &mut state.instances[i..]
     {
-        // Look for child drivers
-        for child in parent.children.lock().unwrap().iter()
-        {
-            if child.is_bound.get() {
-                continue ;
-            }
-            let meta2 = parent.module.get_metalang_name(child.meta_idx);
-
-            // Find a matching device
-            for driver_module in state.modules.iter()
-            {
-                for entry in driver_module.udiprops() {
-                    let ::udiprops_parse::Entry::Device { device_name: _, meta_idx, attributes } = entry else {
-                        continue
-                        };
-                    let meta = driver_module.get_metalang_name(meta_idx);
-
-                    if let Some(i) = maybe_child_bind(&driver_module, meta, attributes, parent, meta2, child)
-                    {
-                        new_instances.push(i);
-                    }
-                }
-            }
+        if !parent.management_state.is_ready() {
+            continue ;
         }
+        bind_children(&mut new_instances, &state.modules, &parent);
     }
 
     state.instances.extend(new_instances.drain(..));
     state.modules.push(driver_module);
+}
+
+fn bind_children(new_instances: &mut Vec<Arc<DriverInstance>>, modules: &[Arc<DriverModule<'static>>], inst: &Arc<DriverInstance>)
+{
+    // Look for drivers for enumerated children
+    for child in inst.children.lock().unwrap().iter()
+    {
+        if child.is_bound.get() {
+            // Huh? - How is it already bound?
+            continue ;
+        }
+        let meta2 = inst.module.get_metalang_name(child.meta_idx);
+
+        // Find a matching device
+        for driver_module in modules.iter()
+        {
+            for entry in driver_module.udiprops() {
+                let ::udiprops_parse::Entry::Device { device_name: _, meta_idx, attributes } = entry else {
+                    continue
+                    };
+                let meta = driver_module.get_metalang_name(meta_idx);
+
+                if let Some(i) = maybe_child_bind(&driver_module, meta, attributes, inst, meta2, child)
+                {
+                    new_instances.push(i);
+                }
+            }
+        }
+    }
 }
 
 fn check_attributes(filter_attributes: ::udiprops_parse::parsed::AttributeList, child_attrs: &[::udi::ffi::attr::udi_instance_attr_list_t]) -> bool
@@ -264,7 +289,6 @@ fn check_attributes(filter_attributes: ::udiprops_parse::parsed::AttributeList, 
     true
 }
 
-
 fn maybe_child_bind(
     driver_module: &Arc<DriverModule<'static>>,
     meta: Option<&str>,
@@ -317,16 +341,5 @@ fn create_driver_instance<'a>(driver_module: Arc<DriverModule<'static>>, channel
 {
     let instance = Arc::new(DriverInstance::new(driver_module));
     instance.management_state.start_init(channel_to_parent);
-    
-    loop {
-        use ::udi_environment::management_agent::NextOp;
-        match instance.management_state.poll(&instance)
-        {
-        NextOp::Idle => panic!("Unexpected idle MA"),
-        NextOp::Op(op) => op.invoke(),
-        NextOp::InitComplete => break,
-        }
-    }
-
     instance
 }

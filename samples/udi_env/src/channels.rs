@@ -57,6 +57,21 @@ pub unsafe fn get_other_instance(ch: &::udi::ffi::udi_channel_t) -> ::std::sync:
     let cr = ChannelRef::from_handle(*ch);
     ChannelRef::from_handle(cr.get_handle_reversed()).get_side().unwrap().driver_instance.clone()
 }
+pub unsafe fn get_region(ch: &::udi::ffi::udi_channel_t) -> &crate::DriverRegion {
+    let cr = ChannelRef::from_handle(*ch);
+    let ch_side = cr.get_side().unwrap();
+    // Launder the pointer - so we can return the borrow
+    let ch_side = &*(ch_side as *const ChannelInnerSide);
+    for r in &ch_side.driver_instance.regions {
+        if r.context == ch_side.context {
+            return r;
+        }
+        if r.context == *(ch_side.context as *mut *mut ::udi::ffi::c_void) {
+            return r;
+        }
+    }
+    todo!();
+}
 
 /// Spawn a channel without needing a parent/source channel
 /// 
@@ -142,7 +157,8 @@ pub unsafe fn anchor_with_context<T: 'static>(
 /// - `name` is the name of the function being called (for debugging)
 /// - `cb` is the control block through which the call is happening
 /// - `call` invokes the callback in the metalanguage ops structure
-pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::metalang_trait::MetalangCb>(name: &'static str, cb: *mut Cb, call: impl FnOnce(&O, *mut Cb))
+pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::metalang_trait::MetalangCb>(
+    name: &'static str, cb: *mut Cb, call: impl FnOnce(&O, *mut Cb) + 'static)
 {
     // Get the channel currently in the cb, and reverse it
     let gcb = cb as *mut ::udi::ffi::udi_cb_t;
@@ -178,7 +194,8 @@ pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::m
         panic!("Metalang mismatch: Expected {:?}, got {:?}", ch_side.ops.type_name(), ::std::any::type_name::<O>());
     }
     let ops = &*(ch_side.ops as *const _ as *const O);
-    call(ops, cb);
+
+    crate::async_call(cb as *mut _, move |cb| call(ops, cb as *mut Cb));
 }
 
 /// Call `udi_event_ind` over the channel, for an internal bind event

@@ -98,7 +98,7 @@ unsafe extern "C" fn udi_dma_prepare(
         dma_info: None,
     });
 
-    callback(gcb, Box::into_raw(rv) as ffi::udi_dma_handle_t)
+    crate::async_call(gcb, move |gcb| callback(gcb, Box::into_raw(rv) as ffi::udi_dma_handle_t))
 }
 
 #[no_mangle]
@@ -157,7 +157,7 @@ unsafe extern "C" fn udi_dma_buf_map(
     unsafe extern "C" fn sync_callback(_: *mut udi_cb_t) {}
     udi_dma_sync(sync_callback, gcb, dma_handle as *mut _ as *mut _, 0, len, flags);
 
-    callback(gcb, scgth, complete, ::udi::ffi::UDI_OK as _);
+    crate::async_call(gcb, move |gcb| callback(gcb, scgth, complete, ::udi::ffi::UDI_OK as _))
 }
 
 #[no_mangle]
@@ -229,7 +229,7 @@ unsafe extern "C" fn udi_dma_mem_alloc(
     println!("scgth={:p}", scgth);
     let rv = Box::into_raw(rv) as ffi::udi_dma_handle_t;
 
-    callback(gcb, rv, mem_ptr, pad, ::udi::ffi::TRUE, scgth, ::udi::ffi::FALSE);
+    crate::async_call(gcb, move |gcb| callback(gcb, rv, mem_ptr, pad, ::udi::ffi::TRUE, scgth, ::udi::ffi::FALSE))
 }
 
 #[no_mangle]
@@ -280,7 +280,7 @@ unsafe extern "C" fn udi_dma_sync(
     Direction::BiDir => todo!("udi_dma_sync In+Out"),
     }
 
-    callback(gcb);
+    crate::async_call(gcb, move |gcb| callback(gcb))
 }
 
 #[no_mangle]
@@ -302,7 +302,7 @@ unsafe extern "C" fn udi_dma_scgth_sync(
         ::core::slice::from_raw_parts_mut(dma_info.scgth.scgth_elements.el32p as *mut u8, ele_size * dma_info.scgth.scgth_num_elements as usize)
     };
     dma_info.scgth_handle.read(0, dst);
-    callback(gcb);
+    crate::async_call(gcb, move |gcb| callback(gcb));
 }
 
 
@@ -341,5 +341,5 @@ unsafe extern "C" fn udi_dma_mem_to_buf(
 
     crate::udi_impl::buf::write(&mut dst_buf, 0..0, &data[src_off..][..src_len]);
 
-    callback(gcb, dst_buf);
+    crate::async_call(gcb, move |gcb| callback(gcb, dst_buf));
 }
