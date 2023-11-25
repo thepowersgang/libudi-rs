@@ -163,7 +163,7 @@ pub unsafe fn remote_call<O: udi::metalang_trait::MetalangOpsHandler, Cb: udi::m
     // Get the channel currently in the cb, and reverse it
     let gcb = cb as *mut ::udi::ffi::udi_cb_t;
     let ch = ChannelRef::from_handle((*gcb).channel);
-    let ch_side = ch.0.sides[!ch.1 as usize].get().unwrap();
+    let ch_side = ch.0.sides[!ch.1 as usize].get().expect("Calling with no remote handle");
     
     // Get the scratch as the max of all CB instances for this type
     let driver_module = &*ch_side.driver_instance.module;

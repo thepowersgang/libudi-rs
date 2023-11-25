@@ -327,8 +327,8 @@ impl MemRxUpdate {
     // 1: Normal
     LABEL 1;
     // - Read ISR and ack all set bits
-    IN.B R0, Regs::Isr as _;
-    OUT.B Regs::Isr as _, R0;
+    IN.S R0, Regs::Isr as _;
+    OUT.S Regs::Isr as _, R0;
     END.B R0;
     // 2: Overrun
     LABEL 2;

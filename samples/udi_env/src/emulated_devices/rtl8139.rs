@@ -17,6 +17,7 @@ impl Device {
 impl super::PioDevice for Device {
 
     fn poll(&self) {
+        println!("rtl8139 - poll: {:#x}", self.regs.lock().unwrap().isr);
         if self.regs.lock().unwrap().isr != 0 {
             self.irq.raise();
         }
@@ -77,6 +78,8 @@ impl super::PioDevice for Device {
                 let tsad = regs.tsad[idx];
                 let data = self.dma.read(tsad, size);
                 println!("RTL8139 TX {} {:02x?}", idx, data);
+
+                regs.isr |= 1 << 2; // TOK
             }
             },
         regs::TSAD0..=regs::TSAD3 => regs.tsad[ (reg >> 2) as usize & 3 ] = u32::decode(src, "TSADn"),

@@ -162,11 +162,13 @@ impl ::udi::meta_bridge::IntrDispatcher for ::udi::ChildBind<Driver,ChildState>
 impl crate::emulated_devices::InterruptHandler for InterruptHandler {
     fn raise(&mut self) {
         let Some(mut cb) = self.cbs.queue.lock().unwrap().pop_front() else {
+            println!("No interrupt CBs!");
             return ;
         };
 
         cb.set_channel(&self.channel);
         if self.preproc.as_raw().is_null() {
+            println!("No preprocess");
             let flags = 0;
             unsafe {
                 ::udi::ffi::meta_bridge::udi_intr_event_ind(cb.into_raw(), flags);
@@ -179,7 +181,7 @@ impl crate::emulated_devices::InterruptHandler for InterruptHandler {
                 let buf = cb.event_buf;
                 ::udi::ffi::pio::udi_pio_trans(
                     callback, cb.into_raw() as *mut _,
-                    self.preproc.as_raw(), Default::default(),
+                    self.preproc.as_raw(), 1.into(),    // Normal interrupt
                     buf, ::core::ptr::null_mut()
                 );
             }
@@ -191,6 +193,7 @@ impl crate::emulated_devices::InterruptHandler for InterruptHandler {
             ) {
                 assert!(_status == ::udi::ffi::UDI_OK as _);
                 unsafe {
+                    println!("Preprocess complete");
                     let cb = gcb as *mut ::udi::ffi::meta_bridge::udi_intr_event_cb_t;
                     let flags = ::core::ptr::read( (*cb).gcb.scratch as *const u8 )
                         /*| ::udi::ffi::meta_bridge::UDI_INTR_PREPROCESSED*/

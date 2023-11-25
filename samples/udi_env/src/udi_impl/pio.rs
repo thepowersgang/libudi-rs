@@ -428,6 +428,7 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
         }
     }
     let mut ofs = find_label(trans_list, start_label)?;
+    println!("pio_trans_inner: Start at +{} of {}", ofs, trans_list.len());
     for _ in 0 .. MAX_OPERATIONS {
         let op = &trans_list[ofs];
         let s = Size(op.tran_size);

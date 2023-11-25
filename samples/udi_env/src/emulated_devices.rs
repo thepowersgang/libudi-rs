@@ -130,6 +130,9 @@ impl Interrupt
         if let Some(ref mut h) = inner.handler {
             h.raise();
         }
+        else {
+            println!("ERROR: Rasing an interrupt with no handler");
+        }
     }
 }
 
