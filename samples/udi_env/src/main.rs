@@ -84,8 +84,39 @@ fn main() {
         register_driver_module(&mut state, driver_module_uart);
     }
 
-    // TODO: Run device emulation?
-    // TODO: Run async tasks for each region
+    // Start running async
+    // Infinite loop checking on pollable tasks
+    // - Per-region operations queue
+    // - Per-instance management agent
+    // - Emulated devices
+    #[cfg(false_)]
+    if false {
+        loop {
+            for inst in &state.instances {
+                match inst.management_state.poll(&inst)
+                {
+                ::udi_environment::management_agent::NextOp::Idle => {},
+                ::udi_environment::management_agent::NextOp::Op(t) => inst.regions[0].task_queue.push_back(t),
+                ::udi_environment::management_agent::NextOp::InitComplete => {
+                    // TODO: Check children for bindings
+                    },
+                }
+
+                for rgn in &inst.regions {
+                    if let Some(t) = rgn.task_queue.pop_front() {
+                        t.invoke();
+                    }
+                }
+
+                if let Some(dev) = inst.device.get() {
+                    if dev.poll() {
+                        // Interrupt generated, need to get the bus bridge to preprocess and dispatch it
+                    }
+                }
+            }
+        }
+    }
+
     println!("--- DONE ---");
     ::std::process::exit(0);
 }
@@ -287,13 +318,13 @@ fn create_driver_instance<'a>(driver_module: Arc<DriverModule<'static>>, channel
     let instance = Arc::new(DriverInstance::new(driver_module));
     instance.management_state.start_init(channel_to_parent);
     
-    while let Some(op) = instance.management_state.next_op(&instance)
-    {
-        unsafe {
-            op.invoke();
-
-            //let returned_cb = instance.management_state.returned_cb().expect("No returned CB?");
-            //::udi_environment::udi_impl::cb::free_internal(returned_cb);
+    loop {
+        use ::udi_environment::management_agent::NextOp;
+        match instance.management_state.poll(&instance)
+        {
+        NextOp::Idle => panic!("Unexpected idle MA"),
+        NextOp::Op(op) => op.invoke(),
+        NextOp::InitComplete => break,
         }
     }
 

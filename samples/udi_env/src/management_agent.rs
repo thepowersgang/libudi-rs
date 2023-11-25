@@ -43,6 +43,15 @@ enum DriverState {
     Active,
 }
 
+pub enum NextOp {
+    /// Management agent is idle (nothing to do)
+    Idle,
+    /// Request an operation be dispatched
+    Op(super::Operation),
+    /// Initialisation is now complete, children should now be bound
+    InitComplete,
+}
+
 impl ManagementAgent
 {
     pub fn start_init(&self, channel_to_parent: Option<::udi::ffi::udi_channel_t>) {
@@ -54,28 +63,34 @@ impl ManagementAgent
         _ => panic!("`start_init` called multiple times?"),
         }
     }
-    pub fn next_op(&self, instance: &Arc<crate::DriverInstance>) -> Option<super::Operation>
+    /// Check if the MA has anything to do
+    pub fn poll(&self, instance: &Arc<crate::DriverInstance>) -> NextOp
     {
         let mut inner = self.inner.lock().unwrap();
-        assert!(!inner.running);
+        if inner.running {
+            return NextOp::Idle;
+        }
+        
         let rv = match inner.state
             {
-            ManagementState::PreInit => panic!("enumerate_ack when in PreInit"),
+            ManagementState::PreInit => panic!("next_op when in PreInit"),
             ManagementState::Init(ref mut is) => match is.next_op(instance)
                 {
-                Some(op) => Some(op),
+                Some(op) => NextOp::Op(op),
                 None => {
                     inner.state = ManagementState::Initialised;
-                    None
+                    NextOp::InitComplete
                 }
                 }
-            ManagementState::Initialised => panic!("enumerate_ack when already initialised"),
+            ManagementState::Initialised => return NextOp::Idle,
             };
-        if rv.is_some() {
+        if let NextOp::Op(_) = rv {
             inner.running = true;
         }
         rv
     }
+
+
     pub(crate) fn usage_res(&self, _instance: &crate::DriverInstance, cb: ::udi::cb::CbHandle<::udi::ffi::meta_mgmt::udi_usage_cb_t>) {
         let mut inner = self.inner.lock().unwrap();
         assert!(inner.running);
@@ -96,6 +111,7 @@ impl ManagementAgent
         }
         drop(cb);
     }
+
     pub(crate) fn enumerate_ack(
         &self,
         instance: &crate::DriverInstance,

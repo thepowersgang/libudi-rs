@@ -182,8 +182,8 @@ pub struct DriverInstance
     //management_channel: ::udi::ffi::udi_channel_t,
     //cur_state: DriverState,
 
-    device: ::std::sync::OnceLock<Box<dyn crate::emulated_devices::PioDevice>>,
-    pio_abort_sequence: ::std::sync::Mutex<Option<(udi_impl::pio::Handle, usize)>>,
+    pub device: ::std::sync::OnceLock<Box<dyn crate::emulated_devices::PioDevice>>,
+    pub pio_abort_sequence: ::std::sync::Mutex<Option<(udi_impl::pio::Handle, usize)>>,
 
     pub management_state: management_agent::ManagementAgent,
 }
