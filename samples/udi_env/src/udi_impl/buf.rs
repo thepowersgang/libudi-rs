@@ -23,10 +23,10 @@ struct Tag {
     tag_len: usize,
 }
 impl Tag {
-    fn get_type(&self, cur_driver_idx: u32) -> ::udi::ffi::buf::udi_tagtype_t {
+    fn get_type(&self) -> ::udi::ffi::buf::udi_tagtype_t {
         if self.tag_type >= 24 {
             let driver_idx = (self.tag_type - 24) / 8;
-            if driver_idx != cur_driver_idx {
+            if driver_idx != get_current_driver_index() {
                 0
             }
             else {
@@ -337,7 +337,7 @@ unsafe extern "C" fn udi_buf_tag_set(
                 tag_type: {
                     let idx = tag.tag_type.trailing_zeros();
                     if idx >= 24 {
-                        let driver_index: u32 = todo!("per-driver buffer tags");
+                        let driver_index: u32 = get_current_driver_index();
                         idx + driver_index * 8
                     }
                     else {
@@ -380,7 +380,7 @@ unsafe extern "C" fn udi_buf_tag_get(
     let mut rv = 0;
     for tag in buf.tags.iter()
     {
-        if tag.get_type(0) & tag_type != 0
+        if tag.get_type() & tag_type != 0
         {
             if tag_start_idx > 0 {
                 tag_start_idx -= 1;
@@ -389,7 +389,7 @@ unsafe extern "C" fn udi_buf_tag_get(
                 tags[rv] = udi_buf_tag_t {
                     tag_off: tag.tag_off,
                     tag_len: tag.tag_len,
-                    tag_type: tag.get_type(0),
+                    tag_type: tag.get_type(),
                     tag_value: tag.tag_value,
                 };
                 rv += 1;
@@ -454,4 +454,8 @@ unsafe extern "C" fn udi_buf_tag_apply(
         }
     }
     callback(gcb, buf);
+}
+
+fn get_current_driver_index() -> u32 {
+    todo!("get_current_driver_index")
 }
