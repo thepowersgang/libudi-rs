@@ -83,6 +83,9 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 #[derive(Default)]
 struct ChildState {
     irq_cbs: ::std::sync::Arc<CbQueue>,
+    handler: Option<::std::sync::Arc<InterruptHandler>>,
+    min_event_pend: u8,
+    intr_enabled: bool,
 }
 struct InterruptHandler {
     cbs: ::std::sync::Arc<CbQueue>,
@@ -122,18 +125,24 @@ impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,ChildState>
     type Future_intr_attach_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
     fn intr_attach_req<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrAttach<'a>) -> Self::Future_intr_attach_req<'a> {
         async move {
-            let channel = ::udi::imc::channel_spawn::<OpsList::Interrupt>(cb.gcb(), self, cb.interrupt_index).await;
+            let channel = ::udi::imc::channel_spawn::<OpsList::Interrupt>(
+                cb.gcb(), self, cb.interrupt_index
+            ).await;
             // SAFE: We're trusting the client driver to not provide a bad handle
             let preproc_handle = unsafe { ::udi::pio::Handle::from_raw(cb.preprocessing_handle) };
+
+            let handler = ::std::sync::Arc::new(InterruptHandler {
+                cbs: self.irq_cbs.clone(),
+                channel,
+                preproc: preproc_handle,
+            });
+            self.min_event_pend = cb.min_event_pend;
+            self.handler = Some(handler.clone());
 
             let di = get_driver_instance(cb.gcb());
             di.device.get().expect("Driver instance not bound to a device")
                 .irq(cb.interrupt_index.0)
-                .bind(Box::new(InterruptHandler {
-                    cbs: self.irq_cbs.clone(),
-                    channel,
-                    preproc: preproc_handle,
-                }));
+                .bind(handler);
             Ok( () )
         }
     }
@@ -156,14 +165,80 @@ impl ::udi::meta_bridge::IntrDispatcher for ::udi::ChildBind<Driver,ChildState>
     }
 
     fn intr_event_ret(&mut self, cb: udi::meta_bridge::CbHandleEvent) {
-        self.irq_cbs.queue.lock().unwrap().push_front(cb);
+        if let Some(ref handler) = self.handler {
+            if handler.channel.raw() == cb.gcb.channel {
+                let sufficient = {
+                    let mut cbs = self.irq_cbs.queue.lock().unwrap();
+                    cbs.push_front(cb);
+                    //println!("intr_event_ret: {} ? >= {}", cbs.count(), self.min_event_pend);
+                    cbs.count() >= self.min_event_pend as usize
+                };
+                if sufficient && !self.intr_enabled {
+                    handler.enable();
+                    self.intr_enabled = true;
+                }
+            }
+            else {
+                panic!("");
+            }
+        }
+        else {
+            panic!("intr_event_ret with no registered handler");
+        }
+    }
+}
+impl InterruptHandler {
+    fn enable(&self) {
+        if !self.preproc.as_raw().is_null() {
+            let mut cb = {
+                let mut cb_queue = self.cbs.queue.lock().unwrap();
+                let Some(cb) = cb_queue.pop_front() else {
+                    println!("InterruptHandler::enable: No interrupt CBs!");
+                    return ;
+                };
+                cb
+            };
+
+            unsafe {
+                cb.get_mut().gcb.initiator_context = self as *const _ as *mut _;
+
+                // NOTE: `scratch` has at least one byte available, as it was used for async above
+                ::core::ptr::write(cb.gcb.scratch as *mut u8, 0);
+                ::udi::ffi::pio::udi_pio_trans(
+                    callback, cb.into_raw() as *mut _,
+                    self.preproc.as_raw(), 0.into(),    // Normal interrupt
+                    ::core::ptr::null_mut(), ::core::ptr::null_mut()
+                );
+                extern "C" fn callback(
+                    gcb: *mut ::udi::ffi::udi_cb_t,
+                    _buf: *mut ::udi::ffi::udi_buf_t,
+                    status: ::udi::ffi::udi_status_t,
+                    _res: ::udi::ffi::udi_ubit16_t
+                ) {
+                    println!("Enable complete");
+                    assert!(status == ::udi::ffi::UDI_OK as _);
+                    unsafe {
+                        let cb = gcb as *mut ::udi::ffi::meta_bridge::udi_intr_event_cb_t;
+                        let p: *const InterruptHandler = (*cb).gcb.initiator_context as *const _;
+                        (*p).cbs.queue.lock().unwrap().push_front(::udi::cb::CbHandle::from_raw(cb))
+                    }
+                }
+            }
+        }
     }
 }
 impl crate::emulated_devices::InterruptHandler for InterruptHandler {
-    fn raise(&mut self) {
-        let Some(mut cb) = self.cbs.queue.lock().unwrap().pop_front() else {
-            println!("No interrupt CBs!");
-            return ;
+    fn raise(&self) {
+        let mut cb = {
+            let mut cb_queue = self.cbs.queue.lock().unwrap();
+            let Some(cb) = cb_queue.pop_front() else {
+                println!("No interrupt CBs!");
+                return ;
+            };
+            if cb_queue.is_empty() {
+                // Overrun! - set a flag so the overrun happenss
+            }
+            cb
         };
 
         cb.set_channel(&self.channel);

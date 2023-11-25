@@ -136,16 +136,16 @@ pub struct Interrupt {
     inner: ::std::sync::Mutex<InterruptInner>,
 }
 pub trait InterruptHandler {
-    fn raise(&mut self);
+    fn raise(&self);
 }
 #[derive(Default)]
 pub struct InterruptInner
 {
-    handler: Option< Box<dyn InterruptHandler> >,
+    handler: Option< ::std::sync::Arc<dyn InterruptHandler> >,
 }
 impl Interrupt
 {
-    pub fn bind(&self, handler: Box<dyn InterruptHandler>) {
+    pub fn bind(&self, handler: ::std::sync::Arc<dyn InterruptHandler>) {
         self.inner.lock().unwrap().handler = Some(handler);
     }
     pub fn unbind(&self) {
