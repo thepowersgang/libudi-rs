@@ -61,7 +61,7 @@ unsafe extern "C" fn udi_channel_spawn(
 
 #[no_mangle]
 unsafe extern "C" fn udi_channel_close(channel: udi_channel_t) {
-    todo!("udi_channel_close");
+    crate::channels::close(channel);
 }
 
 #[no_mangle]

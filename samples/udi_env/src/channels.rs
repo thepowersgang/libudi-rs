@@ -18,12 +18,14 @@ struct ChannelInnerSide {
     ops: &'static dyn udi::metalang_trait::MetalangOpsHandler,
     /// Context pointer to use
     context: *mut ::udi::ffi::c_void,
-    //
-    allocated: bool,
+    /// Is the `context` owned by this channel
+    context_allocated: bool,
+    /// Has this side of the channel been closed
+    is_closed: ::std::sync::atomic::AtomicBool,
 }
 impl Drop for ChannelInnerSide {
     fn drop(&mut self) {
-        if self.allocated {
+        if self.context_allocated {
             unsafe { ::libc::free(self.context as *mut _); }
         }
     }
@@ -84,6 +86,25 @@ pub unsafe fn spawn(
         rv
     }
 }
+pub unsafe fn close(channel: ::udi::ffi::udi_channel_t)
+{
+    let cr = ChannelRef::from_handle(channel);
+    // Consider the other end as free if hasn't been anchored yet.
+    let is_other_free = cr.0.sides[!cr.1 as usize].get()
+        .map(|s| s.is_closed.load(::std::sync::atomic::Ordering::SeqCst))
+        .unwrap_or(true);
+    if is_other_free {
+        // Both sides are closed, to free all of the handle
+        assert!(! cr.0.sides[cr.1 as usize].get().unwrap()
+            .is_closed.load(::std::sync::atomic::Ordering::SeqCst) );
+        drop(Box::from_raw(cr.0 as *const ChannelInner as *mut ChannelInner));
+    }
+    else {
+        // Mark this side as closed
+        cr.0.sides[cr.1 as usize].get().unwrap()
+            .is_closed.store(true, ::std::sync::atomic::Ordering::SeqCst);
+    }
+}
 /// Anchor a channel end
 pub unsafe fn anchor(
     channel: ::udi::ffi::udi_channel_t,
@@ -94,7 +115,7 @@ pub unsafe fn anchor(
 {
     let cr = ChannelRef::from_handle(channel);
     cr.0.sides[cr.1 as usize]
-        .set(ChannelInnerSide { driver_instance, context, allocated: false, ops })
+        .set(ChannelInnerSide { driver_instance, context, context_allocated: false, ops, is_closed: Default::default(), })
         .ok().expect("Anchoring an anchored end");
 }
 /// Anchor a channel end, allocating a channel context instead of using a pre-allocated context
@@ -112,7 +133,7 @@ pub unsafe fn anchor_with_context<T: 'static>(
 
     let cr = ChannelRef::from_handle(channel);
     cr.0.sides[cr.1 as usize]
-        .set(ChannelInnerSide { driver_instance, context: context as *mut _, allocated: true, ops })
+        .set(ChannelInnerSide { driver_instance, context: context as *mut _, context_allocated: true, ops, is_closed: Default::default(), })
         .ok().expect("Anchoring an anchored end");
 }
 
