@@ -16,9 +16,82 @@ impl Device {
 }
 impl super::PioDevice for Device {
 
-    fn poll(&self) {
-        println!("rtl8139 - poll: {:#x}", self.regs.lock().unwrap().isr);
-        if self.regs.lock().unwrap().isr != 0 {
+    fn poll(&self, actions: &mut super::Actions) {
+        let is_int = {
+            let mut regs = self.regs.lock().unwrap();
+
+            while let Some(packet) = actions.pull("nic_rx") {
+                assert!(packet.len() < 1520);
+
+                // 8K, 16K, 32K, 64K
+                let wrap = (regs.rcr >> 7) & 1 != 0;
+                let rblen = 16 + 0x2000 * 1 << ((regs.rcr >> 11) & 3);
+
+                println!("RTL8139 RX {:#x}/{:#x} {:02x?}", regs.cba, rblen, packet);
+
+                // Space left before we hit the driver's read point
+                let space = if regs.cba <= regs.capr {
+                    // Buffer has wrapped (read point is above write)
+                    // - Wrap the return value
+                    rblen - (regs.capr - regs.cba)
+                }
+                else {
+                    regs.cba - regs.capr
+                };
+                if space < packet.len() as u16 + 4 {
+                    // RX overrun!
+                    regs.isr |= 1 << 4; // RX overflow
+                    continue ;
+                }
+ 
+                let hdr = {
+                    let rx_status: u16 = 0;
+                    let packet_len: u16 = packet.len() as _;
+                    let mut hdr = [0; 4];
+                    hdr[..2].copy_from_slice(&rx_status.to_le_bytes());
+                    hdr[2..].copy_from_slice(&packet_len.to_le_bytes());
+                    hdr
+                    };
+                let space_to_end = (rblen - regs.cba) as usize;
+                // if WRAP is 1, then there's no wrapping of a packet - the buffer overlows by one packet
+                if wrap || space_to_end >= 4 + packet.len() {
+                    self.dma.write(regs.rbstart + regs.cba as u32, &hdr);
+                    self.dma.write(regs.rbstart + regs.cba as u32 + 4, &packet);
+                    regs.cba += 4 + packet.len() as u16;
+                    while regs.cba & 3 != 0 {
+                        regs.cba += 1;
+                    }
+                    if regs.cba >= rblen {
+                        regs.cba = 0;
+                    }
+                }
+                else {
+                    if space_to_end < 4 {
+                        self.dma.write(regs.rbstart + regs.cba as u32, &hdr[..space_to_end]);
+                        self.dma.write(regs.rbstart, &hdr[space_to_end..]);
+                        self.dma.write(regs.rbstart + (4 - space_to_end) as u32, &packet);
+                        regs.cba = (packet.len() + (4 - space_to_end)) as u16;
+                    }
+                    else {
+                        let split_point = packet.len() - (space_to_end - 4);
+                        self.dma.write(regs.rbstart + regs.cba as u32, &hdr);
+                        self.dma.write(regs.rbstart + regs.cba as u32 + 4, &packet[..split_point]);
+                        self.dma.write(regs.rbstart, &packet[split_point..]);
+                        regs.cba = (packet.len() - split_point) as u16;
+                    }
+                    while regs.cba & 3 != 0 {
+                        regs.cba += 1;
+                    }
+                }
+
+                regs.cmd &= !0x1;   // Clear BUFE
+                regs.isr |= 1 << 0; // Set ROK
+            }
+    
+            //println!("rtl8139 - poll: 0x{:04x} & 0x{:04x}", regs.isr, regs.imr);
+            regs.isr & regs.imr != 0
+            };
+        if is_int {
             self.irq.raise();
         }
     }

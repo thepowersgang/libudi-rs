@@ -9,7 +9,17 @@ impl XTSerial {
     }
 }
 impl super::PioDevice for XTSerial {
-    fn poll(&self) {
+    fn poll(&self, actions: &mut super::Actions) {
+        let is_int = {
+            let regs = self.regs.lock().unwrap();
+            while let Some(_bytes) = actions.pull("uart_rx") {
+                todo!("uart_rx")
+            }
+            0 & regs.ier != 0
+        };
+        if is_int {
+            self.irq.raise()
+        }
     }
     
     fn pio_read(&self, regset_idx: u32, reg: u32, dst: &mut [u8]) {

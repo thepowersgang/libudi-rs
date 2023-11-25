@@ -11,7 +11,17 @@ impl Rtl8029 {
     }
 }
 impl super::PioDevice for Rtl8029 {
-    fn poll(&self) {
+    fn poll(&self, actions: &mut super::Actions) {
+        let is_int = {
+            let regs = self.regs.lock().unwrap();
+            while let Some(_bytes) = actions.pull("nic_rx") {
+                todo!("nic_rx")
+            }
+            regs.isr & regs.imr != 0
+        };
+        if is_int {
+            self.irq.raise()
+        }
     }
     
     fn pio_read(&self, regset_idx: u32, reg: u32, dst: &mut [u8]) {

@@ -2,13 +2,32 @@
 
 pub trait PioDevice
 {
-    fn poll(&self);
+    fn poll(&self, actions: &mut Actions);
 
     fn pio_read(&self, regset_idx: u32, reg: u32, dst: &mut [u8]);
     fn pio_write(&self, regset_idx: u32, reg: u32, src: &[u8]);
 
     fn dma(&self) -> &DmaPool { panic!("DMA unsupported"); }
     fn irq(&self, index: u8) -> &Interrupt { let _ = index; panic!("Interrupts unsupported"); }
+}
+
+#[derive(Default)]
+pub struct Actions
+{
+    actions: Vec<(String, Vec<u8>)>,
+}
+impl Actions
+{
+    pub fn is_empty(&self) -> bool {
+        self.actions.is_empty()
+    }
+    pub fn push(&mut self, name: &str, data: &[u8]) {
+        self.actions.push((name.to_owned(), data.to_owned()));
+    }
+    pub fn pull(&mut self, name: &str) -> Option<Vec<u8>> {
+        let pos = self.actions.iter().position(|(n,_)| n == name)?;
+        Some(self.actions.swap_remove(pos).1)
+    }
 }
 
 pub struct DmaHandle
@@ -88,7 +107,7 @@ impl DmaPool {
         let idx = match buffers.binary_search_by_key(&addr, |v| v.base)
             {
             Ok(i) => i,
-            Err(i) => i,
+            Err(i) => i-1,
             };
         assert!(idx < buffers.len());
         let buf = &buffers[idx];
@@ -102,6 +121,25 @@ impl DmaPool {
             ::core::ptr::copy_nonoverlapping(buf.data_ptr.offset(ofs as isize) as _, rv.as_mut_ptr(), len as usize);
         }
         rv
+    }
+    fn write(&self, addr: u32, src: &[u8]) {
+        let buffers = self.buffers.write().unwrap();
+        let idx = match buffers.binary_search_by_key(&addr, |v| v.base)
+            {
+            Ok(i) => i,
+            Err(i) => i-1,
+            };
+        assert!(idx < buffers.len());
+        let buf = &buffers[idx];
+        assert!(addr <= buf.base + buf.len);
+        let ofs = addr - buf.base;
+        let space = buf.len - ofs;
+        assert!(src.len() <= space as usize);
+
+        // SAFE: Pointer is valid for this length/offset
+        unsafe {
+            ::core::ptr::copy_nonoverlapping(src.as_ptr(), buf.data_ptr.offset(ofs as isize) as _, src.len());
+        }
     }
 }
 

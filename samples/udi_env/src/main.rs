@@ -89,6 +89,8 @@ fn main() {
     // - Per-region operations queue
     // - Per-instance management agent
     // - Emulated devices
+    let mut task_idx = 0;
+    let mut actions = ::udi_environment::emulated_devices::Actions::default();
     loop {
         println!("--- LOOP ---");
         let mut action_happened = false;
@@ -111,7 +113,7 @@ fn main() {
             }
 
             if let Some(dev) = inst.device.get() {
-                dev.poll();
+                dev.poll(&mut actions);
             }
 
             for rgn in &inst.regions {
@@ -122,12 +124,18 @@ fn main() {
                 }
             }
         }
+        assert!( actions.is_empty() );
         if !new_instances.is_empty() {
             action_happened = true;
         }
         state.instances.extend(new_instances.into_iter());
+
         if !action_happened {
-            break;
+            // Push a network packet
+            match { let v = task_idx; task_idx += 1; v } {
+            0 => actions.push("nic_rx", &[123,255]),
+            _ => break,
+            }
         }
     }
 
