@@ -6,12 +6,17 @@
 use ::std::sync::Arc;
 
 #[derive(Default)]
-pub struct ManagementState
+pub struct ManagementAgent
 {
-    inner: ::std::sync::Mutex<ManagementStateInner>,
+    inner: ::std::sync::Mutex<ManagementAgentInner>,
 }
 #[derive(Default)]
-enum ManagementStateInner {
+struct ManagementAgentInner {
+    running: bool,
+    state: ManagementState,
+}
+#[derive(Default)]
+enum ManagementState {
     #[default]
     PreInit,
     Init(InitState),
@@ -38,41 +43,48 @@ enum DriverState {
     Active,
 }
 
-impl ManagementState
+impl ManagementAgent
 {
     pub fn start_init(&self, channel_to_parent: Option<::udi::ffi::udi_channel_t>) {
-        match *self.inner.lock().unwrap()
+        match self.inner.lock().unwrap().state
         {
-        ref mut dst @ ManagementStateInner::PreInit => {
-            *dst = ManagementStateInner::Init(InitState { channel_to_parent, state: DriverState::UsageInd  });
+        ref mut dst @ ManagementState::PreInit => {
+            *dst = ManagementState::Init(InitState { channel_to_parent, state: DriverState::UsageInd  });
         }
         _ => panic!("`start_init` called multiple times?"),
         }
     }
     pub fn next_op(&self, instance: &Arc<crate::DriverInstance>) -> Option<super::Operation>
     {
-        let mut state = self.inner.lock().unwrap();
-        match *state
-        {
-        ManagementStateInner::PreInit => panic!("enumerate_ack when in PreInit"),
-        ManagementStateInner::Init(ref mut is) => match is.next_op(instance)
+        let mut inner = self.inner.lock().unwrap();
+        assert!(!inner.running);
+        let rv = match inner.state
             {
-            Some(op) => Some(op),
-            None => {
-                *state = ManagementStateInner::Initialised;
-                None
-            }
-            }
-        ManagementStateInner::Initialised => panic!("enumerate_ack when already initialised"),
+            ManagementState::PreInit => panic!("enumerate_ack when in PreInit"),
+            ManagementState::Init(ref mut is) => match is.next_op(instance)
+                {
+                Some(op) => Some(op),
+                None => {
+                    inner.state = ManagementState::Initialised;
+                    None
+                }
+                }
+            ManagementState::Initialised => panic!("enumerate_ack when already initialised"),
+            };
+        if rv.is_some() {
+            inner.running = true;
         }
+        rv
     }
     pub(crate) fn usage_res(&self, _instance: &crate::DriverInstance, cb: ::udi::cb::CbHandle<::udi::ffi::meta_mgmt::udi_usage_cb_t>) {
-        let mut state = self.inner.lock().unwrap();
-        let is = match *state
+        let mut inner = self.inner.lock().unwrap();
+        assert!(inner.running);
+        inner.running = false;
+        let is = match inner.state
             {
-            ManagementStateInner::PreInit => panic!("enumerate_ack when in PreInit"),
-            ManagementStateInner::Init(ref mut is) => is,
-            ManagementStateInner::Initialised => panic!("enumerate_ack when already initialised"),
+            ManagementState::PreInit => panic!("enumerate_ack when in PreInit"),
+            ManagementState::Init(ref mut is) => is,
+            ManagementState::Initialised => panic!("enumerate_ack when already initialised"),
             };
         match is.state
         {
@@ -90,12 +102,14 @@ impl ManagementState
         mut cb: ::udi::cb::CbHandle<::udi::ffi::meta_mgmt::udi_enumerate_cb_t>,
         enumeration_result: ::udi::init::EnumerateResult
     ) {
-        let mut state = self.inner.lock().unwrap();
-        let is = match *state
+        let mut inner = self.inner.lock().unwrap();
+        assert!(inner.running);
+        inner.running = false;
+        let is = match inner.state
             {
-            ManagementStateInner::PreInit => panic!("enumerate_ack when in PreInit"),
-            ManagementStateInner::Init(ref mut is) => is,
-            ManagementStateInner::Initialised => panic!("enumerate_ack when already initialised"),
+            ManagementState::PreInit => panic!("enumerate_ack when in PreInit"),
+            ManagementState::Init(ref mut is) => is,
+            ManagementState::Initialised => panic!("enumerate_ack when already initialised"),
             };
         let DriverState::EnumChildren { ref mut flagged_complete } = is.state else {
             panic!("`enumerate_ack` called when not expected");
@@ -180,12 +194,14 @@ impl ManagementState
     }
 
     pub fn bind_complete(&self, _instance: &crate::DriverInstance, cb: *mut ::udi::ffi::imc::udi_channel_event_cb_t, result: ::udi::Result<()>) {
-        let mut state = self.inner.lock().unwrap();
-        let is = match *state
+        let mut inner = self.inner.lock().unwrap();
+        assert!(inner.running);
+        inner.running = false;
+        let is = match inner.state
             {
-            ManagementStateInner::PreInit => panic!("enumerate_ack when in PreInit"),
-            ManagementStateInner::Init(ref mut is) => is,
-            ManagementStateInner::Initialised => panic!("enumerate_ack when already initialised"),
+            ManagementState::PreInit => panic!("enumerate_ack when in PreInit"),
+            ManagementState::Init(ref mut is) => is,
+            ManagementState::Initialised => panic!("enumerate_ack when already initialised"),
             };
         unsafe {
             crate::udi_impl::cb::free_internal((*cb).params.parent_bound.bind_cb);

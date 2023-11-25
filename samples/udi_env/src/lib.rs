@@ -185,7 +185,7 @@ pub struct DriverInstance
     device: ::std::sync::OnceLock<Box<dyn crate::emulated_devices::PioDevice>>,
     pio_abort_sequence: ::std::sync::Mutex<Option<(udi_impl::pio::Handle, usize)>>,
 
-    pub management_state: management_agent::ManagementState,
+    pub management_state: management_agent::ManagementAgent,
 }
 impl DriverInstance {
     pub fn new(driver_module: Arc<DriverModule<'static>>) -> Self
