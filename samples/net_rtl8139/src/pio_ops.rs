@@ -323,8 +323,10 @@ impl MemRxUpdate {
 
 ::udi::define_pio_ops!{pub IRQACK =
     // Entrypoint 0: Enable interrupts
+    LOAD_IMM.S R0, 0xFF;    // Enable all interrupts
+    OUT.S Regs::Imr as _, R0;
     END_IMM 0;
-    // 1: Normal
+    // 1: Normal Interrupt Handle
     LABEL 1;
     // - Read ISR and ack all set bits
     IN.S R0, Regs::Isr as _;
@@ -332,7 +334,7 @@ impl MemRxUpdate {
     END.B R0;
     // 2: Overrun
     LABEL 2;
-    // 3: Overrun irqs
+    // 3: Hande overrun irqs
     LABEL 3;
     END_IMM 0;
 }

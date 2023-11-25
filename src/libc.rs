@@ -3,27 +3,42 @@ pub trait SnprintfArg {
     fn into_arg(self) -> Self::Output;
 }
 
-macro_rules! impl_snprintf_arg_identity {
-    ( $($t:ty,)* ) => {
-        $(
-        impl SnprintfArg for $t {
-            type Output = Self;
-            fn into_arg(self) -> Self::Output {
-                self
-            }
-        }
-        )*
-    };
+impl SnprintfArg for crate::ffi::udi_ubit32_t {
+    type Output = crate::ffi::udi_ubit32_t;
+    fn into_arg(self) -> Self::Output {
+        self
+    }
 }
-impl_snprintf_arg_identity!{
-    crate::ffi::udi_ubit32_t,
-    crate::ffi::udi_sbit32_t,
-    crate::ffi::udi_ubit16_t,
-    crate::ffi::udi_sbit16_t,
-    crate::ffi::udi_ubit8_t,
-    crate::ffi::udi_sbit8_t,
-
-    //crate::ffi::udi_busaddr64_t,
+impl SnprintfArg for crate::ffi::udi_sbit32_t {
+    type Output = crate::ffi::udi_sbit32_t;
+    fn into_arg(self) -> Self::Output {
+        self
+    }
+}
+// NOTE: Cannot pass values smaller than u32
+impl SnprintfArg for crate::ffi::udi_ubit16_t {
+    type Output = crate::ffi::udi_ubit32_t;
+    fn into_arg(self) -> Self::Output {
+        self as _
+    }
+}
+impl SnprintfArg for crate::ffi::udi_sbit16_t {
+    type Output = crate::ffi::udi_sbit16_t;
+    fn into_arg(self) -> Self::Output {
+        self as _
+    }
+}
+impl SnprintfArg for crate::ffi::udi_ubit8_t {
+    type Output = crate::ffi::udi_ubit32_t;
+    fn into_arg(self) -> Self::Output {
+        self as _
+    }
+}
+impl SnprintfArg for crate::ffi::udi_sbit8_t {
+    type Output = crate::ffi::udi_sbit16_t;
+    fn into_arg(self) -> Self::Output {
+        self as _
+    }
 }
 
 // CString for `%s`

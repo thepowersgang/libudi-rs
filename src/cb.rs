@@ -116,6 +116,20 @@ impl<T> Chain<T>
 where
     T: crate::metalang_trait::MetalangCb + crate::async_trickery::GetCb
 {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_null()
+    }
+    pub fn count(&self) -> usize {
+        unsafe {
+            let mut rv = 0;
+            let mut p = self.0;
+            while !p.is_null() {
+                p = *Self::get_chain_slot(&mut *p);
+                rv += 1;
+            }
+            rv
+        }
+    }
     pub fn pop_front(&mut self) -> Option<CbHandle<T>> {
         if self.0.is_null() {
             None

@@ -361,6 +361,8 @@ impl ::core::fmt::Display for Size {
         match self.0
         {
         0 => f.write_str("B"),
+        1 => f.write_str("S"),
+        2 => f.write_str("L"),
         _ => write!(f, "{}", 1 << self.0),
         }
     }
@@ -440,7 +442,7 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
             match op.pio_op & 0xE0
             {
             IN => {
-                println!("IN{s} {}, #{:#x}", MemRef(op.pio_op & 0x1F), op.operand);
+                println!("IN.{s} {}, #{:#x}", MemRef(op.pio_op & 0x1F), op.operand);
                 let val = io_state.read(op.operand as u32, op.tran_size);
                 state.write(op.pio_op & 0x1F, val, op.tran_size);
                 },

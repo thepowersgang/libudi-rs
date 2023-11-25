@@ -115,7 +115,9 @@ fn main() {
             if let Some(dev) = inst.device.get() {
                 dev.poll(&mut actions);
             }
+        }
 
+        for inst in &state.instances {
             for rgn in &inst.regions {
                 let op = rgn.task_queue.lock().unwrap().pop_front();
                 if let Some(t) = op {
