@@ -2,13 +2,13 @@
 
 pub trait PioDevice
 {
-    //fn set_interrupt_channel(&self, index: udi_index_t, channel: ::udi::imc::ChannelHandle, preproc_handle: ::udi::pio::Handle);
-    //fn push_intr_cb(&self, index: udi_index_t, cb: ::udi::meta_bridge::CbHandleEvent);
+    fn poll(&self);
 
     fn pio_read(&self, regset_idx: u32, reg: u32, dst: &mut [u8]);
     fn pio_write(&self, regset_idx: u32, reg: u32, src: &[u8]);
 
     fn dma(&self) -> &DmaPool { panic!("DMA unsupported"); }
+    fn irq(&self, index: u8) -> &Interrupt { let _ = index; panic!("Interrupts unsupported"); }
 }
 
 pub struct DmaHandle
@@ -102,6 +102,34 @@ impl DmaPool {
             ::core::ptr::copy_nonoverlapping(buf.data_ptr.offset(ofs as isize) as _, rv.as_mut_ptr(), len as usize);
         }
         rv
+    }
+}
+
+#[derive(Default)]
+pub struct Interrupt {
+    inner: ::std::sync::Mutex<InterruptInner>,
+}
+pub trait InterruptHandler {
+    fn raise(&mut self);
+}
+#[derive(Default)]
+pub struct InterruptInner
+{
+    handler: Option< Box<dyn InterruptHandler> >,
+}
+impl Interrupt
+{
+    pub fn bind(&self, handler: Box<dyn InterruptHandler>) {
+        self.inner.lock().unwrap().handler = Some(handler);
+    }
+    pub fn unbind(&self) {
+        self.inner.lock().unwrap().handler = None;
+    }
+    fn raise(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        if let Some(ref mut h) = inner.handler {
+            h.raise();
+        }
     }
 }
 
