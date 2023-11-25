@@ -9,6 +9,8 @@ pub struct ChildBind<Driver,ChildData>
 	/// Required inner for child channel context
 	inner: ::udi_sys::init::udi_child_chan_context_t,
 	channel_cb: *mut crate::ffi::imc::udi_channel_event_cb_t,
+	// - Internal
+	is_init: bool,
 	child_data: ChildData,
 }
 impl<Driver,ChildData> ChildBind<Driver,ChildData>
@@ -47,16 +49,33 @@ impl<Driver,ChildData> ::core::ops::DerefMut for ChildBind<Driver,ChildData>
 	}
 }
 impl<Driver,ChildData> crate::async_trickery::CbContext for ChildBind<Driver,ChildData>
+where
+	ChildData: Default,
 {
+    fn maybe_init(&mut self) {
+        if !self.is_init {
+			unsafe {
+				::core::ptr::write(&mut self.child_data, Default::default())
+			}
+			self.is_init = true;
+		}
+    }
     fn channel_cb_slot(&mut self) -> &mut *mut ::udi_sys::imc::udi_channel_event_cb_t {
         &mut self.channel_cb
     }
+    unsafe fn drop_in_place(&mut self) {
+		// A context can be bound to multiple channels
+        todo!()
+    }
+	
 }
 impl<Driver,ChildData> crate::imc::ChannelInit for ChildBind<Driver,ChildData>
 where
 	ChildData: Default,
 {
     unsafe fn init(&mut self) {
+		assert!(self.is_init == false);
+		self.is_init = true;
 		::core::ptr::write(&mut self.child_data, ChildData::default())
 	}
 }

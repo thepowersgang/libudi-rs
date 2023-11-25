@@ -16,7 +16,9 @@ use crate::ffi::udi_cb_t;
 
 /// Trait for the `context` field in a CB
 pub trait CbContext {
+	fn maybe_init(&mut self);
 	fn channel_cb_slot(&mut self) -> &mut *mut crate::ffi::imc::udi_channel_event_cb_t;
+	unsafe fn drop_in_place(&mut self);
 }
 
 /// Result of a wait operation, stored in scratch
@@ -55,7 +57,9 @@ pub(crate) unsafe fn abort_task(cb: *mut udi_cb_t)
 
 /// Obtain a pointer to the driver instance from a cb
 pub(crate) unsafe fn get_rdata_t<T: CbContext, Cb: GetCb>(cb: &Cb) -> &mut T {
-	&mut *(cb.get_gcb().context as *mut T)
+	let rv = &mut *(cb.get_gcb().context as *mut T);
+	rv.maybe_init();
+	rv
 }
 /// Set the channel operation cb
 pub(crate) unsafe fn set_channel_cb<T: CbContext>(cb: *mut crate::ffi::imc::udi_channel_event_cb_t) {

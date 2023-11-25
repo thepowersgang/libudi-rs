@@ -222,10 +222,20 @@ impl<Driver> AsRef<RData<Driver>> for RData<Driver> {
 impl<Driver> crate::imc::ChannelInit for RData<Driver> {
 }
 impl<Driver> crate::async_trickery::CbContext for RData<Driver>
+where
+	Driver: Default,
 {
+	fn maybe_init(&mut self) {
+		if !self.is_init {
+			unsafe { ::core::ptr::write(&mut self.inner, Default::default()); }
+		}
+	}
     fn channel_cb_slot(&mut self) -> &mut *mut ::udi_sys::imc::udi_channel_event_cb_t {
         &mut self.channel_cb
     }
+    unsafe fn drop_in_place(&mut self) {
+		// Do nothing, this is not a channel context
+	}
 }
 impl<Driver> ::core::ops::Deref for RData<Driver>
 {
