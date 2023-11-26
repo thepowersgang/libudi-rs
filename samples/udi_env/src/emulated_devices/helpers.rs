@@ -31,14 +31,18 @@ impl DmaHandle {
         assert!(ofs + src.len() <= self.len as usize);
         // SAFE: Pointer is valid for this range, and aliasing won't matter
         unsafe {
-            ::core::ptr::copy_nonoverlapping(src.as_ptr(), (self.data_ptr as *mut u8).offset(ofs as isize), src.len());
+            let dst = (self.data_ptr as *mut u8).offset(ofs as isize);
+            println!("DmaHandle::read {:p}+{}", dst, src.len());
+            ::core::ptr::copy_nonoverlapping(src.as_ptr(), dst, src.len());
         }
     }
     pub fn read(&self, ofs: usize, dst: &mut [u8]) {
         assert!(ofs + dst.len() <= self.len as usize);
         // SAFE: Pointer is valid for this range, and aliasing won't matter
         unsafe {
-            ::core::ptr::copy_nonoverlapping((self.data_ptr as *const u8).offset(ofs as isize), dst.as_mut_ptr(), dst.len());
+            let src = (self.data_ptr as *const u8).offset(ofs as isize);
+            println!("DmaHandle::read {:p}+{}", src, dst.len());
+            ::core::ptr::copy_nonoverlapping(src, dst.as_mut_ptr(), dst.len());
         }
     }
 
@@ -106,7 +110,9 @@ impl DmaPool {
         let mut rv = vec![0; len as usize];
         // SAFE: Pointer is valid for this length/offset
         unsafe {
-            ::core::ptr::copy_nonoverlapping(buf.data_ptr.offset(ofs as isize) as _, rv.as_mut_ptr(), len as usize);
+            let src = (buf.data_ptr as *const u8).offset(ofs as isize);
+            println!("DmaPool::read {}+{} (#{} {}) {:p}", addr, rv.len(), idx, ofs, src);
+            ::core::ptr::copy_nonoverlapping(src, rv.as_mut_ptr(), len as usize);
         }
         rv
     }
@@ -126,7 +132,9 @@ impl DmaPool {
 
         // SAFE: Pointer is valid for this length/offset
         unsafe {
-            ::core::ptr::copy_nonoverlapping(src.as_ptr(), buf.data_ptr.offset(ofs as isize) as _, src.len());
+            let dst = (buf.data_ptr as *mut u8).offset(ofs as isize);
+            println!("DmaPool::write {}+{} (#{} {}) {:p}", addr, src.len(), idx, ofs, dst);
+            ::core::ptr::copy_nonoverlapping(src.as_ptr(), dst, src.len());
         }
     }
 }

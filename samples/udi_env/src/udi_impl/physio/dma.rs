@@ -284,7 +284,10 @@ unsafe extern "C" fn udi_dma_sync(
 
     let raw_data = &mut raw_data[offset..][..length];
     match dir {
-    Direction::In => dma_info.data_handle.read(offset, raw_data),
+    Direction::In => {
+        dma_info.data_handle.read(offset, raw_data);
+        //println!("udi_dma_sync: IN {:x?}", &raw_data[..raw_data.len().min(32)]);
+        },
     Direction::Out => dma_info.data_handle.write(offset, raw_data),
     Direction::BiDir => todo!("udi_dma_sync In+Out"),
     }
