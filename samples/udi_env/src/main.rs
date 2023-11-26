@@ -135,7 +135,8 @@ fn main() {
         if !action_happened {
             // Push a network packet
             match { let v = task_idx; task_idx += 1; v } {
-            0 => actions.push("nic_rx", &[123,255]),
+            0 => actions.push("nic_rx", b"ABCDEF0123456\x00\x01Hello World"),
+            1 => actions.push("nic_rx", b"ABCDEF0123456\x00\x01The world replies, that was unexpected"),
             _ => break,
             }
         }
