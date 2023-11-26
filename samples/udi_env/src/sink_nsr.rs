@@ -126,13 +126,20 @@ unsafe impl ::udi::meta_nic::NsrTx for ::udi::init::RData<Driver>
 unsafe impl ::udi::meta_nic::NsrRx for ::udi::init::RData<Driver>
 {
     type Future_rx_ind<'s> = impl ::core::future::Future<Output=()>;
-    fn rx_ind<'a>(&'a mut self, _cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_rx_ind<'a> {
-        async move { todo!("rx_ind") }
+    fn rx_ind<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_rx_ind<'a> {
+        async move {
+            let buf = cb.rx_buf_ref();
+            let mut local_buf = vec![0; buf.len()];
+            buf.read(0, &mut local_buf);
+            println!("NSR: RX packet {:x?}", local_buf);
+            
+            ::udi::meta_nic::nd_rx_rdy(cb);
+        }
     }
 
     type Future_exp_rx_ind<'s> = impl ::core::future::Future<Output=()>;
-    fn exp_rx_ind<'a>(&'a mut self, _cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_exp_rx_ind<'a> {
-        async move { todo!("exp_rx_ind") }
+    fn exp_rx_ind<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_exp_rx_ind<'a> {
+        self.rx_ind(cb)
     }
 }
 
