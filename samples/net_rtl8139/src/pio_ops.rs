@@ -207,9 +207,7 @@ impl MemReset {
     LOAD_IMM.B R0, 0;
     LOAD.L R0, [mem R0];
     OUT.L Regs::RBStart as _, R0;
-    LOAD_IMM.B R0, 0;
-    OUT.S Regs::Capr as _ , R0;
-    //OUT.S Regs::Cba as _ , R0;    // Technically read-only
+    // NOTE: CAPR is 0 after reset (bug offsets it by 0x10, but we handle that)
 
     // - RCR - hw::RCR_DMA_BURST_1024|hw::RCR_BUFSZ_8K16|hw::RCR_FIFO_1024|hw::RCR_OVERFLOW|0x1F
     LOAD_IMM.S R0, ((6<<13)|(0<<11)|(6<<8)|0x80|0x1F);
@@ -276,7 +274,7 @@ impl MemTx {
     // - Read `CAPR` - if it's equal to `CBA` then the buffer is empty
     IN.S R0, Regs::Capr as _;
     ADD_IMM.S R0, 0x10; // Account for a hardware ?bug
-    IN.L R1, Regs::Cba as _;
+    IN.S R1, Regs::Cba as _;
     LOAD.L R2, R0;  // Save CAPR for later
     // CBA - CAPR. If negative then the buffer has wrapped
     // - Need to handle the final packet, which can extend past the wrap point
@@ -319,6 +317,7 @@ impl MemRxUpdate {
     ADD_IMM.S R1, -0x10i16 as u16; // Account for a hardware ?bug
     // CAPR = R1
     OUT.S Regs::Capr as _, R1;
+    END_IMM 0;
 }
 
 ::udi::define_pio_ops!{pub IRQACK =

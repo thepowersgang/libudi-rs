@@ -217,19 +217,24 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 			::udi::debug_printf!("intr_event_ind: ISR=0x%04hx", isr);
 			if isr & pio_ops::FLAG_ISR_ROK != 0 {
 				// RX OK
+				let dma_rx_buf = &self.inner.dma_handles.as_ref().unwrap().rx_buf;
+				dma_rx_buf.sync_all(cb.gcb(), ::udi::physio::dma::Direction::In).await;
 				while let Ok(Some(addr)) = self.inner.pio_handles.rx_check(cb.gcb()).await
 				{
 					// Get the current packet length and flags
 					let (flags, data) = unsafe {
-						let addr = self.dma_handles.as_ref().unwrap().rx_buf.mem_ptr.offset(addr as isize) as *const u8;
+						let addr = dma_rx_buf.mem_ptr.offset(addr as isize) as *const u8;
 						let flags = *addr.offset(0) as u16 | (*addr.offset(1) as u16) << 8;
 						let raw_len = *addr.offset(2) as u16 | (*addr.offset(3) as u16) << 8;
-						(flags, ::core::slice::from_raw_parts(addr.offset(4), raw_len as usize))
+						// NOTE: acess2/rust_os treat this as the packet length, while qemu seems to emit the full buffer length
+						assert!(raw_len >= 4, "Raw packet lenght shorter than header");
+						(flags, ::core::slice::from_raw_parts(addr.offset(4), raw_len as usize - 4))
 					};
-					::udi::debug_printf!("RX packet: %u bytes flags=%04x", data.len() as u32, flags as u32);
+					::udi::debug_printf!("RX packet: @0x%hx %u bytes flags=%04hx", addr, data.len() as u32, flags);
+					assert!(data.len() > 0);
 					// Pull a RX CB off the queue
 					if flags & 0x0001 != 0 {
-						if let Some(mut rx_cb) = self.rx_cb_queue.pop() {
+						if let Some(mut rx_cb) = self.inner.rx_cb_queue.pop() {
 							let buf = rx_cb.rx_buf_mut();
 							buf.write(cb.gcb(), 0..buf.len(), data).await;
 							::udi::meta_nic::nsr_rx_ind(rx_cb);
@@ -240,7 +245,7 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 					}
 
 					// Advance CAPR (header, data, alignment)
-					let delta = (4 + data.len() as u16 + 3) & !4;
+					let delta = (4 + data.len() as u16 + 3) & !3;
 					let _ = self.inner.pio_handles.rx_update(cb.gcb(), delta).await;
 				}
 			}
