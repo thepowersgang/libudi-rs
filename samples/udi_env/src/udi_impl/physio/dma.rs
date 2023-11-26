@@ -58,7 +58,7 @@ impl DmaInfo {
     }
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 enum Direction {
     In,
     Out,
@@ -273,6 +273,15 @@ unsafe extern "C" fn udi_dma_sync(
     |(Direction::BiDir, Direction::Out) =>
         panic!("`udi_dma_sync` with non-matching directions"),
     }
+
+    let length = if length == 0 {
+        assert!(offset == 0, "When `length==0`, `offset` must also be zero");
+        raw_data.len()
+    }
+    else {
+        length
+    };
+
     let raw_data = &mut raw_data[offset..][..length];
     match dir {
     Direction::In => dma_info.data_handle.read(offset, raw_data),
