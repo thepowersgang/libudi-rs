@@ -53,10 +53,13 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
                 self.parent_channel = Some(cb.gcb.channel);
                 
                 // Allocate a pool of CBs with 1KiB buffers
-                let mut cbs = ::udi::cb::alloc_batch::<CbList::_Xfer>(cb.gcb(), 3, Some((1024, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
-                while let Some(xfer_cb) = cbs.pop_front() {
-                    // Channel should already be the same one
-                    //xfer_cb.set_channel_raw(cb.gcb.channel);
+                let mut cbs = ::udi::cb::alloc_batch::<CbList::Xfer>(cb.gcb(), 3, Some((1024, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
+                while let Some(mut xfer_cb) = cbs.pop_front() {
+                    // Channel should already be the same one?
+                    // - Except that it isn't.
+                    unsafe {
+                        xfer_cb.get_mut().gcb.channel = cb.gcb.channel;
+                    }
                     self.cb_pool.push_front(xfer_cb);
                 }
 
@@ -145,7 +148,7 @@ const META_GIO: ::udi::ffi::udi_index_t = udiprops::meta::udi_gio;
     },
     cbs: {
         _Bind : Meta=META_GIO, ::udi::ffi::meta_gio::udi_gio_bind_cb_t,
-        _Xfer : Meta=META_GIO, ::udi::ffi::meta_gio::udi_gio_xfer_cb_t,
+        Xfer : Meta=META_GIO, ::udi::ffi::meta_gio::udi_gio_xfer_cb_t,
         _Event: Meta=META_GIO, ::udi::ffi::meta_gio::udi_gio_event_cb_t,
     }
 }
