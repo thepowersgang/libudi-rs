@@ -109,6 +109,19 @@ impl RealUdiBuf {
             }
         }
     }
+
+    ///
+    fn resize_at(&mut self, dst_off: udi_size_t, dst_len: udi_size_t, src_len: udi_size_t) -> &mut [u8] {
+        if src_len == dst_len {
+        }
+        else if src_len < dst_len {
+            self.delete_at(dst_off + src_len, dst_len - src_len);
+        }
+        else {
+            self.reserve_at(dst_off + dst_len, src_len - dst_len);
+        }
+        &mut self.inner[dst_off..][..src_len]
+    }
 }
 unsafe fn get_or_alloc(ptr: &mut *mut udi_buf_t, path_handle: udi_buf_path_t) -> &mut RealUdiBuf {
     if ptr.is_null() {
@@ -162,17 +175,12 @@ pub unsafe fn read(buf_ptr: *mut udi_buf_t, off: usize, dst: &mut [u8]) -> Optio
 pub unsafe fn write(buf_ptr: &mut *mut udi_buf_t, dst: ::core::ops::Range<usize>, src: &[u8]) {
     let p = get_or_alloc(buf_ptr, ::udi::ffi::buf::UDI_NULL_PATH_BUF);
     let dst_len = dst.end - dst.start;
-    if dst_len < src.len() {
-        p.reserve_at(dst.end, src.len() - dst_len);
-    }
-    else if src.len() < dst_len {
-        p.delete_at(dst.start + src.len(), dst_len - src.len());
-    }
-    else {
-        // No size change
-    }
+
+    //println!("{}.. = {:x?}", dst.start, src);
+    let dst_buf = p.resize_at(dst.start, dst_len, src.len());
+    dst_buf.copy_from_slice(src);
     p.invalidate_tags(dst.start, src.len());
-    p.get_slice_mut(dst.start, src.len()).copy_from_slice(src);
+    //println!("= {:p}+{} {:x?}", p.get_slice(0, 0).as_ptr(), p.len(), p.get_slice(0, p.len()));
 }
 pub unsafe fn get_mut(buf_ptr: &mut *mut udi_buf_t, range: ::core::ops::Range<usize>) -> &mut [u8] {
     let Some(p) = get_buf_mut(buf_ptr) else { panic!() };
@@ -196,8 +204,10 @@ unsafe extern "C" fn udi_buf_copy(
     path_handle: udi_buf_path_t
 )
 {
+    //println!("udi_buf_copy({:p} {}+{}, {:p} {}+{})", dst_buf, dst_off, dst_len, src_buf, src_off, src_len);
     assert!(src_buf != dst_buf, "Not allowed to reference the same buffer");
     let src = get_buf(&src_buf).unwrap().get_slice(src_off, src_len);
+    //let dst = get_or_alloc(&mut dst_buf, path_handle);
     // TODO: Also need to copy the tags
     udi_buf_write(callback, gcb, src.as_ptr() as *const c_void, src.len(), dst_buf, dst_off, dst_len, path_handle);
 }
@@ -213,20 +223,15 @@ unsafe extern "C" fn udi_buf_write(
     path_handle: udi_buf_path_t
 )
 {
+    //println!("udi_buf_write({:p} {}+{}, {:p}+{})", dst_buf, dst_off, dst_len, src_buf, src_len);
+    //if src_len > 0 {
+    //    println!("- {:p} {:?}", src_buf, ::core::slice::from_raw_parts(src_buf as *mut u8, src_len));
+    //}
     let dst = get_or_alloc(&mut dst_buf, path_handle);
     dst.invalidate_tags(dst_off, dst_len);
     if src_buf.is_null() {
         // If `src_buf` is NULL, then the data is unspecified
-        if src_len == dst_len {
-        }
-        else if src_len < dst_len {
-            // Delete
-            dst.delete_at(dst_off+src_len, dst_len - src_len);
-        }
-        else {
-            // Reserve
-            dst.reserve_at(dst_off + dst_len, src_len - dst_len);
-        }
+        dst.resize_at(dst_off, dst_len, src_len);
     }
     else {
         let src = if src_len == 0 {
@@ -236,17 +241,10 @@ unsafe extern "C" fn udi_buf_write(
             ::core::slice::from_raw_parts(src_buf as *mut u8, src_len)
         };
 
-        if src_len == dst_len {
-        }
-        else if src_len < dst_len {
-            dst.delete_at(dst_off+src_len, dst_len - src_len);
-        }
-        else {
-            dst.reserve_at(dst_off + dst_len, src_len - dst_len);
-        }
+        let dst_buf = dst.resize_at(dst_off, dst_len, src_len);
         // Update the data
-        let min_len = usize::min(dst_len, src_len);
-        dst.get_slice_mut(dst_off, min_len).copy_from_slice(&src[..min_len]);
+        dst_buf.copy_from_slice(src);
+        //println!("- {:p} {:?}", dst.get_slice_mut(dst_off,src_len).as_ptr(), dst.get_slice_mut(dst_off,src_len));
     }
     
     crate::async_call(gcb, move |gcb| callback(gcb, dst_buf))
