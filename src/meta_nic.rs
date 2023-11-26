@@ -203,6 +203,9 @@ impl ReadCbQueue
                     // Defensive measure.
                     self.tail = ::core::ptr::null_mut();
                 }
+                else {
+                    (*rv).chain = ::core::ptr::null_mut();
+                }
                 Some( CbHandleNicRx::from_raw(rv) )
             }
         }
