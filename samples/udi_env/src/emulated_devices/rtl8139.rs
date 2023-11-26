@@ -25,7 +25,7 @@ impl super::PioDevice for Device {
 
                 // 8K, 16K, 32K, 64K
                 let wrap = (regs.rcr >> 7) & 1 != 0;
-                let rblen = 16 + 0x2000 * 1 << ((regs.rcr >> 11) & 3);
+                let rblen = /*16 + */regs.rxbuf_size();
 
                 println!("RTL8139 RX {:#x}/{:#x} {:02x?}", regs.cba, rblen, packet);
 
@@ -45,8 +45,9 @@ impl super::PioDevice for Device {
                 }
  
                 let hdr = {
-                    let rx_status: u16 = 0;
-                    let packet_len: u16 = packet.len() as _;
+                    let rx_status: u16 = 0x4001;
+                    // NOTE: This is what qemu does.
+                    let packet_len: u16 = (4 + packet.len()) as _;
                     let mut hdr = [0; 4];
                     hdr[..2].copy_from_slice(&rx_status.to_le_bytes());
                     hdr[2..].copy_from_slice(&packet_len.to_le_bytes());
@@ -106,7 +107,7 @@ impl super::PioDevice for Device {
         regs::TSAD0..=regs::TSAD3 => u32::encode(dst, "TSADn", regs.tsad[ (reg >> 2) as usize & 3 ]),
         regs::RBSTART => u32::encode(dst, "RBSTART", regs.rbstart),
         regs::CMD => u8::encode(dst, "CMD", regs.cmd),
-        regs::CAPR => u16::encode(dst, "CAPR", regs.capr),
+        regs::CAPR => u16::encode(dst, "CAPR", regs.capr.wrapping_sub(0x10)),
         regs::CBR => u16::encode(dst, "CBR", regs.cba),
         regs::IMR => u16::encode(dst, "IMR", regs.imr),
         regs::ISR => u16::encode(dst, "ISR", regs.isr),
@@ -164,7 +165,7 @@ impl super::PioDevice for Device {
                 regs.reset();
             }
             },
-        regs::CAPR => regs.capr = u16::decode(src, "CAPR"),
+        regs::CAPR => regs.capr = u16::decode(src, "CAPR").wrapping_add(0x10) % regs.rxbuf_size(),
         regs::CBR => panic!("Invalid write to CBR"),
         regs::IMR => regs.imr = u16::decode(src, "IMR"),
         regs::ISR => regs.isr &= !u16::decode(src, "ISR"),
@@ -251,6 +252,9 @@ impl Regs
         self.cba = 0;
         self.capr = 0;
         self.cmd &= !0x10;
+    }
+    fn rxbuf_size(&self) -> u16 {
+        0x2000 * 1 << ((self.rcr >> 11) & 3)
     }
 }
 mod regs {
