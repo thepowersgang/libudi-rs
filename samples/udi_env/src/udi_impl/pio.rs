@@ -307,11 +307,19 @@ impl PioMemState<'_> {
                 },
             ::udi::ffi::pio::UDI_PIO_SCRATCH => {
                 let addr = reg.to_u32();
+                // SAFE: We're trusting the caller to have provided a valid pointer
                 unsafe { (self.scratch as *mut u8).offset(addr as _) }
                 }
-            ::udi::ffi::pio::UDI_PIO_BUF => todo!("write buf"),
+            ::udi::ffi::pio::UDI_PIO_BUF => {
+                let addr = reg.to_u32() as usize;
+                //println!("write(buf {:#x}, {})", addr, val.display(size));
+                // SAFE: We're trusting the caller to have provided a valid pointer
+                unsafe { crate::udi_impl::buf::write(self.buf, addr..addr+len, &val.bytes[..len]) };
+                return ;
+            },
             ::udi::ffi::pio::UDI_PIO_MEM => {
                 let addr = reg.to_u32();
+                // SAFE: We're trusting the caller to have provided a valid pointer
                 unsafe { (self.mem_ptr as *mut u8).offset(addr as _) }
                 },
             _ => unreachable!(),
@@ -329,20 +337,21 @@ impl PioMemState<'_> {
             ::udi::ffi::pio::UDI_PIO_DIRECT => return reg.masked(size),
             ::udi::ffi::pio::UDI_PIO_SCRATCH => {
                 let addr = reg.to_u32();
+                // SAFE: We're trusting the caller to have provided a valid pointer
                 unsafe { (self.scratch as *const u8).offset(addr as _) }
                 },
             ::udi::ffi::pio::UDI_PIO_BUF => {
                 let addr = reg.to_u32();
                 let mut val = RegVal::default();
-                unsafe {
-                    // TODO: Error handling.
-                    crate::udi_impl::buf::read(*self.buf, addr as usize, &mut val.bytes[..1 << size]);
-                }
+                // TODO: Error handling.
+                // SAFE: We're trusting the caller to have provided a valid pointer
+                unsafe { crate::udi_impl::buf::read(*self.buf, addr as usize, &mut val.bytes[..1 << size]) };
                 Self::little_to_native(&mut val, size);
                 return val;
             },
             ::udi::ffi::pio::UDI_PIO_MEM => {
                 let addr = reg.to_u32();
+                // SAFE: We're trusting the caller to have provided a valid pointer
                 unsafe { (self.mem_ptr as *const u8).offset(addr as _) }
                 },
             _ => unreachable!(),
