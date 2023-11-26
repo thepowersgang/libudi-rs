@@ -21,6 +21,7 @@ pub use self::future_ext::FutureExt;
 pub mod future_ext;
 #[macro_use]
 mod async_trickery;
+pub mod async_helpers;
 
 #[macro_use]
 pub mod metalang_trait;

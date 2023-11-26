@@ -2,28 +2,26 @@
 
 mod pio_ops;
 
+#[derive(Default)]
 struct Driver
 {
 	pio_handles: PioHandles,
-	parent_channel: ::udi::ffi::udi_channel_t,
+	//parent_channel: ::udi::ffi::udi_channel_t,
 	intr_channel: ::udi::imc::ChannelHandle,
+	intr_bound: ::udi::async_helpers::Wait< ::udi::Result<()> >,
 	channel_tx: ::udi::imc::ChannelHandle,
 	channel_rx: ::udi::imc::ChannelHandle,
 	rx_cb_queue: ::udi::meta_nic::ReadCbQueue,
 	mac_addr: [u8; 6],
+	vals: Vals,
+}
+struct Vals {
 	rx_next_page: u8,
 	tx_next_page: u8,
 }
-impl Default for Driver {
+impl Default for Vals {
     fn default() -> Self {    
-		Driver {
-			pio_handles: Default::default(),
-			parent_channel: ::core::ptr::null_mut(),
-			intr_channel: Default::default(),
-			channel_tx: Default::default(),
-			channel_rx: Default::default(),
-			rx_cb_queue: Default::default(),
-			mac_addr: [0; 6],
+		Vals {
 			rx_next_page: mem::RX_FIRST_PG,
 			tx_next_page: mem::TX_FIRST,
 		}
@@ -114,17 +112,15 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 			self.pio_handles.irq_ack = pio_map(&pio_ops::IRQACK).await;
 
 			// Save the channel used to bind to the parent, so we can unbind later on.
-			self.parent_channel = cb.gcb.channel;
-			::udi::debug_printf!("parent_channel=%p", self.parent_channel);
+			//self.parent_channel = cb.gcb.channel;
+			//::udi::debug_printf!("parent_channel=%p", self.parent_channel);
 
 			// Spawn channel
 			self.intr_channel = ::udi::imc::channel_spawn::<OpsList::Irq>(cb.gcb(), self, /*interrupt number*/0.into()).await;
 			let mut intr_cb = ::udi::cb::alloc::<CbList::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
 			intr_cb.init(0.into(), 2, ::core::mem::take(&mut self.pio_handles.irq_ack));	// NOTE: This transfers ownership
 			::udi::meta_bridge::attach_req(intr_cb);
-			// TODO: Does this need to wait until the attach ACKs?
-			// - Probably should, just in case the operation fails
-			//::udi::Error::from_status(self.intr_attach_res.wait().await)?;
+			self.intr_bound.wait(cb.gcb()).await?;
 
 			for _ in 0 .. 4/*NE2K_NUM_INTR_EVENT_CBS*/ {
 				let intr_event_cb = ::udi::cb::alloc::<CbList::IntrEvent>(cb.gcb(), self.intr_channel.raw()).await;
@@ -154,6 +150,9 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 			if status != 0 {
 				// TODO: Free the CB and channel?
 			}
+			else {
+
+			}
 			// Flag to the "caller" that this is complete, and what the result was
 			//self.intr_attach_res.set(status);
 		}
@@ -181,7 +180,7 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 					// Pull the packet off the device
 					match ::udi::pio::trans(
 						cb.gcb(), &self.inner.pio_handles.rx, 0.into(),
-						Some(&mut buf), Some(unsafe { ::udi::pio::MemPtr::new(::core::slice::from_mut(&mut self.inner.rx_next_page)) })
+						Some(&mut buf), Some(unsafe { ::udi::pio::MemPtr::new(::core::slice::from_mut(&mut self.inner.vals.rx_next_page)) })
 					).await
 					{
 					Ok(res) => {
@@ -305,11 +304,11 @@ unsafe impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 				let mut buf = ::core::mem::take(cur_cb.tx_buf_mut());
 
 				let len = (buf.len() as u16).to_ne_bytes();
-				let mut mem_buf = [len[0], len[1], self.tx_next_page];
+				let mut mem_buf = [len[0], len[1], self.vals.tx_next_page];
 				let mem_ptr = unsafe { ::udi::pio::MemPtr::new(&mut mem_buf) };
-				self.tx_next_page += ((buf.len() + 256-1) / 256) as u8;
-				if self.tx_next_page > mem::TX_LAST {
-					self.tx_next_page -= mem::TX_BUF_SIZE;
+				self.vals.tx_next_page += ((buf.len() + 256-1) / 256) as u8;
+				if self.vals.tx_next_page > mem::TX_LAST {
+					self.vals.tx_next_page -= mem::TX_BUF_SIZE;
 				}
 				match ::udi::pio::trans(cur_cb.gcb(), &self.pio_handles.tx, ::udi::ffi::udi_index_t(0), Some(&mut buf), Some(mem_ptr)).await
 				{
