@@ -53,12 +53,19 @@ fn main() {
         ::std::sync::Arc::new(DriverModule::new(&driver::udi_init_info, udiprops))
     };
     let _ = driver_module_ne2000;
+    
+    let mut is_nic = false;
     if let None = ::std::env::args_os().skip(1).next() {
+        is_nic = true;
         register_driver_module(&mut state, driver_module_ne2000);
     }
 
     for a in ::std::env::args_os().skip(1)
     {
+        let path = ::std::path::Path::new(&a);
+        if path.file_name().unwrap().as_encoded_bytes().starts_with(b"net_") {
+            is_nic = true;
+        }
         let path = ::std::ffi::CString::new(a.as_encoded_bytes()).unwrap();
         println!("LOADING {:?}", path);
         let driver_module_uart = unsafe {
@@ -134,10 +141,19 @@ fn main() {
 
         if !action_happened {
             // Push a network packet
-            match { let v = task_idx; task_idx += 1; v } {
-            0 => actions.push("nic_rx", b"ABCDEF0123456\x00\x01Hello World"),
-            1 => actions.push("nic_rx", b"ABCDEF0123456\x00\x01The world replies, that was unexpected"),
-            _ => break,
+            if is_nic {
+                match { let v = task_idx; task_idx += 1; v } {
+                0 => actions.push("nic_rx", b"ABCDEF0123456\x00\x01Hello World"),
+                1 => actions.push("nic_rx", b"ABCDEF0123456\x00\x01The world replies, that was unexpected"),
+                _ => break,
+                }
+
+            }
+            else {
+                match { let v = task_idx; task_idx += 1; v } {
+                0 => actions.push("uart_rx", b"12345"),
+                _ => break,
+                }
             }
         }
     }
