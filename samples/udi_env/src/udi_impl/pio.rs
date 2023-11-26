@@ -203,6 +203,22 @@ impl RegVal {
         let final_byte = (1 << size) - 1;
         self.bytes[final_byte] & 0x80 != 0
     }
+    fn display(&self, size: u8) -> impl ::core::fmt::Display + '_ {
+        return Display(self, size);
+        struct Display<'a>(&'a RegVal, u8);
+        impl ::core::fmt::Display for Display<'_> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("0x")?;
+                for byte in (0 .. 1 << self.1).rev() {
+                    f.write_fmt(format_args!("{:02x}", self.0.bytes[byte]))?;
+                    if byte != 0 && byte % 4 == 0 {
+                        f.write_str("_")?;
+                    }
+                }
+                Ok( () )
+            }
+        }
+    }
 }
 impl ::core::ops::BitOr for RegVal {
     type Output = RegVal;
@@ -391,12 +407,12 @@ impl PioDevState<'_> {
             DataTranslation::LittleEndian => {},
             }
         }
-        println!("PIO Read {:#x}+{:#x},l={} - {:?}", self.base_offset, reg, 1<<size, &rv.bytes[..1<<size]);
+        println!("PIO Read {:#x}+{:#x},l={} - {}", self.base_offset, reg, 1<<size, rv.display(size));
         rv
     }
     fn write(&mut self, reg: u32, mut val: RegVal, size: u8) {
         assert!(size <= 5);
-        println!("PIO Write {:#x}+{} = {:?}", reg, 1<<size, &val.bytes[..1<<size]);
+        println!("PIO Write {:#x}+{} = {}", reg, 1<<size, val.display(size));
         assert!(reg + (1 << size) <= self.length);
 
         {
