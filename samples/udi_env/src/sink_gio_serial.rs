@@ -92,6 +92,10 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
             {
             ::udi::ffi::meta_gio::UDI_GIO_OP_READ => {
                 // Signal the drivers
+                let buf = cb.data_buf();
+                let mut data = vec![0; buf.len()];
+                buf.read(0, &mut data);
+                println!("xfer_ack - RX {:02x?}", data);
                 },
             ::udi::ffi::meta_gio::UDI_GIO_OP_WRITE => {},
             _ => todo!("xfer_ack - Unknown operation: {:#x}", cb.op),

@@ -23,6 +23,15 @@ impl_metalanguage!{
         ;
 }
 
+impl crate::cb::CbRef<'_, ffi::udi_gio_xfer_cb_t>
+{
+    pub fn data_buf(&self) -> &crate::buf::Handle {
+        // SAFE: Valid pointers
+        unsafe {
+            crate::buf::Handle::from_ref(&self.data_buf)
+        }
+    }
+}
 impl crate::cb::CbHandle<ffi::udi_gio_xfer_cb_t>
 {
     pub fn data_buf_mut(&mut self) -> &mut crate::buf::Handle {
@@ -35,12 +44,6 @@ impl crate::cb::CbHandle<ffi::udi_gio_xfer_cb_t>
     pub fn set_op(&mut self, op: u8) {
         unsafe {
             self.get_mut().op = op;
-        }
-    }
-    /// Get the `tr_params` pointer - this is allocated by the enviromment during CB allocation, and never modified
-    pub fn tr_params(&mut self) -> *mut ::udi_sys::c_void {
-        unsafe {
-            self.get_mut().tr_params
         }
     }
 }
