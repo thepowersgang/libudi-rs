@@ -21,6 +21,7 @@ pub mod meta_bridge;
 pub mod meta_gio;
 pub mod meta_nic;
 pub mod meta_usb;
+pub mod meta_scsi;
 pub mod libc;
 pub mod layout;
 pub mod mem;
