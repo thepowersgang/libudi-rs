@@ -1,6 +1,6 @@
 //! USB Metalanguage, as defined in `udbdi10.pdf`
 //! 
-//! https://www.usb.org/document-library/openusbdi-specification-10
+//! <https://www.usb.org/document-library/openusbdi-specification-10>
 //! 
 //! NOTE: This spec seems incomplete, there's at least one bug, and it was written for UDI 0x095, not 0x101
 use super::*;
