@@ -5,8 +5,8 @@ mod pio_ops;
 
 const MTU: usize = 1520;
 const RX_BUF_LENGTH: usize = 0x2000+16;
-const RX_BUF_CAPACITY: usize = RX_BUF_LENGTH+0x3000;	// Extra page, to allow one page past the end
-//const RX_BUF_CAPACITY: usize = RX_BUF_LENGTH+MTU+8;//0x3000;	// Extra page, to allow one page past the end
+//const RX_BUF_CAPACITY: usize = RX_BUF_LENGTH+0x000;	// Extra page, to allow one page past the end
+const RX_BUF_CAPACITY: usize = RX_BUF_LENGTH+MTU+8;//0x3000;	// Extra page, to allow one page past the end
 
 #[derive(Default)]
 struct Driver
@@ -134,23 +134,23 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 					true, size
 				);
 				DmaStructures {
-				// Allocate the RX buffer (12KiB - 3 standard pages)
-				rx_buf: alloc_single(RX_BUF_CAPACITY).await,
-				// DMA information for direct TX of the four TX slots
-				tx_slots: [
-					DmaBuf::prepare(cb.gcb(), &self.inner.dma_constraints, Some(Direction::Out)).await,
-					DmaBuf::prepare(cb.gcb(), &self.inner.dma_constraints, Some(Direction::Out)).await,
-					DmaBuf::prepare(cb.gcb(), &self.inner.dma_constraints, Some(Direction::Out)).await,
-					DmaBuf::prepare(cb.gcb(), &self.inner.dma_constraints, Some(Direction::Out)).await,
-				],
-				// Bounce buffers for the TX slots
-				tx_bounce: [
-					alloc_single(MTU+20).await,
-					alloc_single(MTU+20).await,
-					alloc_single(MTU+20).await,
-					alloc_single(MTU+20).await,
-				],
-				}
+					// Allocate the RX buffer (12KiB - 3 standard pages)
+					rx_buf: alloc_single(RX_BUF_CAPACITY).await,
+					// DMA information for direct TX of the four TX slots
+					tx_slots: [
+						DmaBuf::prepare(cb.gcb(), &self.inner.dma_constraints, Some(Direction::Out)).await,
+						DmaBuf::prepare(cb.gcb(), &self.inner.dma_constraints, Some(Direction::Out)).await,
+						DmaBuf::prepare(cb.gcb(), &self.inner.dma_constraints, Some(Direction::Out)).await,
+						DmaBuf::prepare(cb.gcb(), &self.inner.dma_constraints, Some(Direction::Out)).await,
+					],
+					// Bounce buffers for the TX slots
+					tx_bounce: [
+						alloc_single(MTU+20).await,
+						alloc_single(MTU+20).await,
+						alloc_single(MTU+20).await,
+						alloc_single(MTU+20).await,
+					],
+					}
 				});
 			let rbstart: u32 = self.inner.dma_handles.as_ref().unwrap()
 				.rx_buf.scgth().single_entry_32().expect("Environment broke the RX buffer into chunks, not allowed")

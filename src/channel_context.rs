@@ -1,4 +1,8 @@
 
+// TODO: Figure out a way to get `&mut` to region data (or channel context?) without technically violating aliasing
+// - Could just leave interior mutability to the driver
+// - Otherwise, can get `&mut` if no async can happen, which means no calls that take a CB
+//   - That CB could be any CB - so short of somehow banning any calls to the UDI environment (how?) it has to be a lock
 
 /// Channel context for child bind channels
 #[repr(C)]
