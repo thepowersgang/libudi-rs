@@ -147,14 +147,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
     fn intr_attach_ack<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrAttach<'a>, status: udi::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'a> {
 		let _ = cb;
         async move {
-			if status != 0 {
-				// TODO: Free the CB and channel?
-			}
-			else {
-
-			}
-			// Flag to the "caller" that this is complete, and what the result was
-			//self.intr_attach_res.set(status);
+			self.intr_bound.signal(::udi::Error::from_status(status))
 		}
     }
 
