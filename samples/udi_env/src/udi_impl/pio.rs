@@ -295,7 +295,12 @@ impl ::core::ops::Shl<u8> for RegVal {
             .take(self.bytes.len());
         let mut prev = 0;
         for (d, v) in rv.bytes.iter_mut().zip( src ) {
-            *d = (v << bits) | (prev >> (8-bits));
+            if bits == 0 {
+                *d = v;
+            }
+            else {
+                *d = (v << bits) | (prev >> (8-bits));
+            }
             prev = v;
         }
         rv
@@ -314,7 +319,12 @@ impl ::core::ops::Shr<u8> for RegVal {
             .take(self.bytes.len());
         let mut prev = 0;
         for (d, v) in rv.bytes.iter_mut().rev().zip( src ) {
-            *d = (v >> bits) | (prev >> (8-bits));
+            if bits == 0 {
+                *d = v;
+            }
+            else {
+                *d = (v >> bits) | (prev >> (8-bits));
+            }
             prev = v;
         }
         rv
@@ -552,7 +562,7 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
                     1 => ("NZ"  , !val.is_zero()),
                     2 => ("Neg ", val.is_neg(op.tran_size)),
                     3 => ("NNeg", !val.is_neg(op.tran_size)),
-                    _ => todo!("CSKIP"),
+                    _ => panic!("Unknwon CSKIP operand {:#x}", op.operand),
                     };
                 println!("CSKIP.{s} R{} {}", op.pio_op&7, msg);
                 if cnd {
