@@ -115,7 +115,7 @@ use super::mem;
     // - Subtract 256-4 from R5(length), if <=0 we've grabbed the entire packet
     LOAD_IMM.B R3, (256-4) as u8;   // R3 is the offset in the output buffer, we've loaded 126 words currently
     ADD_IMM.S R5, -(256i16-4) as u16;
-    LABEL 2;
+LABEL 2;
     CSKIP.S R5 NZ;
     BRANCH 1;   // 1: End if R5(length)==0
     CSKIP.S R5 NNeg;
@@ -139,10 +139,15 @@ use super::mem;
     //  > Data to buffer (128 words)
     // buffer offset maintained in R3
     LOAD_IMM.B R1, regs::APG_MEM;
+    LOAD.S R2, R5;
+    SHIFT_RIGHT.S R2, 2;
+    LOAD.S R6, R2;
+    ADD_IMM.S R6, -128i16 as u16;
+    CSKIP.S R6 Neg; // If R2 < 128, then don't set to 128
     LOAD_IMM.B R2, (256u16/2) as u8;   // Count (full 128 words)
     REP_IN_IND.B [buf R3 STEP1], R1, R2;
     ADD_IMM.S R3, 256;
-    ADD_IMM.S R3, -256i16 as u16;
+    ADD_IMM.S R5, -256i16 as u16;
     // - Jump to length check
     BRANCH 2;   // 2: Check against length
 
