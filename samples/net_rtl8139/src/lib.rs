@@ -352,10 +352,11 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 		}
     }
 
-	type Future_unbind_req<'s> = impl ::core::future::Future<Output=()> + 's;
+	type Future_unbind_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
     fn unbind_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_unbind_req<'a> {
         async move {
 			let _ = cb;
+			Ok( () )
 		}
     }
 
@@ -369,7 +370,7 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 		self.dev().pio_handles.disable(cb.gcb())
     }
 
-	type Future_ctrl_req<'s> = impl ::core::future::Future<Output=()> + 's;
+	type Future_ctrl_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
     fn ctrl_req<'a>(&'a mut self, _cb: ::udi::meta_nic::CbRefNicCtrl<'a>) -> Self::Future_ctrl_req<'a> {
         async move { todo!() }
     }

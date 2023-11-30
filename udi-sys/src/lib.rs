@@ -70,6 +70,16 @@ pub struct udi_boolean_t(pub u8);
 impl udi_boolean_t {
 	pub fn to_bool(&self) -> bool { self.0 != 0 }
 }
+impl From<bool> for udi_boolean_t {
+    fn from(value: bool) -> Self {
+        udi_boolean_t(value as u8)
+    }
+}
+impl From<udi_boolean_t> for bool {
+    fn from(value: udi_boolean_t) -> Self {
+		value.to_bool()
+    }
+}
 pub const TRUE: udi_boolean_t = udi_boolean_t(1);
 pub const FALSE: udi_boolean_t = udi_boolean_t(0);
 pub type udi_ubit8_t  = u8;

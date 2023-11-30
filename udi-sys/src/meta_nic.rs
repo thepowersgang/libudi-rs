@@ -52,6 +52,18 @@ pub struct udi_nic_ctrl_cb_t
     pub indicator: udi_ubit32_t,
     pub data_buf: *mut udi_buf_t,
 }
+/* Network Control Operation Commands */
+pub const UDI_NIC_ADD_MULTI   : udi_ubit8_t =  1;
+pub const UDI_NIC_DEL_MULTI   : udi_ubit8_t =  2;
+pub const UDI_NIC_ALLMULTI_ON : udi_ubit8_t =  3;
+pub const UDI_NIC_ALLMULTI_OFF: udi_ubit8_t =  4;
+pub const UDI_NIC_GET_CURR_MAC: udi_ubit8_t =  5;
+pub const UDI_NIC_SET_CURR_MAC: udi_ubit8_t =  6;
+pub const UDI_NIC_GET_FACT_MAC: udi_ubit8_t =  7;
+pub const UDI_NIC_PROMISC_ON  : udi_ubit8_t =  8;
+pub const UDI_NIC_PROMISC_OFF : udi_ubit8_t =  9;
+pub const UDI_NIC_HW_RESET    : udi_ubit8_t = 10;
+pub const UDI_NIC_BAD_RXPKT   : udi_ubit8_t = 11;
 
 #[repr(C)]
 pub struct udi_nic_status_cb_t
@@ -59,6 +71,11 @@ pub struct udi_nic_status_cb_t
     pub gcb: udi_cb_t,
     pub event: udi_ubit8_t,
 }
+/* Network Status Event Codes */
+pub const UDI_NIC_LINK_DOWN : udi_ubit8_t = 0;
+pub const UDI_NIC_LINK_UP   : udi_ubit8_t = 1;
+pub const UDI_NIC_LINK_RESET: udi_ubit8_t = 2;
+
 
 #[repr(C)]
 pub struct udi_nic_info_cb_t

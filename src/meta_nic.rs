@@ -14,6 +14,23 @@
 use crate::ffi::udi_index_t;
 use crate::ffi::meta_nic as ffi;
 
+
+pub fn nd_enable_req(cb: crate::cb::CbHandle<ffi::udi_nic_cb_t>) {
+    unsafe { ffi::udi_nd_enable_req(cb.into_raw()) }
+}
+pub fn nd_disable_req(cb: crate::cb::CbHandle<ffi::udi_nic_cb_t>) {
+    unsafe { ffi::udi_nd_disable_req(cb.into_raw()) }
+}
+pub fn nd_ctrl_req(cb: crate::cb::CbHandle<ffi::udi_nic_ctrl_cb_t>) {
+    unsafe { ffi::udi_nd_ctrl_req(cb.into_raw()) }
+}
+pub fn nd_info_req(cb: crate::cb::CbHandle<ffi::udi_nic_info_cb_t>, reset_statistics: bool) {
+    unsafe { ffi::udi_nd_info_req(cb.into_raw(), reset_statistics.into()) }
+}
+pub fn nsr_status_ind(cb: crate::cb::CbHandle<ffi::udi_nic_status_cb_t>) {
+    unsafe { ffi::udi_nsr_status_ind(cb.into_raw()) }
+}
+
 pub fn nsr_rx_ind(rx_cb: CbHandleNicRx) {
     unsafe { ffi::udi_nsr_rx_ind(rx_cb.into_raw()) }
 }
@@ -225,10 +242,10 @@ pub enum OpsNum
 
 pub trait Control: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
     async_method!(fn bind_req(&'a mut self, cb: CbRefNicBind<'a>, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->crate::Result<NicInfo> as Future_bind_req);
-    async_method!(fn unbind_req(&'a mut self, cb: CbRefNic<'a>)->() as Future_unbind_req);
+    async_method!(fn unbind_req(&'a mut self, cb: CbRefNic<'a>)->crate::Result<()> as Future_unbind_req);
     async_method!(fn enable_req(&'a mut self, cb: CbRefNic<'a>)->crate::Result<()> as Future_enable_req);
     async_method!(fn disable_req(&'a mut self, cb: CbRefNic<'a>)->() as Future_disable_req);
-    async_method!(fn ctrl_req(&'a mut self, cb: CbRefNicCtrl<'a>)->() as Future_ctrl_req);
+    async_method!(fn ctrl_req(&'a mut self, cb: CbRefNicCtrl<'a>)->crate::Result<()> as Future_ctrl_req);
     async_method!(fn info_req(&'a mut self, cb: CbRefNicInfo<'a>, reset_statistics: bool)->() as Future_info_req);
 }
 struct MarkerControl;
@@ -277,6 +294,9 @@ future_wrapper!(nd_disable_req_op => <T as Control>(cb: *mut ffi::udi_nic_cb_t) 
 });
 future_wrapper!(nd_ctrl_req_op => <T as Control>(cb: *mut ffi::udi_nic_ctrl_cb_t) val @ {
     val.ctrl_req(cb)
+} finally(res) {
+    // SAFE: Correct FFIs
+    unsafe { ffi::udi_nsr_ctrl_ack(cb, crate::Error::to_status(res)) }
 });
 future_wrapper!(nd_info_req_op => <T as Control>(cb: *mut ffi::udi_nic_info_cb_t, reset_statistics: crate::ffi::udi_boolean_t) val @ {
     val.info_req(cb, reset_statistics.to_bool())
@@ -314,6 +334,9 @@ pub trait NsrControl: 'static + crate::async_trickery::CbContext + crate::imc::C
     async_method!(fn ctrl_ack(&'a mut self, cb: CbRefNicCtrl<'a>, res: crate::Result<()>)->() as Future_ctrl_ack);
     async_method!(fn info_ack(&'a mut self, cb: CbRefNicInfo<'a>)->() as Future_info_ack);
     async_method!(fn status_ind(&'a mut self, cb: CbRefNicStatus<'a>)->() as Future_status_ind);
+    fn ret_cb_nic(&mut self, cb: crate::cb::CbHandle<ffi::udi_nic_cb_t>) { let _ = cb; }
+    fn ret_cb_nic_ctrl(&mut self, cb: crate::cb::CbHandle<ffi::udi_nic_ctrl_cb_t>) { let _ = cb; }
+    fn ret_cb_nic_info(&mut self, cb: crate::cb::CbHandle<ffi::udi_nic_info_cb_t>) { let _ = cb; }
 }
 future_wrapper!(nsr_channel_bound => <T as NsrControl>(cb: *mut ffi::udi_nic_bind_cb_t) val @ {
     val.get_bind_channels(cb)
@@ -345,18 +368,34 @@ future_wrapper!(nsr_bind_ack_op => <T as NsrControl>(cb: *mut ffi::udi_nic_bind_
 });
 future_wrapper!(nsr_unbind_ack_op => <T as NsrControl>(cb: *mut ffi::udi_nic_cb_t, status: ::udi_sys::udi_status_t) val @ {
     val.unbind_ack(cb, crate::Error::from_status(status))
+} finally( () ) {
+    // SAFE: Owns the CB
+    val.ret_cb_nic(unsafe { crate::cb::CbHandle::from_raw(cb) });
 });
 future_wrapper!(nsr_enable_ack_op => <T as NsrControl>(cb: *mut ffi::udi_nic_cb_t, status: ::udi_sys::udi_status_t) val @ {
     val.enable_ack(cb, crate::Error::from_status(status))
+} finally( () ) {
+    // SAFE: Owns the CB
+    val.ret_cb_nic(unsafe { crate::cb::CbHandle::from_raw(cb) });
 });
 future_wrapper!(nsr_ctrl_ack_op => <T as NsrControl>(cb: *mut ffi::udi_nic_ctrl_cb_t, status: ::udi_sys::udi_status_t) val @ {
     val.ctrl_ack(cb, crate::Error::from_status(status))
+} finally( () ) {
+    // SAFE: Owns the CB
+    val.ret_cb_nic_ctrl(unsafe { crate::cb::CbHandle::from_raw(cb) });
 });
 future_wrapper!(nsr_info_ack_op => <T as NsrControl>(cb: *mut ffi::udi_nic_info_cb_t) val @ {
     val.info_ack(cb)
+} finally( () ) {
+    // SAFE: Owns the CB
+    val.ret_cb_nic_info(unsafe { crate::cb::CbHandle::from_raw(cb) });
 });
 future_wrapper!(nsr_status_ind_op => <T as NsrControl>(cb: *mut ffi::udi_nic_status_cb_t) val @ {
     val.status_ind(cb)
+} finally( () ) {
+    // See the docs for `udi_nsr_status_ind` - Expected to deallocate the CB
+    // SAFE: Owns the CB
+    drop(unsafe { crate::cb::CbHandle::from_raw(cb) });
 });
 map_ops_structure!{
     ffi::udi_nsr_ctrl_ops_t => NsrControl,MarkerNsrControl {
