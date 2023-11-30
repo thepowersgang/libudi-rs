@@ -289,9 +289,10 @@ impl ::core::ops::Shl<u8> for RegVal {
         let bytes = rhs / 8;
         let bits = rhs % 8;
         // Start at the LSB, since we're shifting left/up
-        let src = self.bytes.iter().copied()
+        let src = [0; 32].iter().copied()
+            .chain(self.bytes.iter().copied())
             .chain(std::iter::repeat(0))
-            .skip(bytes as _)
+            .skip(32 - bytes as usize)
             .take(self.bytes.len());
         let mut prev = 0;
         for (d, v) in rv.bytes.iter_mut().zip( src ) {
@@ -313,10 +314,12 @@ impl ::core::ops::Shr<u8> for RegVal {
         let bytes = rhs / 8;
         let bits = rhs % 8;
         // Start at the MSB, since we're shifting right/down
-        let src = self.bytes.iter().copied().rev()
-            .chain(std::iter::repeat(0))
-            .skip(bytes as _)
-            .take(self.bytes.len());
+        let src = [0; 32].iter().copied()
+            .chain(self.bytes.iter().copied().rev())
+            .chain([0; 32].iter().copied())
+            .skip(32 - bytes as usize)
+            .take(self.bytes.len())
+            ;
         let mut prev = 0;
         for (d, v) in rv.bytes.iter_mut().rev().zip( src ) {
             if bits == 0 {
@@ -327,8 +330,19 @@ impl ::core::ops::Shr<u8> for RegVal {
             }
             prev = v;
         }
-        rv
+        return rv;
     }
+}
+#[cfg(test)]
+mod test {
+
+    #[test]
+    fn val_shift() {
+        let v1 = super::RegVal::from_u16(0x1234);
+        assert_eq!((v1 >> 8).to_u32(), 0x12);
+        assert_eq!((v1 << 8).to_u32(), 0x123400);
+    }
+
 }
 struct PioMemState<'a> {
     buf: &'a mut *mut udi_buf_t,
@@ -409,6 +423,7 @@ impl PioMemState<'_> {
         let mut val = RegVal::default();
         unsafe {
             let len = 1 << size;
+            //println!("Read {:p}+{}", ptr, len);
             for i in 0 .. len {
                 val.bytes[i] = *ptr.offset(i as _);
             }
