@@ -282,6 +282,44 @@ impl ::core::ops::Sub for RegVal {
         rv
     }
 }
+impl ::core::ops::Shl<u8> for RegVal {
+    type Output = RegVal;
+    fn shl(self, rhs: u8) -> Self::Output {
+        let mut rv = RegVal::default();
+        let bytes = rhs / 8;
+        let bits = rhs % 8;
+        // Start at the LSB, since we're shifting left/up
+        let src = self.bytes.iter().copied()
+            .chain(std::iter::repeat(0))
+            .skip(bytes as _)
+            .take(self.bytes.len());
+        let mut prev = 0;
+        for (d, v) in rv.bytes.iter_mut().zip( src ) {
+            *d = (v << bits) | (prev >> (8-bits));
+            prev = v;
+        }
+        rv
+    }
+}
+impl ::core::ops::Shr<u8> for RegVal {
+    type Output = RegVal;
+    fn shr(self, rhs: u8) -> Self::Output {
+        let mut rv = RegVal::default();
+        let bytes = rhs / 8;
+        let bits = rhs % 8;
+        // Start at the MSB, since we're shifting right/down
+        let src = self.bytes.iter().copied().rev()
+            .chain(std::iter::repeat(0))
+            .skip(bytes as _)
+            .take(self.bytes.len());
+        let mut prev = 0;
+        for (d, v) in rv.bytes.iter_mut().rev().zip( src ) {
+            *d = (v >> bits) | (prev >> (8-bits));
+            prev = v;
+        }
+        rv
+    }
+}
 struct PioMemState<'a> {
     buf: &'a mut *mut udi_buf_t,
     scratch: *mut c_void,
@@ -302,7 +340,9 @@ impl PioMemState<'_> {
         let ptr = match location_spec & 0x18
             {
             ::udi::ffi::pio::UDI_PIO_DIRECT => {
+                Self::little_to_native(&mut val, size); // Undo the endian flip
                 *reg = val.masked(size);
+                println!("> R{} = {}", location_spec, reg.display(size));
                 return
                 },
             ::udi::ffi::pio::UDI_PIO_SCRATCH => {
@@ -531,8 +571,18 @@ fn pio_trans_inner(state: &mut PioMemState, io_state: &mut PioDevState, trans_li
                 let reg = state.read(op.operand as u8 & 7, op.tran_size).to_u32();
                 io_state.write(reg, val, op.tran_size)
             },
-            SHIFT_LEFT => todo!("SHIFT_LEFT"),
-            SHIFT_RIGHT => todo!("SHIFT_RIGHT"),
+            SHIFT_LEFT => {
+                println!("SHIFT_LEFT.{s} R{}, {}", op.pio_op & 7, op.operand);
+                let val = state.read(op.pio_op & 7, op.tran_size);
+                assert!(op.operand <= 8 << op.tran_size);
+                state.write(op.pio_op & 7, val << op.operand as u8, op.tran_size);
+            },
+            SHIFT_RIGHT => {
+                println!("SHIFT_RIGHT.{s} R{}, {}", op.pio_op & 7, op.operand);
+                let val = state.read(op.pio_op & 7, op.tran_size);
+                assert!(op.operand <= 8 << op.tran_size);
+                state.write(op.pio_op & 7, val >> op.operand as u8, op.tran_size);
+            },
             AND => {
                 println!("AND.{s} R{}, R{}", op.pio_op & 7, op.operand & 7);
                 let val_l = state.read(op.pio_op & 7, op.tran_size);

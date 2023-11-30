@@ -112,6 +112,7 @@ impl RealUdiBuf {
 
     ///
     fn resize_at(&mut self, dst_off: udi_size_t, dst_len: udi_size_t, src_len: udi_size_t) -> &mut [u8] {
+        assert!(dst_off + dst_len <= self.len(), "resize_at: {}+{} not in {}", dst_off, dst_len, self.len());
         if src_len == dst_len {
         }
         else if src_len < dst_len {
