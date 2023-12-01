@@ -149,15 +149,20 @@ impl Handle
         }
     }
 
-    #[cfg(false_)]
+    /// Copy from one buffer to another (including tags)
+    /// 
+    /// - `src_range` - Source data range
+    /// - `dst_range` - Destination range, if this is not the same size as `src_range` data will be shifted
     pub fn copy_from<'a>(
         &'a mut self,
         cb: crate::CbRef<crate::ffi::udi_cb_t>,
         src: &'a Handle,
-        src_range: ::core::ops::Range<usize>,
-        dst_range: ::core::ops::Range<usize>,
-    )
+        src_range: impl ::core::ops::RangeBounds<usize>,
+        dst_range: impl ::core::ops::RangeBounds<usize>,
+    ) -> impl ::core::future::Future<Output=()> + 'a
     {
+        let src_range = src.get_range(src_range);
+        let dst_range = self.get_range(dst_range);
         let self_buf = self.0;
         crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
             cb,
@@ -176,9 +181,10 @@ impl Handle
     /// Write data into a buffer
     pub fn write<'a>(&'a mut self,
     	cb: crate::CbRef<crate::ffi::udi_cb_t>,
-        dst: ::core::ops::Range<usize>,
+        dst: impl ::core::ops::RangeBounds<usize>,
         data: &'a [u8]
     ) -> impl Future<Output=()> + 'a {
+        let dst = self.get_range(dst);
         let self_buf = self.0;
         crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
             cb,
@@ -267,7 +273,8 @@ impl Handle
         };
         &mut dst[..len as usize]
     }
-    pub fn tag_compute(&mut self, range: ::core::ops::Range<usize>, tag_type: udi_tagtype_t) -> crate::ffi::udi_ubit32_t {
+    pub fn tag_compute(&mut self, range: impl ::core::ops::RangeBounds<usize>, tag_type: udi_tagtype_t) -> crate::ffi::udi_ubit32_t {
+        let range = self.get_range(range);
         debug_assert!(tag_type.count_ones() == 1);
         debug_assert!(tag_type & crate::ffi::buf::UDI_BUFTAG_VALUES != 0);
         let off = range.start;
