@@ -62,7 +62,7 @@ impl super::PioDevice for Rtl8029 {
                     bytes.len().to_le_bytes()[0],
                     bytes.len().to_le_bytes()[1],
                     ];
-                regs.card_ram.write(regs.rx_next as u16, &hdr);
+                regs.card_ram.write(regs.rx_next as u16 * 256 + 0, &hdr);
                 regs.card_ram.write(regs.rx_next as u16 * 256 + 4, a);
                 regs.card_ram.write(regs.pstart as u16 * 256, b);
                 regs.rx_next = next_page;
@@ -134,7 +134,10 @@ impl super::PioDevice for Rtl8029 {
             },
             }
         },
-        (0, 1) => regs.pstart = v,
+        (0, 1) => {
+            regs.pstart = v;
+            regs.rx_next = regs.pstart;
+        },
         (0, 2) => regs.pstop = v,
         (0, 3) => regs.bnry = v,
         (0, 4) => regs.tpsr = v,
@@ -268,9 +271,12 @@ impl CardMem {
         }
     }
     fn write(&mut self, addr: u16, src: &[u8]) {
+        fn copy_to(dst: &mut [u8], rel_addr: u16, src: &[u8]) {
+            dst[rel_addr as usize..][..src.len()].copy_from_slice(src);
+        }
         match addr {
-        0x40_00 ..= 0x80_00 => self.0[addr as usize..][..src.len()].copy_from_slice(src),
-        _ => panic!(),
+        0x40_00 ..= 0x80_00 => copy_to(&mut *self.0, addr - 0x40_00, src),
+        _ => panic!("Out-of-bounds write: {:#x}+{}", addr, src.len()),
         }
     }
 }
