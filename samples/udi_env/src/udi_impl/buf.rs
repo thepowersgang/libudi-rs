@@ -37,6 +37,11 @@ impl Tag {
             1 << self.tag_type
         }
     }
+    fn sort_ord(&self, other: &Self) -> ::core::cmp::Ordering {
+        self.tag_off.cmp(&other.tag_off)
+            .then(self.tag_len.cmp(&other.tag_len))
+            .then(self.tag_type.cmp(&other.tag_type))
+    }
 }
 
 impl RealUdiBuf {
@@ -128,6 +133,9 @@ unsafe fn get_or_alloc(ptr: &mut *mut udi_buf_t, path_handle: udi_buf_path_t) ->
     if ptr.is_null() {
         *ptr = RealUdiBuf::new_raw(path_handle);
     }
+    else {
+        // TODO: Assert that `path_handle` is NULL
+    }
     &mut *(*ptr as *mut RealUdiBuf)
 }
 unsafe fn get_buf_mut(ptr: &mut *mut udi_buf_t) -> Option<&mut RealUdiBuf> {
@@ -199,7 +207,7 @@ unsafe extern "C" fn udi_buf_copy(
     src_buf: *mut udi_buf_t,
     src_off: udi_size_t,
     src_len: udi_size_t,
-    dst_buf: *mut udi_buf_t,
+    mut dst_buf: *mut udi_buf_t,
     dst_off: udi_size_t,
     dst_len: udi_size_t,
     path_handle: udi_buf_path_t
@@ -207,10 +215,37 @@ unsafe extern "C" fn udi_buf_copy(
 {
     //println!("udi_buf_copy({:p} {}+{}, {:p} {}+{})", dst_buf, dst_off, dst_len, src_buf, src_off, src_len);
     assert!(src_buf != dst_buf, "Not allowed to reference the same buffer");
-    let src = get_buf(&src_buf).unwrap().get_slice(src_off, src_len);
-    //let dst = get_or_alloc(&mut dst_buf, path_handle);
-    // TODO: Also need to copy the tags
-    udi_buf_write(callback, gcb, src.as_ptr() as *const c_void, src.len(), dst_buf, dst_off, dst_len, path_handle);
+    let src_buf = get_buf(&src_buf).unwrap();
+
+    let dst = get_or_alloc(&mut dst_buf, path_handle);
+    // Remove existing tags
+    dst.invalidate_tags(dst_off, dst_len);
+    // Copy data
+    {
+        let src = src_buf.get_slice(src_off, src_len);
+        let dst_buf = dst.resize_at(dst_off, dst_len, src_len);
+        dst_buf.copy_from_slice(src);
+    }
+    // Copy tags (done after the data is copied, as the copying would otherwise maybe shift the tag offsets)
+    {
+        for src_tag in src_buf.tags.iter()
+        {
+            // 13.7 Paragraph 4
+            // When a buffer is copied to another buffer or to a newly created buffer, any tags contained entirely within
+            // the copied section are duplicated in the destination buffer automatically.
+            if src_off <= src_tag.tag_off && src_tag.tag_off + src_tag.tag_len <= src_off + src_len {
+                dst.tags.push(Tag {
+                    tag_off: src_tag.tag_off - src_off + dst_off,
+                    ..*src_tag
+                });
+            }
+        }
+        // Lazy option: re-sort the tag list
+        // - There should be no duplicates, becuase the destination range has been invalidated
+        dst.tags.sort_unstable_by(Tag::sort_ord);
+    }
+    
+    crate::async_call(gcb, move |gcb| callback(gcb, dst_buf))
 }
 #[no_mangle]
 unsafe extern "C" fn udi_buf_write(
@@ -345,7 +380,7 @@ unsafe extern "C" fn udi_buf_tag_set(
                     },
                 tag_value: tag.tag_value,
             };
-            match p.tags.binary_search_by(|v: &Tag| tag.tag_off.cmp(&v.tag_off).then(tag.tag_len.cmp(&v.tag_len)).then(tag.tag_type.cmp(&v.tag_type)))
+            match p.tags.binary_search_by(|v: &Tag| v.sort_ord(&tag))
             {
             Ok(pos) => {
                 if tag.tag_type < 24 {
