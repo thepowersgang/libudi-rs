@@ -76,6 +76,10 @@ impl ::udi::meta_nic::NsrControl for ::udi::init::RData<Driver>
                     ::udi::meta_nic::nd_rx_rdy(rx_cb);
                 }
 
+                ::udi::meta_nic::nd_enable_req({
+                    ::udi::cb::alloc::<CbList::_Nic>(cb.gcb(), cb.gcb.channel).await
+                });
+
                 // Send a test packet
                 if let Some(mut tx_cb) = self.tx_cbs.pop_front() {
                     let buf = tx_cb.tx_buf_mut();
@@ -95,7 +99,7 @@ impl ::udi::meta_nic::NsrControl for ::udi::init::RData<Driver>
 
     type Future_enable_ack<'s> = impl ::core::future::Future<Output=()>;
     fn enable_ack<'a>(&'a mut self, _cb: ::udi::meta_nic::CbRefNic<'a>, _res: ::udi::Result<()>) -> Self::Future_enable_ack<'a> {
-        async move { todo!("enable_ack") }
+        async move { }
     }
 
     type Future_ctrl_ack<'s> = impl ::core::future::Future<Output=()>;
