@@ -63,10 +63,10 @@ pub unsafe fn get_region(ch: &::udi::ffi::udi_channel_t) -> &crate::DriverRegion
     // Launder the pointer - so we can return the borrow
     let ch_side = &*(ch_side as *const ChannelInnerSide);
     for r in &ch_side.driver_instance.regions {
-        if r.context == ch_side.context {
+        if r.context() == ch_side.context {
             return r;
         }
-        if r.context == *(ch_side.context as *mut *mut ::udi::ffi::c_void) {
+        if r.context() == *(ch_side.context as *mut *mut ::udi::ffi::c_void) {
             return r;
         }
     }

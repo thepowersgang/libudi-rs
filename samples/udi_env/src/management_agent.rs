@@ -328,10 +328,10 @@ impl InitState {
 
         // Spawn the channel
         let (channel_1, channel_2) = crate::channels::spawn_raw();
-        let bind_cb = crate::udi_impl::cb::alloc(&driver_module, bind_cb_idx, rgn.context, channel_1);
+        let bind_cb = crate::udi_impl::cb::alloc(&driver_module, bind_cb_idx, rgn.context(), channel_1);
         unsafe {
-            crate::channels::anchor(channel_1, instance.clone(), driver_module.get_meta_ops(ops_pri), instance.regions[0].context);
-            crate::channels::anchor(channel_2, instance.clone(), driver_module.get_meta_ops(ops_sec), rgn.context);
+            crate::channels::anchor(channel_1, instance.clone(), driver_module.get_meta_ops(ops_pri), instance.regions[0].context());
+            crate::channels::anchor(channel_2, instance.clone(), driver_module.get_meta_ops(ops_sec), rgn.context());
 
             let (op, cb) = crate::channels::event_ind_bound_internal(channel_1, bind_cb as *mut _);
             crate::Operation::new(cb, move |cb| op(cb))
@@ -355,9 +355,9 @@ impl InitState {
                 assert_eq!(ops_init.meta_idx, meta_idx);
                 assert_eq!(cb.meta_idx, meta_idx);
 
-                let bind_cb = crate::udi_impl::cb::alloc(&driver_module, bind_cb_idx, rgn.context, channel_to_parent);
+                let bind_cb = crate::udi_impl::cb::alloc(&driver_module, bind_cb_idx, rgn.context(), channel_to_parent);
                 unsafe {
-                    crate::channels::anchor(channel_to_parent, instance.clone(), driver_module.get_meta_ops(ops_init), rgn.context);
+                    crate::channels::anchor(channel_to_parent, instance.clone(), driver_module.get_meta_ops(ops_init), rgn.context());
                     let (op, cb)
                         = crate::channels::event_ind_bound_parent(channel_to_parent, bind_cb as *mut _, 0, ::core::ptr::null());
                     return crate::Operation::new(cb, move |cb| op(cb));
@@ -393,7 +393,7 @@ unsafe fn alloc_cb_raw<T>(instance: &super::DriverInstance) -> *mut T {
     let rv = ::libc::malloc( ::core::mem::size_of::<T>() ) as *mut ::udi::ffi::udi_cb_t;
     ::core::ptr::write(rv, ::udi::ffi::udi_cb_t {
         channel: ::core::ptr::null_mut(),
-        context: instance.regions[0].context,
+        context: instance.regions[0].context(),
         scratch: ::core::ptr::null_mut(),
         initiator_context: instance as *const _ as *mut _,
         origin: ::core::ptr::null_mut(),

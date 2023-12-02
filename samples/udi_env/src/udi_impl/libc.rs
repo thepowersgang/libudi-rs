@@ -156,7 +156,8 @@ unsafe extern "C" fn udi_vsnprintf(s: *mut c_char, max_bytes: udi_size_t, format
     let dst = ::core::slice::from_raw_parts_mut(s, max_bytes);
     let mut rv = Output(dst, 0);
     
-    snprintf_inner(&mut rv, format, ap);
+    let format = ::core::ffi::CStr::from_ptr(format);
+    snprintf_inner(&mut rv, format.to_bytes(), ap);
 
     // Ensure NUL terminated
     let nul_pos = usize::min(rv.1, rv.0.len());
@@ -186,10 +187,9 @@ pub trait SnprintfSink {
     }
 }
 /// The innards of [udi_snprintf]/[udi_vsnprintf]/[super::log::udi_debug_printf]
-pub unsafe fn snprintf_inner(rv: &mut dyn SnprintfSink, format: *const c_char, mut ap: ::core::ffi::VaList)
+pub unsafe fn snprintf_inner(rv: &mut dyn SnprintfSink, format: &[u8], mut ap: ::core::ffi::VaList)
 {
-    let format = ::core::ffi::CStr::from_ptr(format);
-    let mut p = ::udi_macro_helpers::printf::Parser::new(format.to_bytes());
+    let mut p = ::udi_macro_helpers::printf::Parser::new(format);
     loop {
         let e = match p.next() {
             Ok(Some(v)) => v,

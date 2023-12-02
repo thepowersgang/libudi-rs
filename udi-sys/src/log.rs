@@ -44,7 +44,7 @@ pub type udi_log_write_call_t = extern "C" fn(*mut udi_cb_t, udi_status_t);
 
 extern "C" {
 	// --- Tracing
-	pub fn udi_trace_write(init_context: *const udi_init_context_t, trace_event: udi_trevent_t, index: udi_index_t, msgnum: u32, ...);
+	pub fn udi_trace_write(init_context: *const udi_init_context_t, trace_event: udi_trevent_t, meta_idx: udi_index_t, msgnum: u32, ...);
 	pub fn udi_log_write(callback: udi_log_write_call_t, cb: *mut udi_cb_t, trace_event: udi_trevent_t, severity: u8, meta_idx: udi_index_t, original_status: udi_status_t, msgnum: u32, ...);
 
 	// --- Debugging

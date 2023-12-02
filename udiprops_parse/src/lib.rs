@@ -123,7 +123,7 @@ pub fn create_module_body(outfp: &mut dyn ::std::io::Write, props: &[String], em
 
         meta_bindings: HashMap<&'p udi_index_t,&'p str>,
         regions: HashMap<&'p udi_index_t,()>,
-        messages: HashMap<&'p parsed::MsgNum,()>,
+        messages: HashMap<&'p parsed::MsgNum,(&'p str, Vec<&'static str>)>,
     }
     impl<'a,'p> State<'a,'p> {
         pub fn check_metalang(&mut self, linename: &'static str, meta_idx: &udi_index_t) -> ::std::io::Result<()> {
@@ -163,8 +163,40 @@ pub fn create_module_body(outfp: &mut dyn ::std::io::Write, props: &[String], em
         parsed::Entry::Metalang { meta_idx, interface_name } => {
 			state.meta_bindings.insert(meta_idx, interface_name.to_owned());
             },
-        parsed::Entry::Message(msg_id, _body) => {
-            state.messages.insert(msg_id, ());
+        parsed::Entry::Message(msg_id, body) => {
+
+            // TODO: Parse the message for formatting fragments
+            let mut p = ::udi_macro_helpers::printf::Parser::new(body.as_bytes());
+            let mut types = Vec::new();
+            loop {
+                let e = match p.next() {
+                    Ok(Some(e)) => e,
+                    Ok(None) => break,
+                    Err(e) => {
+                        // TODO: Should this be a hard error?
+                        writeln!(state.outfp, "compile_error!(\"Malformed message format string: {}\");", e.kind)?;
+                        break;
+                    },
+                    };
+                types.push(match e {
+                udi_macro_helpers::printf::FormatArg::StringData(_) => continue,
+                udi_macro_helpers::printf::FormatArg::Pointer(_) => "*const ::udi::ffi::c_void",
+                udi_macro_helpers::printf::FormatArg::String(_, _) => "&::core::ffi::CStr",
+                udi_macro_helpers::printf::FormatArg::BusAddr(_) => "::udi::ffi::physio::udi_busaddr64_t",
+                udi_macro_helpers::printf::FormatArg::Char => "::udi::ffi::c_char",
+                udi_macro_helpers::printf::FormatArg::Integer(_, _, ty, _) => match ty
+                    {
+                    udi_macro_helpers::printf::Size::U32 => "::udi::ffi::udi_ubit32_t",
+                    udi_macro_helpers::printf::Size::U16 => "::udi::ffi::udi_ubit16_t",
+                    udi_macro_helpers::printf::Size::U8 => "::udi::ffi::udi_ubit8_t",
+                    },
+                udi_macro_helpers::printf::FormatArg::BitSet(_) => "::udi::ffi::udi_ubit32_t",
+                });
+            }
+
+            if let Some(_) = state.messages.insert(msg_id, (body,types)) {
+                writeln!(state.outfp, "compile_error!(\"Duplicated message ID {:?}\");", msg_id)?;
+            }
         },
         parsed::Entry::Region { region_idx, attributes } => {
             let _ = attributes;
@@ -173,6 +205,7 @@ pub fn create_module_body(outfp: &mut dyn ::std::io::Write, props: &[String], em
         _ => {},
         }
     }
+
 	for ent in parsed.iter()
 	{
         match ent {
@@ -232,6 +265,20 @@ fn _check_child_bind_ops() {{
         _ => {},
 		}
 	}
+
+    //writeln!(state.outfp, "mod messages {{")?;
+    for (msgnum,(_body,types)) in state.messages {
+        writeln!(state.outfp, "pub struct Msg{};", msgnum.0)?;
+        writeln!(state.outfp, "impl ::udi::log::Message for Msg{} {{", msgnum.0)?;
+        writeln!(state.outfp, "  const NUM: ::udi::ffi::udi_ubit32_t = {};", msgnum.0)?;
+        write!(state.outfp, "  type Args = (")?;
+        for t in types {
+            write!(state.outfp, "{},", t)?;
+        }
+        writeln!(state.outfp, ");")?;
+        writeln!(state.outfp, "}}")?;
+    }
+    //writeln!(state.outfp, "}}")?;
 
     let outfp = state.outfp;
 	writeln!(outfp, "#[allow(non_upper_case_globals)]")?;

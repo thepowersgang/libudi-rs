@@ -192,9 +192,9 @@ impl DriverInstance {
     {
         DriverInstance {
             regions: {
-                let mut v = vec![DriverRegion::new(0.into(), driver_module.pri_init.rdata_size)];
+                let mut v = vec![DriverRegion::new(&driver_module, 0.into(), driver_module.pri_init.rdata_size)];
                 for secondary_region in driver_module.sec_init {
-                    v.push(DriverRegion::new(secondary_region.region_idx, secondary_region.rdata_size));
+                    v.push(DriverRegion::new(&driver_module, secondary_region.region_idx, secondary_region.rdata_size));
                 }
                 v
                 },
@@ -208,31 +208,75 @@ impl DriverInstance {
 }
 pub struct DriverRegion
 {
-    pub context: *mut ::udi::ffi::c_void,
+    context_raw: *mut RegionContextRaw,
     pub task_queue: ::std::sync::Mutex< ::std::collections::VecDeque<crate::Operation> >,
+}
+#[repr(C)]
+struct RegionContextRaw {
+    module: Arc<DriverModule<'static>>,
+    _align: [u64; 0],
+    context: ::udi::ffi::init::udi_init_context_t,
 }
 impl DriverRegion
 {
-    pub fn new(region_index: ::udi::ffi::udi_index_t, rdata_size: usize) -> DriverRegion {
+    pub fn new(module: &Arc<DriverModule<'static>>, region_index: ::udi::ffi::udi_index_t, rdata_size: usize) -> DriverRegion {
         DriverRegion {
-            context: unsafe {
-                let v: *mut udi::ffi::init::udi_init_context_t = ::libc::calloc(1, rdata_size) as *mut ::udi::ffi::init::udi_init_context_t;
+            context_raw: unsafe {
+                let alloc_size = if rdata_size == 0 {
+                        0
+                    }
+                    else if rdata_size < ::core::mem::size_of::<::udi::ffi::init::udi_init_context_t>() {
+                        eprintln!("WARNING: rdata size is too small! ({} < {})", 
+                            rdata_size, ::core::mem::size_of::<::udi::ffi::init::udi_init_context_t>()
+                            );
+                        ::core::mem::size_of::<RegionContextRaw>()
+                    }
+                    else {
+                        ::core::mem::size_of::<RegionContextRaw>()
+                            - ::core::mem::size_of::<::udi::ffi::init::udi_init_context_t>()
+                            + rdata_size
+                    };
+                let v: *mut RegionContextRaw = ::libc::calloc(1, alloc_size) as *mut _;
                 if rdata_size == 0 {
                 }
-                else if rdata_size < ::core::mem::size_of::<::udi::ffi::init::udi_init_context_t>() {
-                    eprintln!("WARNING: rdata size is too small! ({} < {})", 
-                        rdata_size, ::core::mem::size_of::<::udi::ffi::init::udi_init_context_t>()
-                        )
-                }
                 else {
-                    (*v).region_index = region_index;
-                    (*v).limits.max_safe_alloc = 0x1000;
-                    (*v).limits.max_legal_alloc = 1 << 20;
+                    ::core::ptr::write(v, RegionContextRaw {
+                        module: module.clone(),
+                        _align: [],
+                        context: udi::ffi::init::udi_init_context_t {
+                            region_index,
+                            limits: udi::ffi::init::udi_limits_t {
+                                max_legal_alloc: 1 << 20,
+                                max_safe_alloc: 0x1000,
+                                max_trace_log_formatted_len: 512,
+                                max_instance_attr_len: 512,
+                                min_curtime_res: 1,
+                                min_timer_res: 1
+                            },
+                        }
+                    });
                 }
-                v as *mut ::udi::ffi::c_void
+                v
                 },
             task_queue: Default::default(),
         }
+    }
+    pub fn context(&self) -> *mut ::udi::ffi::c_void {
+        unsafe {
+            if self.context_raw.is_null() {
+                ::core::ptr::null_mut()
+            }
+            else {
+                ::core::ptr::addr_of_mut!( (*self.context_raw).context ) as *mut _
+            }
+        }
+    }
+    unsafe fn driver_module_from_context(r: &udi::ffi::init::udi_init_context_t) -> &DriverModule {
+        let ofs = ::core::mem::size_of::<RegionContextRaw>() - ::core::mem::size_of::<udi::ffi::init::udi_init_context_t>();
+        let p = (r as *const _ as *const u8).offset(-(ofs as isize));
+        let p = p as *const RegionContextRaw;
+        assert_eq!(::core::ptr::addr_of!((*p).context), r as *const _);
+        &*(*p).module
     }
 }
 pub struct DriverChild {

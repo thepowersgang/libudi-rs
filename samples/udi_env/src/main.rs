@@ -342,7 +342,7 @@ fn maybe_child_bind(
     unsafe {
         let ops_init = parent.module.get_ops_init(child.ops_idx).unwrap();
         let ops = parent.module.get_meta_ops(ops_init);
-        let rdata = parent.regions[child.region_idx_real].context;
+        let rdata = parent.regions[child.region_idx_real].context();
         if ops_init.chan_context_size > 0 {
             ::udi_environment::channels::anchor_with_context(
                 channel_parent, parent.clone(), ops, ops_init.chan_context_size,

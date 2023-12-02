@@ -5,3 +5,4 @@ edition = "2018"
 
 [dependencies]
 udi-sys = { path = "../udi-sys" }
+udi_macro_helpers = { path = "../udi_macro_helpers" }
