@@ -179,242 +179,124 @@ unsafe extern "C" fn udi_vsnprintf(s: *mut c_char, max_bytes: udi_size_t, format
 /// Effectively fmt::Write, but simpler
 pub trait SnprintfSink {
     fn push(&mut self, byte: u8);
+    fn push_str(&mut self, s: &[u8]) {
+        for b in s.iter().copied() {
+            self.push(b)
+        }
+    }
 }
 /// The innards of [udi_snprintf]/[udi_vsnprintf]/[super::log::udi_debug_printf]
 pub unsafe fn snprintf_inner(rv: &mut dyn SnprintfSink, format: *const c_char, mut ap: ::core::ffi::VaList)
 {
     let format = ::core::ffi::CStr::from_ptr(format);
-    let mut it = format.to_bytes().iter().copied();
-    'outer: while let Some(mut c) = it.next()
-    {
-        macro_rules! nextc {
-            () => {
-                match it.next() { Some(c) => c, None => break 'outer, }
+    let mut p = ::udi_macro_helpers::printf::Parser::new(format.to_bytes());
+    loop {
+        let e = match p.next() {
+            Ok(Some(v)) => v,
+            Ok(None) => break,
+            Err(_) => return,
+        };
+
+        let mut tmpbuf = [0; 64/4];
+        
+        match e {
+        udi_macro_helpers::printf::FormatArg::StringData(s) => rv.push_str(s),
+
+        udi_macro_helpers::printf::FormatArg::Pointer(is_upper/*, pad, width*/) => {
+            rv.push_str(b"0x");
+            fmt_pad_rev(rv, Pad::SpaceLeft, 0, to_str_radix(&mut tmpbuf, 16, is_upper, ap.arg::<*const ()>() as usize as u64), None)
+        },
+        udi_macro_helpers::printf::FormatArg::String(pad, width) => {
+            let pad = match pad {
+                udi_macro_helpers::printf::PadKind::LeadingZero => Pad::ZeroRight,
+                udi_macro_helpers::printf::PadKind::LeftPad => Pad::SpaceLeft,
+                udi_macro_helpers::printf::PadKind::Unspec => Pad::SpaceRight,
             };
+            let s = ::core::ffi::CStr::from_ptr(ap.arg::<*const ::core::ffi::c_char>());
+            fmt_pad(rv, pad, width as _, s.to_bytes().iter().copied(), None)
+        },
+        udi_macro_helpers::printf::FormatArg::BusAddr(_is_upper) => {
+            //rv.fmt_pad_rev(pad, Pad::SpaceLeft, 0, to_str_radix(&mut tmpbuf, 16, is_upper, ap.arg::<udi_busaddr64_t>()), None);
+            todo!("bus addr")
+        },
+        udi_macro_helpers::printf::FormatArg::Char => {
+            let pad = Pad::SpaceRight;
+            let width = 0;
+            fmt_pad_rev(rv, pad, width, &[ap.arg::<udi_ubit8_t>()], None)
         }
-        if c != b'%' {
-            rv.push(c);
-        }
-        else {
-            c = nextc!();
-            let pad = if c == b'0' {
-                    // Zero pad
-                    c = nextc!();
-                    Pad::ZeroRight
-                }
-                else if c == b'-' {
-                    // Left-justify
-                    c = nextc!();
-                    Pad::SpaceLeft
-                }
-                else {
-                    Pad::SpaceRight
-                };
-            let mut width = 0;
-            while c.is_ascii_digit() {
-                width *= 10;
-                width += (c as char).to_digit(10).unwrap() as usize;
-                c = nextc!();
-            }
-
-            let mut tmpbuf = [0; 64/4];
-            fn to_str_radix(dst: &mut [u8], radix: u32, upper: bool, value: u64) -> &[u8] {
-                assert!(2 <= radix && radix <= 36);
-
-                let mut v = value;
-                let mut len = 0;
-                loop {
-                    let c = char::from_digit((v % radix as u64) as u32, radix).unwrap() as u8;
-                    dst[len] = if upper {
-                        c.to_ascii_uppercase()
-                    }
-                    else {
-                        c.to_ascii_lowercase()
+        udi_macro_helpers::printf::FormatArg::Integer(pad, width, size, fmt) => {
+            let pad = match pad {
+                udi_macro_helpers::printf::PadKind::LeadingZero => Pad::ZeroRight,
+                udi_macro_helpers::printf::PadKind::LeftPad => Pad::SpaceLeft,
+                udi_macro_helpers::printf::PadKind::Unspec => Pad::SpaceRight,
+            };
+            let width = width as _;
+            use udi_macro_helpers::printf::IntFormat;
+            match fmt {
+            IntFormat::LowerHex => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 16, false, ap.arg::<udi_ubit32_t>() as _), None),
+            IntFormat::UpperHex => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 16, true , ap.arg::<udi_ubit32_t>() as _), None),
+            IntFormat::Unsigned => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 10, false, ap.arg::<udi_ubit32_t>() as _), None),
+            IntFormat::Decimal => {
+                let v = match size {
+                    udi_macro_helpers::printf::Size::U32 => ap.arg::<udi_sbit32_t>(),
+                    udi_macro_helpers::printf::Size::U16 => ap.arg::<udi_ubit32_t>() as u16 as i16 as i32,
+                    udi_macro_helpers::printf::Size::U8 => ap.arg::<udi_ubit32_t>() as u8 as i8 as i32,
                     };
-                    len += 1;
-                    v /= radix as u64;
-                    if v == 0 {
-                        break &dst[..len];
-                    }
-                }
-            }
-            match c {
-            b'x' => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 16, false, ap.arg::<udi_ubit32_t>() as _), None),
-            b'X' => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 16, true , ap.arg::<udi_ubit32_t>() as _), None),
-            b'u' => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 10, false, ap.arg::<udi_ubit32_t>() as _), None),
-            b'd' => {
-                let v = ap.arg::<udi_sbit32_t>();
                 let prefix = if v.is_negative() { Some(b'-') } else { None };
                 fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 10, false, v.unsigned_abs() as _), prefix)
                 },
-            b'h' => {
-                c = match it.next() { Some(c) => c, None => break, };
-                match c {
-                b'x' => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 16, false, ap.arg::<udi_ubit16_t>() as _), None),
-                b'X' => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 16, true , ap.arg::<udi_ubit16_t>() as _), None),
-                b'u' => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 10, false, ap.arg::<udi_ubit16_t>() as _), None),
-                b'd' => {
-                    let v = ap.arg::<udi_sbit16_t>();
-                    let prefix = if v.is_negative() { Some(b'-') } else { None };
-                    fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 10, false, v.unsigned_abs() as _), prefix)
-                    },
-                _ => {
-                    rv.push(b'%'); rv.push(b'h'); rv.push(c);
-                },
-                }
-                },
-            b'b' => {
-                c = match it.next() { Some(c) => c, None => break, };
-                match c {
-                b'x'|b'X' => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 16, c == b'X', ap.arg::<udi_ubit8_t>() as _), None),
-                b'u' => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 10, false, ap.arg::<udi_ubit8_t>() as _), None),
-                b'd' => {
-                    let v = ap.arg::<udi_sbit8_t>();
-                    let prefix = if v.is_negative() { Some(b'-') } else { None };
-                    fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 10, false, v.unsigned_abs() as _), prefix)
-                    },
-                _ => {
-                    rv.push(b'%'); rv.push(b'b'); rv.push(c);
-                },
-                }
-                },
-            b'p'|b'P' => {
-                rv.push(b'0'); rv.push(b'x');
-                fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 16, c == b'P', ap.arg::<*const ()>() as usize as u64), None)
-                }
-            //b'a'|b'A' => rv.fmt_pad_rev(pad, width, to_str_radix(&mut tmpbuf, 16, c == b'A', ap.arg::<udi_busaddr64_t>()), None),
-            b'c' => {
-                fmt_pad_rev(rv, pad, width, &[ap.arg::<udi_ubit8_t>()], None)
-                },
-            b's' => {
-                let s = ::core::ffi::CStr::from_ptr(ap.arg::<*const ::core::ffi::c_char>());
-                fmt_pad(rv, pad, width, s.to_bytes().iter().copied(), None)
-                },
-            b'<' => {
-                rv.push(b'<');
-                let val = ap.arg::<udi_ubit32_t>();
-                c = nextc!();
-                if c == b',' {
-                    c = nextc!();
-                }
-                let mut need_comma = false;
-                loop {
-                    if c == b'>' {
-                        break;
-                    }
-                    let is_not = if c == b'~' { c = nextc!(); true } else { false };
-                    let bitnum = {
-                        let mut v = 0;
-                        while let Some(d) = (c as char).to_digit(10) {
-                            v *= 10;
-                            v += d;
-                            c = nextc!();
-                        }
-                        v
-                        };
-                    if c == b'-' {
-                        c = nextc!();
-                        let end_bitnum = {
-                            let mut v = 0;
-                            while let Some(d) = (c as char).to_digit(10) {
-                                v *= 10;
-                                v += d;
-                                c = nextc!();
-                            }
-                            v
-                        };
-                        if c == b'=' {
-                            c = nextc!();
-                        }
-                        let nbit = end_bitnum.saturating_sub(bitnum);
-                        let val = (val >> bitnum) & !(!0 << nbit);
-                        if need_comma {
-                            rv.push(b',');
-                            rv.push(b' ');
-                        }
-                        loop {
-                            if c == b'>' || c == b',' || c == b':' {
-                                break;
-                            }
-                            rv.push(c);
-                            c = nextc!();
-                        }
-                        rv.push(b'=');
-                        let mut found = false;
-                        while c == b':' {
-                            c = nextc!();
-                            let target_val = {
-                                let mut v = 0;
-                                while let Some(d) = (c as char).to_digit(10) {
-                                    v *= 10;
-                                    v += d;
-                                    c = nextc!();
-                                }
-                                v
-                            };
-                            if c == b'=' {
-                                c = nextc!();
-                            }
-                            else {
-                                // Error.
-                            }
-                            let is_match = val == target_val;
-                            if is_match {
-                                found = true;
-                            }
-                            loop {
-                                if c == b'>' || c == b',' || c == b':' {
-                                    break;
-                                }
-                                if is_match {
-                                    rv.push(c);
-                                }
-                                c = nextc!();
-                            }
-                        }
-                        if !found {
-                            fmt_pad_rev(rv, Pad::SpaceRight, 0, to_str_radix(&mut tmpbuf, 16, false, val as _), None)
-                        }
-                        need_comma = true;
-                    }
-                    else {
-                        if c == b'=' {
-                            c = nextc!();
-                        }
-                        else {
-                            // Error.
-                        }
-                        let is_match = ((val >> bitnum) & 1 != 0) != is_not;
-
-                        if is_match && need_comma {
-                            rv.push(b',');
-                            rv.push(b' ');
-                        }
-                        
-                        loop {
-                            if c == b'>' || c == b',' {
-                                break;
-                            }
-                            if is_match {
-                                rv.push(c);
-                            }
-                            c = nextc!();
-                        }
-                        if is_match {
-                            need_comma = true;
-                        }
-                    }
-                    if c != b',' {
-                        break;
-                    }
-                    c = nextc!();   // Consume the comma
-                }
-                rv.push(b'>');
-                },
-            _ => {
-                rv.push(b'%'); rv.push(c);
-                },
             }
+        },
+        udi_macro_helpers::printf::FormatArg::BitSet(mut p) => {
+            rv.push(b'<');
+            let v = ap.arg::<udi_ubit32_t>();
+            let mut comma_needed = false;
+            loop {
+                let e = match p.next() {
+                    Ok(Some(v)) => v,
+                    Ok(None) => break,
+                    Err(_) => return,
+                };
+                match e {
+                udi_macro_helpers::printf::BitsetEnt::Single(bit, is_inv, name) => {
+                    if ((v >> bit) & 1 == 0) == is_inv {
+                        if comma_needed {
+                            rv.push_str(b", ");
+                        }
+                        rv.push_str(name);
+                        comma_needed = true;
+                    }
+                },
+                udi_macro_helpers::printf::BitsetEnt::Range(start, end, name, mut p) => {
+                    if comma_needed {
+                        rv.push_str(b", ");
+                    }
+                    rv.push_str(name);
+                    rv.push(b'=');
+                    let nbits = end - start;
+                    let v = (v >> start) & ((1 << nbits) - 1);
+                    let mut printed = false;
+                    loop {
+                        let (chk,name) = match p.next() {
+                            Ok(Some(v)) => v,
+                            Ok(None) => break,
+                            Err(_) => return,
+                        };
+                        if v == chk {
+                            rv.push_str(name);
+                            printed = true;
+                            break;
+                        }
+                    }
+                    if !printed {
+                        fmt_pad_rev(rv, Pad::SpaceRight, 0, to_str_radix(&mut tmpbuf, 16, false, v as _), None);
+                    }
+                    comma_needed = true;
+                },
+                }
+            }
+            rv.push(b'>');
+        },
         }
     }
 
@@ -424,6 +306,26 @@ pub unsafe fn snprintf_inner(rv: &mut dyn SnprintfSink, format: *const c_char, m
         SpaceLeft,
     }
 
+    fn to_str_radix(dst: &mut [u8], radix: u32, upper: bool, value: u64) -> &[u8] {
+        assert!(2 <= radix && radix <= 36);
+
+        let mut v = value;
+        let mut len = 0;
+        loop {
+            let c = char::from_digit((v % radix as u64) as u32, radix).unwrap() as u8;
+            dst[len] = if upper {
+                c.to_ascii_uppercase()
+            }
+            else {
+                c.to_ascii_lowercase()
+            };
+            len += 1;
+            v /= radix as u64;
+            if v == 0 {
+                break &dst[..len];
+            }
+        }
+    }
     fn fmt_pad_rev(v: &mut dyn SnprintfSink, pad: Pad, width: usize, src: &[u8], prefix: Option<u8>) {
         fmt_pad(v, pad, width, src.iter().rev().copied(), prefix)
     }

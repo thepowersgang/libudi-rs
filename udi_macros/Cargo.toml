@@ -12,3 +12,4 @@ proc-macro = true
 quote = "1.0.33"
 syn = { version = "2.0.38", features = ["full"] }
 udiprops_parse = { path = "../udiprops_parse" }
+udi_macro_helpers = { path = "../udi_macro_helpers" }

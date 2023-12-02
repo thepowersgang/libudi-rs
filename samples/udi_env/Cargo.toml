@@ -7,6 +7,7 @@ edition = "2021"
 udi = { path = "../../" }
 udi_macros = { path = "../../udi_macros" }
 udiprops_parse = { path = "../../udiprops_parse" }
+udi_macro_helpers = { path = "../../udi_macro_helpers" }
 udi-net_ne2000 = { path = "../net_ne2000" }
 
 libc = "0.2.149"
