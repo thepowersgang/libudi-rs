@@ -1,0 +1,13 @@
+[package]
+name = "udi"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+udi-sys = { path = "../udi-sys" }
+udi_macros = { path = "../udi_macros" }
+udiprops_parse = { path = "../udiprops_parse" }

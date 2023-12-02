@@ -1,0 +1,5 @@
+{
+    "rust-analyzer.linkedProjects": [
+        "./samples/net_rtl8139/Cargo.toml"
+    ]
+}

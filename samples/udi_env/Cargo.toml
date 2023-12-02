@@ -4,7 +4,7 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-udi = { path = "../../" }
+udi = { path = "../../udi" }
 udi_macros = { path = "../../udi_macros" }
 udiprops_parse = { path = "../../udiprops_parse" }
 udi_macro_helpers = { path = "../../udi_macro_helpers" }

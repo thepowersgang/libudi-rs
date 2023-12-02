@@ -1,20 +1,8 @@
-[package]
-name = "udi"
-version = "0.1.0"
-edition = "2021"
-
-[features]
-default = ["std"]
-std = []
-
-[dependencies]
-udi-sys = { path = "udi-sys" }
-udi_macros = { path = "udi_macros" }
-udiprops_parse = { path = "udiprops_parse" }
 
 [workspace]
+resolver = "1"
 members = [
-    ".",
+    "udi",
     "udi-sys",
     "udiprops_parse",
     "udi_macros",
@@ -22,5 +10,8 @@ members = [
     "tools/fix_elf",
     "samples/udi_env",
     "samples/net_ne2000",
+    #"samples/net_rtl8139",
+    ]
+exclude = [
     "samples/net_rtl8139",
     ]

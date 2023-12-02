@@ -1,4 +1,6 @@
 #![no_std]
+#![allow(internal_features)]
+#![feature(lang_items)]
 #![feature(impl_trait_in_assoc_type)]
 
 mod pio_ops;
@@ -498,5 +500,22 @@ fn mod_inc(v: &mut u8, max: u8) {
 	*v += 1;
 	while *v >= max {
 		*v -= max;
+	}
+}
+
+#[cfg(not(rust_analyzer))]
+#[cfg(false_)]
+mod _panic {
+	#[panic_handler]
+	fn panic_handler(_h: &::core::panic::PanicInfo) -> !
+	{
+		unsafe {
+			//::udi_macros::debug_printf!("PANIC");
+			::udi::ffi::udi_assert(::udi::ffi::udi_boolean_t(0));
+		}
+		loop {}
+	}
+	#[lang="eh_personality"]
+	fn eh_personality() {
 	}
 }
