@@ -47,6 +47,7 @@ version = "0.1.0"
 dependencies = [
  "udi-sys",
  "udi_macros",
+ "udiprops_parse",
 ]
 
 [[package]]
@@ -56,6 +57,7 @@ dependencies = [
  "libc",
  "udi",
  "udi-net_ne2000",
+ "udi_macro_helpers",
  "udi_macros",
  "udiprops_parse",
 ]
@@ -81,11 +83,16 @@ name = "udi-sys"
 version = "0.1.0"
 
 [[package]]
+name = "udi_macro_helpers"
+version = "0.1.0"
+
+[[package]]
 name = "udi_macros"
 version = "0.1.0"
 dependencies = [
  "quote",
  "syn",
+ "udi_macro_helpers",
  "udiprops_parse",
 ]
 
@@ -94,6 +101,7 @@ name = "udiprops_parse"
 version = "0.0.1"
 dependencies = [
  "udi-sys",
+ "udi_macro_helpers",
 ]
 
 [[package]]

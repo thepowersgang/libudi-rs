@@ -45,9 +45,10 @@ pub unsafe extern "C" fn udi_trace_write(
 {
     let module = crate::DriverRegion::driver_module_from_context(&*init_context);
     let Some(format) = module.get_message(::udiprops_parse::parsed::MsgNum(msgnum as u16)) else { todo!() };
+    let Some(meta) = module.get_metalang_name(meta_idx) else { todo!() };
 
     let mut sink = Sink([0; 64], 0);
-    print!("udi_trace_write[{} T]: ", trace_event);
+    print!("udi_trace_write[{} T {}]: ", trace_event, meta);
     super::libc::snprintf_inner(&mut sink, format.as_bytes(), args.as_va_list());
     ::std::io::stdout().write_all(&sink.0[..sink.1]).unwrap();
     println!("");
@@ -61,12 +62,13 @@ pub unsafe extern "C" fn udi_log_write(
 {
     let i = crate::channels::get_driver_instance(&(*cb).channel);
     let Some(format) = i.module.get_message(::udiprops_parse::parsed::MsgNum(msgnum as u16)) else { todo!() };
+    let Some(meta) = i.module.get_metalang_name(meta_idx) else { panic!("Unable to get metalang name") };
 
     let mut sink = Sink([0; 64], 0);
-    print!("udi_log_write[{} {}]: ", trace_event, severity);
+    print!("udi_log_write[{} {} {}]: ", trace_event, severity, meta);
     super::libc::snprintf_inner(&mut sink, format.as_bytes(), args.as_va_list());
     ::std::io::stdout().write_all(&sink.0[..sink.1]).unwrap();
     println!("");
 
-    callback(cb, ::udi::ffi::UDI_OK as _);
+    callback(cb, original_status);
 }
