@@ -1,5 +1,60 @@
+use ::udi::future_ext::FutureExt;
 use super::regs;
 use super::mem;
+
+#[derive(Default)]
+pub struct PioHandles {
+	reset: ::udi::pio::Handle,
+	enable: ::udi::pio::Handle,
+	disable: ::udi::pio::Handle,
+	rx: ::udi::pio::Handle,
+	tx: ::udi::pio::Handle,
+}
+impl PioHandles {
+    pub async fn init(&mut self, gcb: ::udi::CbRef<'_, ::udi::ffi::udi_cb_t>) -> ::udi::pio::Handle {
+        let pio_map = |trans_list| ::udi::pio::map(
+            gcb, 0/*UDI_PCI_BAR_0*/, 0x00,0x20,
+            trans_list, ::udi::ffi::pio::UDI_PIO_LITTLE_ENDIAN, 0, 0.into()
+        );
+        self.reset   = pio_map(&RESET).await;
+        self.enable  = pio_map(&ENABLE).await;
+        self.disable = pio_map(&DISBALE).await;
+        self.rx      = pio_map(&RX).await;
+        self.tx      = pio_map(&TX).await;
+        let irq_ack  = pio_map(&IRQACK).await;
+        irq_ack
+    }
+
+    pub fn reset<'a>(&'a self, gcb: ::udi::CbRef<'_, ::udi::ffi::udi_cb_t>, mac_addr: &'a mut [u8; 6])
+        -> impl ::std::future::Future<Output=::udi::Result<()>> + 'a {
+        ::udi::pio::trans(gcb, &self.reset, 0.into(), None, Some(unsafe { ::udi::pio::MemPtr::new(mac_addr) }))
+            .map(|res| match res { Ok(_) => Ok(()), Err(e) => Err(e) })
+    }
+    pub fn enable<'a>(&'a self, gcb: ::udi::CbRef<'_, ::udi::ffi::udi_cb_t>)
+        -> impl ::std::future::Future<Output=::udi::Result<()>> + 'a {
+        ::udi::pio::trans(gcb, &self.enable, 0.into(), None, None)
+            .map(|res| match res { Ok(_) => Ok(()), Err(e) => Err(e) })
+    }
+    pub fn disable<'a>(&'a self, gcb: ::udi::CbRef<'_, ::udi::ffi::udi_cb_t>)
+        -> impl ::std::future::Future<Output=()> + 'a {
+        ::udi::pio::trans(gcb, &self.disable, 0.into(), None, None)
+            .map(|_| ())
+    }
+
+    pub fn rx<'a>(&'a self, gcb: ::udi::CbRef<'_, ::udi::ffi::udi_cb_t>, buf: &'a mut ::udi::buf::Handle, rx_next_page: &'a mut u8)
+         -> impl ::std::future::Future<Output=::udi::Result<usize>> + 'a {
+        // Pull the packet off the device
+        ::udi::pio::trans(gcb, &self.rx, 0.into(),Some(buf), Some(unsafe { ::udi::pio::MemPtr::new(::core::slice::from_mut(rx_next_page)) }))
+            .map(|res| match res { Ok(s) => Ok(s as usize), Err(e) => Err(e) })
+    }
+    pub async fn tx(&self, gcb: ::udi::CbRef<'_, ::udi::ffi::udi_cb_t>, buf: &mut ::udi::buf::Handle, tx_next_page: u8) -> ::udi::Result<()> {
+        let len = (buf.len() as u16).to_ne_bytes();
+        let mut mem_buf = [len[0], len[1], tx_next_page];
+        let mem_ptr = unsafe { ::udi::pio::MemPtr::new(&mut mem_buf) };
+        ::udi::pio::trans(gcb, &self.tx, ::udi::ffi::udi_index_t(0), Some(buf), Some(mem_ptr)).await?;
+        Ok( () )
+    }
+}
 
 ::udi::define_pio_ops!{pub RESET =
 	// Send reset

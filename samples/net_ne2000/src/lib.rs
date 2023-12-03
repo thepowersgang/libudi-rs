@@ -5,7 +5,7 @@ mod pio_ops;
 #[derive(Default)]
 struct Driver
 {
-	pio_handles: PioHandles,
+	pio_handles: pio_ops::PioHandles,
 	//parent_channel: ::udi::ffi::udi_channel_t,
 	intr_channel: ::udi::imc::ChannelHandle,
 	intr_bound: ::udi::async_helpers::Wait< ::udi::Result<()> >,
@@ -26,15 +26,6 @@ impl Default for Vals {
 			tx_next_page: mem::TX_FIRST,
 		}
     }
-}
-#[derive(Default)]
-struct PioHandles {
-	reset: ::udi::pio::Handle,
-	enable: ::udi::pio::Handle,
-	disable: ::udi::pio::Handle,
-	rx: ::udi::pio::Handle,
-	tx: ::udi::pio::Handle,
-	irq_ack: ::udi::pio::Handle,
 }
 
 impl ::udi::init::Driver for ::udi::init::RData<Driver>
@@ -103,16 +94,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 	) -> Self::Future_bind_ack<'a> {
 		async move {
 			::udi::debug_printf!("NIC bus_bind_ack: self(%p)", &*self);
-			let pio_map = |trans_list| ::udi::pio::map(
-				cb.gcb(), 0/*UDI_PCI_BAR_0*/, 0x00,0x20,
-				trans_list, ::udi::ffi::pio::UDI_PIO_LITTLE_ENDIAN, 0, 0.into()
-			);
-			self.pio_handles.reset   = pio_map(&pio_ops::RESET).await;
-			self.pio_handles.enable  = pio_map(&pio_ops::ENABLE).await;
-			self.pio_handles.disable = pio_map(&pio_ops::DISBALE).await;
-			self.pio_handles.rx      = pio_map(&pio_ops::RX).await;
-			self.pio_handles.tx      = pio_map(&pio_ops::TX).await;
-			self.pio_handles.irq_ack = pio_map(&pio_ops::IRQACK).await;
+			let pio_irq_ack = self.pio_handles.init(cb.gcb()).await;
 
 			// Save the channel used to bind to the parent, so we can unbind later on.
 			//self.parent_channel = cb.gcb.channel;
@@ -120,9 +102,10 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 
 			// Spawn channel
 			self.intr_channel = ::udi::imc::channel_spawn::<OpsList::Irq>(cb.gcb(), self, /*interrupt number*/0.into()).await;
-			let mut intr_cb = ::udi::cb::alloc::<CbList::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
-			intr_cb.init(0.into(), 2, ::core::mem::take(&mut self.pio_handles.irq_ack));	// NOTE: This transfers ownership
-			::udi::meta_bridge::attach_req(intr_cb);
+			::udi::meta_bridge::attach_req({
+				let mut intr_cb = ::udi::cb::alloc::<CbList::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
+				intr_cb.init(0.into(), 2, pio_irq_ack);	// NOTE: This transfers ownership
+				intr_cb});
 			self.intr_bound.wait(cb.gcb()).await?;
 
 			for _ in 0 .. 4/*NE2K_NUM_INTR_EVENT_CBS*/ {
@@ -130,9 +113,8 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 				::udi::meta_bridge::event_rdy(intr_event_cb);
 			}
 
-			// Reset the hardware, and get the MAC address
-			let d = &mut **self;
-			::udi::pio::trans(cb.gcb(), &d.pio_handles.reset, 0.into(), None, Some(unsafe { ::udi::pio::MemPtr::new(&mut d.mac_addr) })).await?;
+			// Reset the hardware, and get the MAC addres
+			self.inner.pio_handles.reset( cb.gcb(), &mut self.inner.mac_addr ).await?;
 
 			::udi::debug_printf!("NIC bus_bind_ack (RET): %p", &*self);
 			// Binding is complete!
@@ -174,14 +156,11 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 					// Ensure that it's big enough for an entire packet
 					buf.ensure_size(cb.gcb(), 1520).await;
 					// Pull the packet off the device
-					match ::udi::pio::trans(
-						cb.gcb(), &self.inner.pio_handles.rx, 0.into(),
-						Some(&mut buf), Some(unsafe { ::udi::pio::MemPtr::new(::core::slice::from_mut(&mut self.inner.vals.rx_next_page)) })
-					).await
+					match self.inner.pio_handles.rx(cb.gcb(), &mut buf, &mut self.inner.vals.rx_next_page).await
 					{
 					Ok(res) => {
 						// If that succeeded, then set the size and hand to the NSR
-						buf.truncate(res as usize);
+						buf.truncate(res);
 						::udi::meta_nic::nsr_rx_ind(rx_cb);
 						},
 					Err(_e) => {
@@ -266,7 +245,7 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 	type Future_enable_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
     fn enable_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_enable_req<'a> {
         async move {
-			::udi::pio::trans(cb.gcb(), &self.dev().pio_handles.enable, ::udi::ffi::udi_index_t(0), None, None).await?;
+			self.dev().pio_handles.enable( cb.gcb() ).await?;
 			Ok( () )
 		}
     }
@@ -274,7 +253,7 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 	type Future_disable_req<'s> = impl ::core::future::Future<Output=()> + 's;
     fn disable_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_disable_req<'a> {
         async move {
-			let _ = ::udi::pio::trans(cb.gcb(), &self.dev().pio_handles.disable, 0.into(), None, None).await;
+			self.dev().pio_handles.disable( cb.gcb() ).await;
 		}
     }
 
@@ -300,17 +279,14 @@ unsafe impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 				let (mut cur_cb, next) = cb.unlink();
 				let mut buf = ::core::mem::take(cur_cb.tx_buf_mut());
 
-				let len = (buf.len() as u16).to_ne_bytes();
-				let mut mem_buf = [len[0], len[1], self.vals.tx_next_page];
-				let mem_ptr = unsafe { ::udi::pio::MemPtr::new(&mut mem_buf) };
-				self.vals.tx_next_page += ((buf.len() + 256-1) / 256) as u8;
-				if self.vals.tx_next_page > mem::TX_LAST {
-					self.vals.tx_next_page -= mem::TX_BUF_SIZE;
-				}
-				match ::udi::pio::trans(cur_cb.gcb(), &self.pio_handles.tx, ::udi::ffi::udi_index_t(0), Some(&mut buf), Some(mem_ptr)).await
+				match self.pio_handles.tx(cur_cb.gcb(), &mut buf, self.vals.tx_next_page).await
 				{
 				Ok(_) => {},
 				Err(_) => {},
+				}
+				self.vals.tx_next_page += ((buf.len() + 256-1) / 256) as u8;
+				if self.vals.tx_next_page > mem::TX_LAST {
+					self.vals.tx_next_page -= mem::TX_BUF_SIZE;
 				}
 				*cur_cb.tx_buf_mut() = buf;
 				//buf.free();
@@ -412,7 +388,6 @@ mod udiprops {
 
 ::udi::define_driver!{Driver;
 	ops: {
-		// TODO: How to enforce the right mapping to metalangs?
 		Dev : ::udi::ffi::meta_bridge@udi_bus_device_ops_t,
 		Ctrl: ::udi::ffi::meta_nic@udi_nd_ctrl_ops_t : ChildBind<_,()>,
 		Tx  : ::udi::ffi::meta_nic@udi_nd_tx_ops_t,
