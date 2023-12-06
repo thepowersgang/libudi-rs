@@ -20,6 +20,7 @@ pub struct udi_scsi_pd_ops_t
     pub ctl_ack_op: udi_scsi_ctl_ack_op_t,
     pub event_ind_op: udi_scsi_event_ind_op_t,
 }
+pub const UDI_SCSI_PD_OPS_NUM: u8 = 1;
 #[repr(C)]
 pub struct udi_scsi_hd_ops_t
 {
@@ -30,6 +31,7 @@ pub struct udi_scsi_hd_ops_t
     pub ctl_req_op: udi_scsi_ctl_req_op_t,
     pub event_res_op: udi_scsi_event_res_op_t,
 }
+pub const UDI_SCSI_HD_OPS_NUM: u8 = 2;
 
 #[repr(C)]
 pub struct udi_scsi_bind_cb_t
@@ -37,6 +39,8 @@ pub struct udi_scsi_bind_cb_t
     pub gcb: udi_cb_t,
     pub events: udi_ubit16_t,
 }
+pub const UDI_SCSI_BIND_CB_NUM: u8 = 1;
+
 pub const UDI_SCSI_EVENT_AEN: udi_ubit16_t = 1 << 0;
 pub const UDI_SCSI_EVENT_TGT_RESET: udi_ubit16_t = 1 << 1;
 pub const UDI_SCSI_EVENT_BUS_RESET: udi_ubit16_t = 1 << 2;
@@ -89,6 +93,7 @@ pub struct udi_scsi_io_cb_t
     pub cdb_len: udi_ubit8_t,
     pub cdb_ptr: *mut udi_ubit8_t,
 }
+pub const UDI_SCSI_IO_CB_NUM: u8 = 2;
 /* I/O Request Flags */
 pub const UDI_SCSI_DATA_IN: udi_ubit16_t   = 1<<0;
 pub const UDI_SCSI_DATA_OUT: udi_ubit16_t  = 1<<1;
@@ -124,6 +129,7 @@ pub struct udi_scsi_ctl_cb_t
     pub ctrl_func: udi_ubit8_t,
     pub queue_depth: udi_ubit16_t,
 }
+pub const UDI_SCSI_CTL_CB_NUM: u8 = 3;
 /* Values for ctrl_func */
 pub const UDI_SCSI_CTL_ABORT_TASK_SET: udi_ubit8_t = 1;
 pub const UDI_SCSI_CTL_CLEAR_TASK_SET: udi_ubit8_t = 2;
@@ -149,6 +155,7 @@ pub struct udi_scsi_event_cb_t
     pub event: udi_ubit8_t,
     pub aen_data_buf: *mut udi_buf_t,
 }
+pub const UDI_SCSI_EVENT_CB_NUM: u8 = 4;
 extern "C" {
     pub fn udi_scsi_event_ind(cb: *mut udi_scsi_event_cb_t);
     pub fn udi_scsi_event_ind_unused(cb: *mut udi_scsi_event_cb_t);

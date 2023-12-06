@@ -43,6 +43,7 @@ pub mod meta_mgmt;
 pub mod meta_bridge;
 pub mod meta_gio;
 pub mod meta_nic;
+pub mod meta_scsi;
 
 
 pub use ::udi_macros::{debug_printf,/*GetLayout,*/};
