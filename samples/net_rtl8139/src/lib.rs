@@ -19,6 +19,7 @@ struct Driver
 	dma_constraints: ::udi::physio::dma::DmaConstraints,
 	dma_handles: Option<DmaStructures>,
 
+	intr_bound: ::udi::async_helpers::Wait< ::udi::Result<()> >,
 	intr_channel: ::udi::imc::ChannelHandle,
 	channel_tx: ::udi::imc::ChannelHandle,
 	channel_rx: ::udi::imc::ChannelHandle,
@@ -29,9 +30,6 @@ struct Driver
 	cur_tx_slot: u8,
 	/// Information about each TX slot
 	tx_cbs: [Option<TxSlot>; 4],
-
-	intr_bound: bool,
-	bind_complete: bool,
 }
 struct DmaStructures {
 	rx_buf: ::udi::physio::dma::DmaAlloc,
@@ -115,6 +113,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 			let mut intr_cb = ::udi::cb::alloc::<CbList::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
 			intr_cb.init(0.into(), 2, irq_ack);
 			::udi::meta_bridge::attach_req(intr_cb);
+			self.intr_bound.wait(cb.gcb()).await?;
 
 			self.dma_constraints = unsafe {
 				use ::udi::ffi::physio::udi_dma_constraints_attr_spec_t as Spec;
@@ -168,13 +167,10 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 				self.mac_addr[4] as _,
 				self.mac_addr[5] as _,
 				);
-			if self.intr_bound {
-				for _ in 0 .. 4/*NUM_INTR_EVENT_CBS*/ {
-					let intr_event_cb = ::udi::cb::alloc::<CbList::IntrEvent>(cb.gcb(), self.intr_channel.raw()).await;
-					::udi::meta_bridge::event_rdy(intr_event_cb);
-				}
+			for _ in 0 .. 4/*NUM_INTR_EVENT_CBS*/ {
+				let intr_event_cb = ::udi::cb::alloc::<CbList::IntrEvent>(cb.gcb(), self.intr_channel.raw()).await;
+				::udi::meta_bridge::event_rdy(intr_event_cb);
 			}
-			self.bind_complete = true;
 			Ok( () )
 		}
     }
@@ -186,20 +182,9 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
     }
 
     type Future_intr_attach_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn intr_attach_ack<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrAttach<'a>, status: udi::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'a> {
+    fn intr_attach_ack<'a>(&'a mut self, _cb: ::udi::meta_bridge::CbRefIntrAttach<'a>, status: udi::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'a> {
+		self.intr_bound.signal(::udi::Error::from_status(status));
         async move {
-			if status != ::udi::ffi::UDI_OK as _ {
-				// uh-oh, error
-			}
-			else {
-				self.intr_bound = true;
-				if self.bind_complete {
-					for _ in 0 .. 4/*NUM_INTR_EVENT_CBS*/ {
-						let intr_event_cb = ::udi::cb::alloc::<CbList::IntrEvent>(cb.gcb(), self.intr_channel.raw()).await;
-						::udi::meta_bridge::event_rdy(intr_event_cb);
-					}
-				}
-			}
 		}
     }
 

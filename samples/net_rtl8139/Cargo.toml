@@ -1,10 +1,15 @@
+[workspace]
+
 [package]
 name = "udi-net_rtl8139"
 version = "0.0.0"
 edition = "2021"
 
+[profile.dev]
+panic = "abort"
+
 [lib]
-crate-type = ["staticlib"]
+crate_type = ["staticlib"]
 test = false    # Tests don't link becuase there's no UDI environment
 #panic = "abort"
 
