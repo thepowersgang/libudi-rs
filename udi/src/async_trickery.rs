@@ -54,7 +54,7 @@ pub(crate) unsafe fn abort_task(cb: *mut udi_cb_t)
 {
 	let task = &mut *((*cb).scratch as *mut TaskStub);
 	let get_inner = task.get_inner;
-	(*(get_inner(task) as *mut dyn TaskTrait)).drop_in_place();
+	(*get_inner(task)).drop_in_place();
 }
 
 /// Obtain a pointer to the driver instance from a cb
@@ -154,7 +154,7 @@ struct Task<Cb,T,R,F> {
 	/// Current waiting state
 	state: ::core::cell::Cell<TaskState>,
 	/// Effectively the vtable for this task
-	get_inner: unsafe fn(*const Self)->*const dyn TaskTrait,
+	get_inner: unsafe fn(*mut TaskStub)->*mut dyn TaskTrait,
 	/// Actual task/future data
 	inner: T,
 	finally: ::core::mem::ManuallyDrop<F>,
@@ -197,8 +197,8 @@ where
 			inner,
 		}
 	}
-	unsafe fn get_inner(this: *const Self) -> *const dyn TaskTrait {
-		this
+	unsafe fn get_inner(this: *mut TaskStub) -> *mut dyn TaskTrait {
+		this as *mut Self
 	}
 }
 impl<Cb, T, R, F> TaskTrait for Task<Cb, T, R, F>
@@ -234,7 +234,7 @@ impl TaskStub
 		let get_inner = self.get_inner;
 		let this = unsafe { Pin::get_unchecked_mut(self) };
 		// SAFE: Pinned
-		unsafe { (*((get_inner)(this as *mut Self as *const Self) as *mut dyn TaskTrait)).poll(cx) }
+		unsafe { (*(get_inner)(this)).poll(cx) }
 	}
 }
 
@@ -296,8 +296,8 @@ pub(crate) fn cb_from_waker<Cb: GetCb>(waker: &::core::task::Waker) -> &Cb {
 	assert!( !gcb.scratch.is_null(), "cb_from_waker with no state?" );
 	// SAFE: Since the waker is from a cb, that cb has/should have been for an active task. The scratch is non-null
 	let cb_type = unsafe {
-		let task = &*(gcb.scratch as *const TaskStub);
-		(*(task.get_inner)(task)).get_cb_type()
+		let task = gcb.scratch as *mut TaskStub;
+		(*((*task).get_inner)(task)).get_cb_type()
 		};
 	assert!(cb_type == ::core::any::TypeId::of::<Cb>(),
 		"cb_from_waker with mismatched types: {:?} != {:?}", cb_type, ::core::any::TypeId::of::<Cb>());

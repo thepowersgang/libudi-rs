@@ -338,16 +338,23 @@ impl<'a> Entry<'a>
             rv
         }
         fn get_remainder<'a>(ents: &mut ::core::str::SplitWhitespace<'a>) -> Result<&'a str,Box<dyn ::std::error::Error>> {
-            let v = get_str(ents)?;
-            let mut end_ptr = v.as_ptr() as usize + v.len();
-            while let Some(v) = ents.next() {
-                assert!(v.as_ptr() as usize > end_ptr);
-                end_ptr = v.as_ptr() as usize + v.len();
+            if true {
+                let rv = ents.remainder().ok_or("Unexpected EOL".into());
+                while let Some(_) = ents.next() {}
+                rv
             }
-            let out_len = end_ptr - v.as_ptr() as usize;
-            // SAFE: The pointer is in-bounds, and source data is valid UTF-8
-            unsafe {
-                Ok(::core::str::from_utf8_unchecked(::core::slice::from_raw_parts(v.as_ptr(), out_len)))
+            else {
+                let v = get_str(ents)?;
+                let mut end_ptr = v.as_ptr() as usize + v.len();
+                while let Some(v) = ents.next() {
+                    assert!(v.as_ptr() as usize > end_ptr);
+                    end_ptr = v.as_ptr() as usize + v.len();
+                }
+                let out_len = end_ptr - v.as_ptr() as usize;
+                // SAFE: The pointer is in-bounds, and source data is valid UTF-8
+                unsafe {
+                    Ok(::core::str::from_utf8_unchecked(::core::slice::from_raw_parts(v.as_ptr(), out_len)))
+                }
             }
         }
         let mut ents = line.split_whitespace();

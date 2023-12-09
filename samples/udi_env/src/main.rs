@@ -44,6 +44,7 @@ fn main() {
     });
 
     // ----
+    #[cfg(not(miri))]
     let driver_module_ne2000 = unsafe {
         let udiprops = ::udiprops_parse::load_from_raw_section({
             let ptr = driver::libudi_rs_udiprops.as_ptr();
@@ -52,9 +53,11 @@ fn main() {
             });
         ::std::sync::Arc::new(DriverModule::new(&driver::udi_init_info, udiprops))
     };
+    #[cfg(not(miri))]
     let _ = driver_module_ne2000;
     
     let mut is_nic = false;
+    #[cfg(not(miri))]
     if let None = ::std::env::args_os().skip(1).next() {
         is_nic = true;
         register_driver_module(&mut state, driver_module_ne2000);

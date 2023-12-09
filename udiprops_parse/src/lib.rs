@@ -1,6 +1,7 @@
 //!
 //! 
 //! 
+#![feature(str_split_whitespace_remainder)]
 
 pub use self::parsed::Entry;
 pub mod parsed;
