@@ -1,3 +1,4 @@
+//! Helpful extension traits for futures
 use ::core::future::Future;
 use ::core::task::Poll;
 use ::core::pin::Pin;
@@ -12,6 +13,7 @@ macro_rules! pin_project {
 /// Extension trait for futures, to reduce the size of state machines slightly (`async` blocks get chunky)
 pub trait FutureExt: Future
 {
+	/// Modify the return value
 	fn map<F, U>(self, op: F) -> Map<Self,F,U>
 	where
 		Self: Sized,
@@ -28,6 +30,7 @@ impl<T: Future> FutureExt for T
 	}
 }
 
+/// Implementation for `FutureExt::map`
 pub struct Map<I,F,U>
 {
 	inner: I,

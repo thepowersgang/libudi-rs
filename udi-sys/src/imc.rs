@@ -1,3 +1,4 @@
+#![allow(non_camel_case_types)]
 use ::core::ffi::c_void;
 use super::{udi_cb_t, udi_channel_t, udi_index_t};
 

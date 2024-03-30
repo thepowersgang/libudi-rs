@@ -39,24 +39,24 @@ pub struct BindOpts
 pub trait Peripheral: 'static + crate::imc::ChannelInit + crate::async_trickery::CbContext
 {
     fn bind_opts(&mut self) -> BindOpts;
-    async_method!(fn bind_ack  (&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>, hd_timeout_increase: crate::Result<u32>)->() as Future_bind_ack);
-    async_method!(fn unbind_ack(&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>)->() as Future_unbind_ack);
+    async_method!(fn bind_ack  (&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>, hd_timeout_increase: crate::Result<u32>)->() as Future_bind_ack);
+    async_method!(fn unbind_ack(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>)->() as Future_unbind_ack);
     fn unbind_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_scsi_bind_cb_t>) { let _ = cb; }
-    async_method!(fn io_ack(&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_io_cb_t>)->() as Future_io_ack);
-    async_method!(fn io_nak(&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_io_cb_t>, res: ffi::udi_scsi_status_t, sense: crate::buf::Handle)->() as Future_io_nak);
+    async_method!(fn io_ack(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_io_cb_t>)->() as Future_io_ack);
+    async_method!(fn io_nak(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_io_cb_t>, res: ffi::udi_scsi_status_t, sense: crate::buf::Handle)->() as Future_io_nak);
     fn io_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_scsi_io_cb_t>) { let _ = cb; }
-    async_method!(fn ctl_ack(&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_ctl_cb_t>, res: crate::Result<()>)->() as Future_ctl_ack);
+    async_method!(fn ctl_ack(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_ctl_cb_t>, res: crate::Result<()>)->() as Future_ctl_ack);
     fn ctl_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_scsi_ctl_cb_t>) { let _ = cb; }
-    async_method!(fn event_ind(&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_event_cb_t>)->() as Future_event_ind);
+    async_method!(fn event_ind(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_event_cb_t>)->() as Future_event_ind);
 }
 pub trait Host: 'static + crate::imc::ChannelInit + crate::async_trickery::CbContext
 {
-    async_method!(fn bind_req(&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>, opts: BindOpts)->crate::Result<u32> as Future_bind_ack);
-    async_method!(fn unbind_req(&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>)->() as Future_unbind_req);
+    async_method!(fn bind_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>, opts: BindOpts)->crate::Result<u32> as Future_bind_ack);
+    async_method!(fn unbind_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>)->() as Future_unbind_req);
     // For NAK, it should return the buffer
-    async_method!(fn io_req(&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_io_cb_t>)->(ffi::udi_scsi_status_t,crate::buf::Handle) as Future_io_req);
-    async_method!(fn ctl_req(&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_ctl_cb_t>)->crate::Result<()> as Future_ctl_ack);
-    async_method!(fn event_res(&'s mut self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_event_cb_t>)->() as Future_event_res);
+    async_method!(fn io_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_io_cb_t>)->(ffi::udi_scsi_status_t,crate::buf::Handle) as Future_io_req);
+    async_method!(fn ctl_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_ctl_cb_t>)->crate::Result<()> as Future_ctl_ack);
+    async_method!(fn event_res(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_event_cb_t>)->() as Future_event_res);
     fn event_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_scsi_event_cb_t>);
 }
 

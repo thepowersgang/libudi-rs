@@ -174,6 +174,10 @@ impl crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>
 /// A queue of RX CBs
 pub struct ReadCbQueue
 {
+    inner: ::core::cell::Cell<ReadCbQueueInner>,
+}
+#[derive(Copy,Clone)]
+struct ReadCbQueueInner {
     head: *mut ffi::udi_nic_rx_cb_t,
     tail: *mut ffi::udi_nic_rx_cb_t,
 }
@@ -186,43 +190,52 @@ impl ReadCbQueue
 {
     pub const fn new() -> Self {
         Self {
-            head: ::core::ptr::null_mut(),
-            tail: ::core::ptr::null_mut(),
+            inner: ::core::cell::Cell::new(ReadCbQueueInner {
+                head: ::core::ptr::null_mut(),
+                tail: ::core::ptr::null_mut(),
+            })
         }
     }
-    pub fn push(&mut self, cb: CbHandleNicRx) {
+    pub fn push(&self, cb: CbHandleNicRx) {
         let cb = cb.into_raw();
-        if self.head.is_null() {
-            self.head = cb;
-            self.tail = self.head;
+        let s = self.inner.get();
+        self.inner.set(if s.head.is_null() {
+            ReadCbQueueInner {
+                head: cb,
+                tail: cb,
+            }
         }
         else {
             // SAFE: This type logically owns these pointers (so they're non-NULL)
             // SAFE: Trusting the `chain` on incoming cbs to be a valid single-linked list
+            let mut tail = s.tail;
             unsafe {
-                (*self.tail).chain = cb;
-                while !(*self.tail).chain.is_null() {
-                    self.tail = (*self.tail).chain;
+                (*tail).chain = cb;
+                while !(*tail).chain.is_null() {
+                    tail = (*tail).chain;
                 }
             }
-        }
+            ReadCbQueueInner { head: s.head, tail: tail }
+        })
     }
-    pub fn pop(&mut self) -> Option< CbHandleNicRx > {
-        if self.head.is_null() {
+    pub fn pop(&self) -> Option< CbHandleNicRx > {
+        let ReadCbQueueInner { mut head, mut tail } = self.inner.get();
+        if head.is_null() {
             None
         }
         else {
-            let rv = self.head;
+            let rv = head;
             // SAFE: The chain is a valid singularly-linked list of owned pointers
             unsafe {
-                self.head = (*rv).chain;
-                if self.head.is_null() {
+                head = (*rv).chain;
+                if head.is_null() {
                     // Defensive measure.
-                    self.tail = ::core::ptr::null_mut();
+                    tail = ::core::ptr::null_mut();
                 }
                 else {
                     (*rv).chain = ::core::ptr::null_mut();
                 }
+                self.inner.set(ReadCbQueueInner { head, tail });
                 Some( CbHandleNicRx::from_raw(rv) )
             }
         }
@@ -241,12 +254,12 @@ pub enum OpsNum
 }
 
 pub trait Control: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
-    async_method!(fn bind_req(&'a mut self, cb: CbRefNicBind<'a>, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->crate::Result<NicInfo> as Future_bind_req);
-    async_method!(fn unbind_req(&'a mut self, cb: CbRefNic<'a>)->crate::Result<()> as Future_unbind_req);
-    async_method!(fn enable_req(&'a mut self, cb: CbRefNic<'a>)->crate::Result<()> as Future_enable_req);
-    async_method!(fn disable_req(&'a mut self, cb: CbRefNic<'a>)->() as Future_disable_req);
-    async_method!(fn ctrl_req(&'a mut self, cb: CbRefNicCtrl<'a>)->crate::Result<()> as Future_ctrl_req);
-    async_method!(fn info_req(&'a mut self, cb: CbRefNicInfo<'a>, reset_statistics: bool)->() as Future_info_req);
+    async_method!(fn bind_req(&'a self, cb: CbRefNicBind<'a>, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->crate::Result<NicInfo> as Future_bind_req);
+    async_method!(fn unbind_req(&'a self, cb: CbRefNic<'a>)->crate::Result<()> as Future_unbind_req);
+    async_method!(fn enable_req(&'a self, cb: CbRefNic<'a>)->crate::Result<()> as Future_enable_req);
+    async_method!(fn disable_req(&'a self, cb: CbRefNic<'a>)->() as Future_disable_req);
+    async_method!(fn ctrl_req(&'a self, cb: CbRefNicCtrl<'a>)->crate::Result<()> as Future_ctrl_req);
+    async_method!(fn info_req(&'a self, cb: CbRefNicInfo<'a>, reset_statistics: bool)->() as Future_info_req);
 }
 struct MarkerControl;
 impl<T> crate::imc::ChannelHandler<MarkerControl> for T
@@ -327,13 +340,13 @@ pub struct BindChannels {
 }
 
 pub trait NsrControl: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
-    async_method!(fn get_bind_channels(&'a mut self, cb: CbRefNicBind<'a>)->BindChannels as Future_gbc);
-    async_method!(fn bind_ack(&'a mut self, cb: CbRefNicBind<'a>, res: crate::Result<()>)->() as Future_bind_ack);
-    async_method!(fn unbind_ack(&'a mut self, cb: CbRefNic<'a>, res: crate::Result<()>)->() as Future_unbind_ack);
-    async_method!(fn enable_ack(&'a mut self, cb: CbRefNic<'a>, res: crate::Result<()>)->() as Future_enable_ack);
-    async_method!(fn ctrl_ack(&'a mut self, cb: CbRefNicCtrl<'a>, res: crate::Result<()>)->() as Future_ctrl_ack);
-    async_method!(fn info_ack(&'a mut self, cb: CbRefNicInfo<'a>)->() as Future_info_ack);
-    async_method!(fn status_ind(&'a mut self, cb: CbRefNicStatus<'a>)->() as Future_status_ind);
+    async_method!(fn get_bind_channels(&'a self, cb: CbRefNicBind<'a>)->BindChannels as Future_gbc);
+    async_method!(fn bind_ack(&'a self, cb: CbRefNicBind<'a>, res: crate::Result<()>)->() as Future_bind_ack);
+    async_method!(fn unbind_ack(&'a self, cb: CbRefNic<'a>, res: crate::Result<()>)->() as Future_unbind_ack);
+    async_method!(fn enable_ack(&'a self, cb: CbRefNic<'a>, res: crate::Result<()>)->() as Future_enable_ack);
+    async_method!(fn ctrl_ack(&'a self, cb: CbRefNicCtrl<'a>, res: crate::Result<()>)->() as Future_ctrl_ack);
+    async_method!(fn info_ack(&'a self, cb: CbRefNicInfo<'a>)->() as Future_info_ack);
+    async_method!(fn status_ind(&'a self, cb: CbRefNicStatus<'a>)->() as Future_status_ind);
     fn ret_cb_nic(&mut self, cb: crate::cb::CbHandle<ffi::udi_nic_cb_t>) { let _ = cb; }
     fn ret_cb_nic_ctrl(&mut self, cb: crate::cb::CbHandle<ffi::udi_nic_ctrl_cb_t>) { let _ = cb; }
     fn ret_cb_nic_info(&mut self, cb: crate::cb::CbHandle<ffi::udi_nic_info_cb_t>) { let _ = cb; }
@@ -423,8 +436,8 @@ map_ops_structure!{
 /// 
 /// Failure to do so can lead to crashes. See the module documentation for more details
 pub unsafe trait NdTx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
-    async_method!(fn tx_req(&'a mut self, cb: CbHandleNicTx)->() as Future_tx_req);
-    async_method!(fn exp_tx_req(&'a mut self, cb: CbHandleNicTx)->() as Future_exp_tx_req);
+    async_method!(fn tx_req(&'a self, cb: CbHandleNicTx)->() as Future_tx_req);
+    async_method!(fn exp_tx_req(&'a self, cb: CbHandleNicTx)->() as Future_exp_tx_req);
 }
 struct MarkerNdTx;
 impl<T> crate::imc::ChannelHandler<MarkerNdTx> for T
@@ -458,7 +471,7 @@ map_ops_structure!{
 /// 
 /// Failure to do so can lead to crashes. See the module documentation for more details
 pub unsafe trait NsrTx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
-    async_method!(fn tx_rdy(&'a mut self, cb: CbHandleNicTx)->() as Future_tx_rdy);
+    async_method!(fn tx_rdy(&'a self, cb: CbHandleNicTx)->() as Future_tx_rdy);
 }
 struct MarkerNsrTx;
 impl<T> crate::imc::ChannelHandler<MarkerNsrTx> for T
@@ -488,7 +501,7 @@ map_ops_structure!{
 /// 
 /// Failure to do so can lead to crashes. See the module documentation for more details
 pub unsafe trait NdRx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
-    async_method!(fn rx_rdy(&'a mut self, cb: CbHandleNicRx)->() as Future_rx_rdy);
+    async_method!(fn rx_rdy(&'a self, cb: CbHandleNicRx)->() as Future_rx_rdy);
 }
 struct MarkerNdRx;
 impl<T> crate::imc::ChannelHandler<MarkerNdRx> for T
@@ -519,9 +532,9 @@ map_ops_structure!{
 pub unsafe trait NsrRx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
     async_method!{
         /// Indication of a received packet
-        fn rx_ind(&'a mut self, cb: CbHandleNicRx)->() as Future_rx_ind
+        fn rx_ind(&'a self, cb: CbHandleNicRx)->() as Future_rx_ind
     }
-    async_method!(fn exp_rx_ind(&'a mut self, cb: CbHandleNicRx)->() as Future_exp_rx_ind);
+    async_method!(fn exp_rx_ind(&'a self, cb: CbHandleNicRx)->() as Future_exp_rx_ind);
 }
 struct MarkerNsrRx;
 impl<T> crate::imc::ChannelHandler<MarkerNsrRx> for T

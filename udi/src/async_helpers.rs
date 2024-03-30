@@ -4,12 +4,12 @@
 /// E.g. Use to check the result of [crate::meta_bridge::attach_req] within the `bind_req` handler
 pub struct Wait<R>
 {
-    result: Option<R>,
-    cb: *mut crate::ffi::udi_cb_t,
+    result: ::core::cell::Cell<Option<R>>,
+    cb: ::core::cell::Cell<*mut crate::ffi::udi_cb_t>,
 }
 impl<R> Default for Wait<R> {
     fn default() -> Self {
-        Self { result: Default::default(), cb: ::core::ptr::null_mut() }
+        Self { result: Default::default(), cb: ::core::cell::Cell::new(::core::ptr::null_mut()) }
     }
 }
 impl<R> Wait<R>
@@ -26,24 +26,29 @@ where
     // - Could require interior mutability for all regions, although that'd be "fun"
 
     /// Wait until the result is set
-    pub fn wait<'s>(&'s mut self, cb: crate::CbRef<'s, ::udi_sys::udi_cb_t>) -> impl ::core::future::Future<Output=R> + 's {
-        let wake_instant = self.result.is_some();
-        let cb_slot = &mut self.cb;
-        let res_slot = &mut self.result;
+    pub fn wait<'s>(&'s self, cb: crate::CbRef<'s, ::udi_sys::udi_cb_t>) -> impl ::core::future::Future<Output=R> + 's {
+        let wake_instant = {
+            let v = self.result.take();
+            let t = v.is_some();
+            self.result.set(v);
+            t
+            };
+        let cb_slot = &self.cb;
+        let res_slot = &self.result;
         crate::async_trickery::wait_task(cb, move |gcb| {
             if wake_instant {
                 Self::signal_inner(gcb);
             }
             else {
-                *cb_slot = gcb;
+                cb_slot.set(gcb);
             }
         }, move |_| res_slot.take().unwrap())
     }
     /// Set the result, and wake the waiter
-    pub fn signal(&mut self, r: R) {
-        self.result = Some(r);
-        if ! self.cb.is_null() {
-            Self::signal_inner(self.cb);
+    pub fn signal(&self, r: R) {
+        self.result.set( Some(r) );
+        if ! self.cb.get().is_null() {
+            Self::signal_inner(self.cb.get());
         }
     }
 

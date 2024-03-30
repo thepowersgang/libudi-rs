@@ -11,18 +11,21 @@ pub struct PioHandles {
 	tx: ::udi::pio::Handle,
 }
 impl PioHandles {
-    pub async fn init(&mut self, gcb: ::udi::CbRef<'_, ::udi::ffi::udi_cb_t>) -> ::udi::pio::Handle {
+    pub async fn new(gcb: ::udi::CbRef<'_, ::udi::ffi::udi_cb_t>) -> (Self, ::udi::pio::Handle) {
         let pio_map = |trans_list| ::udi::pio::map(
             gcb, 0/*UDI_PCI_BAR_0*/, 0x00,0x20,
             trans_list, ::udi::ffi::pio::UDI_PIO_LITTLE_ENDIAN, 0, 0.into()
         );
-        self.reset   = pio_map(&RESET).await;
-        self.enable  = pio_map(&ENABLE).await;
-        self.disable = pio_map(&DISBALE).await;
-        self.rx      = pio_map(&RX).await;
-        self.tx      = pio_map(&TX).await;
-        let irq_ack  = pio_map(&IRQACK).await;
-        irq_ack
+        (
+            PioHandles {
+                reset   : pio_map(&RESET).await,
+                enable  : pio_map(&ENABLE).await,
+                disable : pio_map(&DISBALE).await,
+                rx      : pio_map(&RX).await,
+                tx      : pio_map(&TX).await,
+            },
+            pio_map(&IRQACK).await
+            )
     }
 
     pub fn reset<'a>(&'a self, gcb: ::udi::CbRef<'_, ::udi::ffi::udi_cb_t>, mac_addr: &'a mut [u8; 6])

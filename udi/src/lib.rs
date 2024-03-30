@@ -2,6 +2,7 @@
 //!
 //! An absolutely evil attempt at making bindings for the various UDI interfaces 
 #![no_std]
+//#![warn(missing_docs)]
 #![feature(waker_getters)]	// For evil with contexts
 #![feature(const_trait_impl)]
 #![feature(const_mut_refs)]	// Used for getting size of tasks

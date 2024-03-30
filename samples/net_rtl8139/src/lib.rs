@@ -13,23 +13,34 @@ const RX_BUF_CAPACITY: usize = RX_BUF_LENGTH+MTU+8;//0x3000;	// Extra page, to a
 #[derive(Default)]
 struct Driver
 {
-	pio_handles: pio_ops::PioHandles,
-	mac_addr: [u8; 6],
-	rx_cb_queue: ::udi::meta_nic::ReadCbQueue,
-	dma_constraints: ::udi::physio::dma::DmaConstraints,
-	dma_handles: Option<DmaStructures>,
-
+	init: ::core::cell::OnceCell<InitState>,
 	intr_bound: ::udi::async_helpers::Wait< ::udi::Result<()> >,
-	intr_channel: ::udi::imc::ChannelHandle,
-	channel_tx: ::udi::imc::ChannelHandle,
-	channel_rx: ::udi::imc::ChannelHandle,
+
+	rx_cb_queue: ::udi::meta_nic::ReadCbQueue,
+	
+	channels: ::core::cell::OnceCell<Channels>,
 
 	/// Next TX slot (out of four) that will be used by the hardware
-	next_tx_slot: u8,
+	next_tx_slot: ::core::cell::Cell<u8>,
 	/// Currently active TX slot, if equal to `next_tx_slot` then all entries are unused
-	cur_tx_slot: u8,
+	cur_tx_slot: ::core::cell::Cell<u8>,
 	/// Information about each TX slot
-	tx_cbs: [Option<TxSlot>; 4],
+	tx_cbs: [::core::cell::Cell<Option<TxSlot>>; 4],
+}
+struct InitState {
+	pio_handles: pio_ops::PioHandles,
+	#[allow(dead_code)]
+	intr_channel: ::udi::imc::ChannelHandle,
+
+	mac_addr: [u8; 6],
+	#[allow(dead_code)]
+	dma_constraints: ::udi::physio::dma::DmaConstraints,
+	dma_handles: ::core::cell::RefCell<DmaStructures>,
+}
+#[allow(dead_code)]
+struct Channels {
+	tx: ::udi::imc::ChannelHandle,
+	rx: ::udi::imc::ChannelHandle,
 }
 struct DmaStructures {
 	rx_buf: ::udi::physio::dma::DmaAlloc,
@@ -45,14 +56,14 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 	const MAX_ATTRS: u8 = 4;
 
     type Future_init<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn usage_ind<'s>(&'s mut self, _cb: ::udi::meta_mgmt::CbRefUsage<'s>, _resouce_level: u8) -> Self::Future_init<'s> {
+    fn usage_ind<'s>(&'s self, _cb: ::udi::meta_mgmt::CbRefUsage<'s>, _resouce_level: u8) -> Self::Future_init<'s> {
         async move {
 		}
     }
 
     type Future_enumerate<'s> = impl ::core::future::Future<Output=(::udi::init::EnumerateResult,::udi::init::AttrSink<'s>)> + 's;
     fn enumerate_req<'s>(
-		&'s mut self,
+		&'s self,
 		_cb: ::udi::init::CbRefEnumerate<'s>,
 		level: ::udi::init::EnumerateLevel,
 		mut attrs_out: ::udi::init::AttrSink<'s>
@@ -62,11 +73,12 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 			{
 			::udi::init::EnumerateLevel::Start
 			|::udi::init::EnumerateLevel::StartRescan => {
+				let mac_addr = &self.init.get().unwrap().mac_addr;
 				attrs_out.push_u32("if_num", 0);
 				attrs_out.push_string("if_media", "eth");
 				attrs_out.push_string_fmt("identifier", format_args!("{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
-					self.mac_addr[0], self.mac_addr[1], self.mac_addr[2],
-					self.mac_addr[3], self.mac_addr[4], self.mac_addr[5],
+					mac_addr[0], mac_addr[1], mac_addr[2],
+					mac_addr[3], mac_addr[4], mac_addr[5],
 					));
 				(::udi::init::EnumerateResultOk::new::<OpsList::Ctrl>(0).into(), attrs_out)
 				},
@@ -79,7 +91,7 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
     }
 
     type Future_devmgmt<'s> = impl ::core::future::Future<Output=::udi::Result<u8>> + 's;
-    fn devmgmt_req<'s>(&'s mut self, _cb: ::udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, _parent_id: ::udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
+    fn devmgmt_req<'s>(&'s self, _cb: ::udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, _parent_id: ::udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
         async move {
 			use ::udi::init::MgmtOp;
 			match mgmt_op
@@ -98,7 +110,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 {
     type Future_bind_ack<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
     fn bus_bind_ack<'a>(
-		&'a mut self,
+		&'a self,
 		cb: ::udi::meta_bridge::CbRefBind<'a>,
 		dma_constraints: ::udi::ffi::physio::udi_dma_constraints_t,
 		_preferred_endianness: ::udi::meta_bridge::PreferredEndianness,
@@ -106,16 +118,15 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 	) -> Self::Future_bind_ack<'a> {
 		async move {
 			::udi::debug_printf!("bus_bind_ack");
-			let (handles,irq_ack) = pio_ops::PioHandles::new(cb.gcb()).await;
-			self.pio_handles = handles;
+			let (pio_handles,irq_ack) = pio_ops::PioHandles::new(cb.gcb()).await;
 
-			self.intr_channel = ::udi::imc::channel_spawn::<OpsList::Irq>(cb.gcb(), self, /*interrupt number*/0.into()).await;
+			let intr_channel = ::udi::imc::channel_spawn::<OpsList::Irq>(cb.gcb(), self, /*interrupt number*/0.into()).await;
 			let mut intr_cb = ::udi::cb::alloc::<CbList::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
 			intr_cb.init(0.into(), 2, irq_ack);
 			::udi::meta_bridge::attach_req(intr_cb);
 			self.intr_bound.wait(cb.gcb()).await?;
 
-			self.dma_constraints = unsafe {
+			let dma_constraints = unsafe {
 				use ::udi::ffi::physio::udi_dma_constraints_attr_spec_t as Spec;
 				use ::udi::ffi::physio;
 				let mut dc = ::udi::physio::dma::DmaConstraints::from_raw(dma_constraints);
@@ -128,10 +139,10 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 					]).await?;
 				dc
 				};
-			self.inner.dma_handles = Some({
+			let dma_handles = {
 				use ::udi::physio::dma::{DmaBuf,Direction,Endianness};
 				let alloc_single = |size: usize| ::udi::physio::dma::DmaAlloc::alloc_single(
-					cb.gcb(), &self.inner.dma_constraints, Direction::In, Endianness::NeverSwap,
+					cb.gcb(), &dma_constraints, Direction::In, Endianness::NeverSwap,
 					true, size
 				);
 				DmaStructures {
@@ -139,10 +150,10 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 					rx_buf: alloc_single(RX_BUF_CAPACITY).await,
 					// DMA information for direct TX of the four TX slots
 					tx_slots: [
-						DmaBuf::prepare(cb.gcb(), &self.inner.dma_constraints, Some(Direction::Out)).await,
-						DmaBuf::prepare(cb.gcb(), &self.inner.dma_constraints, Some(Direction::Out)).await,
-						DmaBuf::prepare(cb.gcb(), &self.inner.dma_constraints, Some(Direction::Out)).await,
-						DmaBuf::prepare(cb.gcb(), &self.inner.dma_constraints, Some(Direction::Out)).await,
+						DmaBuf::prepare(cb.gcb(), &dma_constraints, Some(Direction::Out)).await,
+						DmaBuf::prepare(cb.gcb(), &dma_constraints, Some(Direction::Out)).await,
+						DmaBuf::prepare(cb.gcb(), &dma_constraints, Some(Direction::Out)).await,
+						DmaBuf::prepare(cb.gcb(), &dma_constraints, Some(Direction::Out)).await,
 					],
 					// Bounce buffers for the TX slots
 					tx_bounce: [
@@ -152,44 +163,53 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 						alloc_single(MTU+20).await,
 					],
 					}
-				});
-			let rbstart: u32 = self.inner.dma_handles.as_ref().unwrap()
+				};
+			let rbstart: u32 = dma_handles
 				.rx_buf.scgth().single_entry_32().expect("Environment broke the RX buffer into chunks, not allowed")
 				.block_busaddr;
 			// Reset the card and get the MAC address
 			// SAFE: Correct DMA address
-			self.mac_addr = unsafe { self.pio_handles.reset(cb.gcb(), rbstart).await? };
+			let mac_addr = unsafe { pio_handles.reset(cb.gcb(), rbstart).await? };
 			::udi::debug_printf!("bus_bind_ack: mac_addr = %02X:%02X:%02X:%02X:%02X:%02X",
-				self.mac_addr[0] as _,
-				self.mac_addr[1] as _,
-				self.mac_addr[2] as _,
-				self.mac_addr[3] as _,
-				self.mac_addr[4] as _,
-				self.mac_addr[5] as _,
+				mac_addr[0] as _,
+				mac_addr[1] as _,
+				mac_addr[2] as _,
+				mac_addr[3] as _,
+				mac_addr[4] as _,
+				mac_addr[5] as _,
 				);
 			for _ in 0 .. 4/*NUM_INTR_EVENT_CBS*/ {
-				let intr_event_cb = ::udi::cb::alloc::<CbList::IntrEvent>(cb.gcb(), self.intr_channel.raw()).await;
+				let intr_event_cb = ::udi::cb::alloc::<CbList::IntrEvent>(cb.gcb(), intr_channel.raw()).await;
 				::udi::meta_bridge::event_rdy(intr_event_cb);
+			}
+			if let Err(_) = self.init.set(InitState {
+				pio_handles,
+				intr_channel,
+				mac_addr,
+				dma_constraints,
+				dma_handles: ::core::cell::RefCell::new(dma_handles),
+			}) {
+				panic!("bus_bind_ack called multiple times");
 			}
 			Ok( () )
 		}
     }
 
     type Future_unbind_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn bus_unbind_ack<'a>(&'a mut self, _cb: ::udi::meta_bridge::CbRefBind<'a>) -> Self::Future_unbind_ack<'a> {
+    fn bus_unbind_ack<'a>(&'a self, _cb: ::udi::meta_bridge::CbRefBind<'a>) -> Self::Future_unbind_ack<'a> {
         async move {
 		}
     }
 
     type Future_intr_attach_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn intr_attach_ack<'a>(&'a mut self, _cb: ::udi::meta_bridge::CbRefIntrAttach<'a>, status: udi::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'a> {
+    fn intr_attach_ack<'a>(&'a self, _cb: ::udi::meta_bridge::CbRefIntrAttach<'a>, status: udi::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'a> {
 		self.intr_bound.signal(::udi::Error::from_status(status));
         async move {
 		}
     }
 
     type Future_intr_detach_ack<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn intr_detach_ack<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_ack<'a> {
+    fn intr_detach_ack<'a>(&'a self, cb: ::udi::meta_bridge::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_ack<'a> {
         async move {
 			let _ = cb;
 		}
@@ -198,15 +218,15 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 {
     type Future_intr_event_ind<'s> = impl ::core::future::Future<Output=()>+'s;
-    fn intr_event_ind<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefEvent<'a>, _flags: u8) -> Self::Future_intr_event_ind<'a> {
+    fn intr_event_ind<'a>(&'a self, cb: ::udi::meta_bridge::CbRefEvent<'a>, _flags: u8) -> Self::Future_intr_event_ind<'a> {
 		async move {
 			let isr = cb.intr_result;
 			::udi::debug_printf!("intr_event_ind: ISR=0x%04hx", isr);
 			if isr & pio_ops::FLAG_ISR_ROK != 0 {
 				// RX OK
-				let dma_rx_buf = &self.inner.dma_handles.as_ref().unwrap().rx_buf;
+				let dma_rx_buf = &self.inner.dma_handles().rx_buf;
 				dma_rx_buf.sync_all(cb.gcb(), ::udi::physio::dma::Direction::In).await;
-				while let Ok(Some(addr)) = self.inner.pio_handles.rx_check(cb.gcb()).await
+				while let Ok(Some(addr)) = self.inner.pio_handles().rx_check(cb.gcb()).await
 				{
 					// Get the current packet length and flags
 					let (flags, data) = unsafe {
@@ -233,7 +253,7 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 
 					// Advance CAPR (header, data, alignment)
 					let delta = (4 + data.len() as u16 + 3) & !3;
-					let _ = self.inner.pio_handles.rx_update(cb.gcb(), delta).await;
+					let _ = self.inner.pio_handles().rx_update(cb.gcb(), delta).await;
 				}
 			}
 			if isr & pio_ops::FLAG_ISR_RER != 0 {
@@ -245,9 +265,9 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 			if isr & pio_ops::FLAG_ISR_TOK != 0 || isr & pio_ops::FLAG_ISR_TER != 0 {
 				// Release TX slots until we find an unused one
 				while self.inner.cur_tx_slot != self.inner.next_tx_slot {
-					let slot = self.inner.cur_tx_slot as usize;
+					let slot = self.inner.cur_tx_slot.get() as usize;
 					
-					let tsd = match self.inner.pio_handles.get_tsd(cb.gcb(), slot).await
+					let tsd = match self.inner.pio_handles().get_tsd(cb.gcb(), slot).await
 						{
 						Ok(tsd) => tsd,
 						Err(_e) => break,
@@ -257,9 +277,9 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 						break;
 					}
 					::udi::debug_printf!("TX%u TSD=%04x", slot as u32, tsd);
-					mod_inc(&mut self.inner.cur_tx_slot, 4);
+					mod_inc(&self.inner.cur_tx_slot, 4);
 
-					let dma = self.inner.dma_handles.as_mut().unwrap();
+					let mut dma = self.inner.dma_handles();
 					match self.inner.tx_cbs[slot].take()
 					{
 					Some(mut s) => {
@@ -304,22 +324,26 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 {
 	type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::Result<::udi::meta_nic::NicInfo>> + 's;
-    fn bind_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNicBind<'a>, tx_chan_index: udi::ffi::udi_index_t, rx_chan_index: udi::ffi::udi_index_t) -> Self::Future_bind_req<'a> {
+    fn bind_req<'a>(&'a self, cb: ::udi::meta_nic::CbRefNicBind<'a>, tx_chan_index: udi::ffi::udi_index_t, rx_chan_index: udi::ffi::udi_index_t) -> Self::Future_bind_req<'a> {
         async move {
-			self.dev_mut().channel_tx = ::udi::imc::channel_spawn::<OpsList::Tx>(cb.gcb(), self, tx_chan_index).await;
-			self.dev_mut().channel_rx = ::udi::imc::channel_spawn::<OpsList::Rx>(cb.gcb(), self, rx_chan_index).await;
+			let channel_tx = ::udi::imc::channel_spawn::<OpsList::Tx>(cb.gcb(), self, tx_chan_index).await;
+			let channel_rx = ::udi::imc::channel_spawn::<OpsList::Rx>(cb.gcb(), self, rx_chan_index).await;
 
 			// Create and send 4 TX CBs
 			let mut tx_cbs = ::udi::cb::alloc_batch::<CbList::NicTx>(cb.gcb(), 4, Some((1520, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
 			while let Some(mut tx_cb) = tx_cbs.pop_front() {
 				// SAFE: Channel is correct for this CB
 				/*unsafe*/ {
-					tx_cb.set_channel(&self.dev_mut().channel_tx);
+					tx_cb.set_channel(&channel_tx);
 				}
-				//tx_cb.gcb.channel = self.dev_mut().channel_tx.raw();
+				//tx_cb.gcb.channel = channel_tx.raw();
 				::udi::meta_nic::nsr_tx_rdy(tx_cb );
 			}
+			if let Err(_) = self.dev().channels.set(Channels { tx: channel_tx, rx: channel_rx } ) {
+				panic!("Already bound?");
+			}
 
+			let mac_addr = &self.dev().init.get().unwrap().mac_addr;
 			Ok(::udi::meta_nic::NicInfo {
 				media_type: ::udi::ffi::meta_nic::MediaType::UDI_NIC_ETHER,
 				min_pdu_size: 0,
@@ -330,8 +354,8 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 				max_total_multicast: 0,
 				mac_addr_len: 6,
 				mac_addr: [
-					self.dev().mac_addr[0], self.dev().mac_addr[1], self.dev().mac_addr[2],
-					self.dev().mac_addr[3], self.dev().mac_addr[4], self.dev().mac_addr[5],
+					mac_addr[0], mac_addr[1], mac_addr[2],
+					mac_addr[3], mac_addr[4], mac_addr[5],
 					0,0,0,0,
 					0,0,0,0,0,0,0,0,0,0,
 				],
@@ -340,7 +364,7 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
     }
 
 	type Future_unbind_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
-    fn unbind_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_unbind_req<'a> {
+    fn unbind_req<'a>(&'a self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_unbind_req<'a> {
         async move {
 			let _ = cb;
 			Ok( () )
@@ -348,28 +372,34 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
     }
 
 	type Future_enable_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
-    fn enable_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_enable_req<'a> {
-		self.dev().pio_handles.enable(cb.gcb())
+    fn enable_req<'a>(&'a self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_enable_req<'a> {
+		self.dev().pio_handles().enable(cb.gcb())
     }
 
 	type Future_disable_req<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn disable_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_disable_req<'a> {
-		self.dev().pio_handles.disable(cb.gcb())
+    fn disable_req<'a>(&'a self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_disable_req<'a> {
+		self.dev().pio_handles().disable(cb.gcb())
     }
 
 	type Future_ctrl_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
-    fn ctrl_req<'a>(&'a mut self, _cb: ::udi::meta_nic::CbRefNicCtrl<'a>) -> Self::Future_ctrl_req<'a> {
+    fn ctrl_req<'a>(&'a self, _cb: ::udi::meta_nic::CbRefNicCtrl<'a>) -> Self::Future_ctrl_req<'a> {
         async move { todo!() }
     }
 
 	type Future_info_req<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn info_req<'a>(&'a mut self, _cb: ::udi::meta_nic::CbRefNicInfo<'a>, _reset_statistics: bool) -> Self::Future_info_req<'a> {
+    fn info_req<'a>(&'a self, _cb: ::udi::meta_nic::CbRefNicInfo<'a>, _reset_statistics: bool) -> Self::Future_info_req<'a> {
         async move { todo!() }
     }
 }
 impl Driver
 {
-	fn tx_inner<'s>(&'s mut self, mut cb: ::udi::meta_nic::CbHandleNicTx) -> impl ::core::future::Future<Output=::udi::Result<()>> + 's {
+	fn pio_handles(&self) -> &pio_ops::PioHandles {
+		&self.init.get().unwrap().pio_handles
+	}
+	fn dma_handles(&self) -> ::core::cell::RefMut<'_, DmaStructures> {
+		self.init.get().unwrap().dma_handles.borrow_mut()
+	}
+	fn tx_inner<'s>(&'s self, mut cb: ::udi::meta_nic::CbHandleNicTx) -> impl ::core::future::Future<Output=::udi::Result<()>> + 's {
 		async move {
 			use ::udi::physio::dma::Direction;
 			// SAFE: Input contract that the buffer is valid
@@ -378,11 +408,11 @@ impl Driver
 			let len = buf.len();
 			assert!(len <= MTU, "TX buffer exceeds MTU? {} > {}", len, MTU);
 
-			let slot = self.next_tx_slot as usize;
-			assert!(self.tx_cbs[slot].is_none(), "TX slot already active, too many TX CBs around?");
-			mod_inc(&mut self.next_tx_slot, 4);
+			let slot = self.next_tx_slot.get() as usize;
+			assert!(self.tx_cbs[slot].take().is_none(), "TX slot already active, too many TX CBs around?");
+			mod_inc(&self.next_tx_slot, 4);
 
-			let dma = self.dma_handles.as_mut().unwrap();
+			let mut dma = self.dma_handles();
 			let ent = match dma.tx_slots[slot].buf_map(cb.gcb(), buf, .., Direction::Out).await
 				{
 				// The buffer is small enough that it could be DMA'd in one chunk - nice
@@ -404,9 +434,9 @@ impl Driver
 				};
 			// SAFE: DMA is correct (assuming environment is behaving)
 			unsafe {
-				self.pio_handles.tx_packet(cb.gcb(), slot, ent.block_busaddr, ent.block_length as u16).await?;
+				self.pio_handles().tx_packet(cb.gcb(), slot, ent.block_busaddr, ent.block_length as u16).await?;
 			}
-			self.tx_cbs[slot] = Some(TxSlot { cb });
+			self.tx_cbs[slot].set( Some(TxSlot { cb }) );
 			Ok( () )
 		}
 	}
@@ -416,7 +446,7 @@ impl Driver
 unsafe impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 {
 	type Future_tx_req<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn tx_req<'a>(&'a mut self, mut cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_tx_req<'a> {
+    fn tx_req<'a>(&'a self, mut cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_tx_req<'a> {
         async move {
 			loop {
 				let (cur_cb, next) = cb.unlink();
@@ -438,7 +468,7 @@ unsafe impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
     }
 
 	type Future_exp_tx_req<'s> = Self::Future_tx_req<'s>;
-    fn exp_tx_req<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_exp_tx_req<'a> {
+    fn exp_tx_req<'a>(&'a self, cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_exp_tx_req<'a> {
         self.tx_req(cb)
     }
 }
@@ -446,7 +476,7 @@ unsafe impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 unsafe impl ::udi::meta_nic::NdRx for ::udi::init::RData<Driver>
 {
 	type Future_rx_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn rx_rdy<'a>(&'a mut self, cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_rx_rdy<'a> {
+    fn rx_rdy<'a>(&'a self, cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_rx_rdy<'a> {
 		self.rx_cb_queue.push(cb);
         async move {
 		}
@@ -481,11 +511,16 @@ mod udiprops {
 		}
 }
 
-fn mod_inc(v: &mut u8, max: u8) {
-	*v += 1;
-	while *v >= max {
-		*v -= max;
-	}
+fn mod_inc(v: &::core::cell::Cell<u8>, max: u8) {
+	assert!(max > 0);
+	v.set({
+		let mut v = v.get();
+		v += 1;
+		while v >= max && max > 0 {
+			v -= max;
+		}
+		v
+	});
 }
 
 #[cfg(not(rust_analyzer))]

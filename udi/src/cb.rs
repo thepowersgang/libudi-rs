@@ -3,6 +3,11 @@
 //! Control blocks are the core context for UDI calls between drivers and the environment or each other
 use crate::ffi::udi_channel_t;
 
+mod collections;
+
+pub use self::collections::Chain;
+pub use self::collections::SharedQueue;
+
 /// A reference to a Cb (for async calls)
 pub struct CbRef<'a, T: 'static>(*mut T, ::core::marker::PhantomData<&'a T>);
 impl<'a, T: 'static> Copy for CbRef<'a, T> {
@@ -100,76 +105,6 @@ where
     }
 }
 
-/// A chain of CBs, as returned by [alloc_batch]
-pub struct Chain<T>(*mut T);
-impl<T> Default for Chain<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-impl<T> Chain<T> {
-    pub const fn new() -> Self {
-        Chain(::core::ptr::null_mut())
-    }
-}
-impl<T> Chain<T>
-where
-    T: crate::metalang_trait::MetalangCb + crate::async_trickery::GetCb
-{
-    pub fn is_empty(&self) -> bool {
-        self.0.is_null()
-    }
-    pub fn count(&self) -> usize {
-        unsafe {
-            let mut rv = 0;
-            let mut p = self.0;
-            while !p.is_null() {
-                p = *Self::get_chain_slot(&mut *p);
-                rv += 1;
-            }
-            rv
-        }
-    }
-    pub fn pop_front(&mut self) -> Option<CbHandle<T>> {
-        if self.0.is_null() {
-            None
-        }
-        else {
-            let rv = self.0;
-            // SAFE: For a pointer to be in this structure, it must be chained using `get_chain_slot`
-            let new_next = unsafe {
-                let slot = Self::get_chain_slot(&mut *rv);
-                ::core::mem::replace(slot, ::core::ptr::null_mut())
-            };
-            self.0 = new_next as *mut T;
-            Some(CbHandle(rv))
-        }
-    }
-    pub fn push_front(&mut self, cb: CbHandle<T>) {
-        let cb = cb.into_raw();
-        // SAFE: `cb` is from a `CbHandle` which is valid
-        unsafe {
-            let slot = Self::get_chain_slot(&mut *cb);
-            *slot = self.0;
-        }
-        self.0 = cb;
-    }
-
-    fn get_chain_slot(cb: &mut T) -> &mut *mut T {
-        unsafe fn cast_ptr_mutref<U,T>(p: &mut *mut U) -> &mut *mut T {
-            &mut *(p as *mut _ as *mut *mut T)
-        }
-        // SAFE: Correct pointer manipulations
-        unsafe {
-            let cb = cb as *mut T;
-            match (*cb).get_chain() {
-            Some(slot) => cast_ptr_mutref(slot),
-            None => cast_ptr_mutref( &mut (*(cb as *mut _ as *mut ::udi_sys::udi_cb_t)).initiator_context ),
-            }
-        }
-    }
-}
-
 /// Trait covering the definition of a Control Block (in [crate::define_driver])
 pub trait CbDefinition {
     const INDEX: crate::ffi::udi_index_t;
@@ -223,7 +158,8 @@ where
 			},
 		|res| {
 			let crate::WaitRes::Pointer(p) = res else { panic!(""); };
-			Chain(p as *mut _)
+            // SAFE: This input pointer is from `alloc_batch` - so is a valid chain of CBs
+			unsafe { Chain::from_raw(p as *mut _) }
 			}
 		)
 }

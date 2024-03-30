@@ -1,20 +1,20 @@
 
 #[derive(Default)]
 struct Driver {
-    parent_channel: Option<::udi::ffi::udi_channel_t>,
-    cb_pool: ::udi::cb::Chain<::udi::ffi::meta_gio::udi_gio_xfer_cb_t>,
+    parent_channel: ::core::cell::OnceCell< ::udi::ffi::udi_channel_t >,
+    cb_pool: ::udi::cb::SharedQueue<::udi::ffi::meta_gio::udi_gio_xfer_cb_t>,
 }
 impl ::udi::init::Driver for ::udi::init::RData<Driver>
 {
     const MAX_ATTRS: u8 = 0;
     type Future_init<'s> = impl ::core::future::Future<Output=()>;
-    fn usage_ind<'s>(&'s mut self, _cb: udi::init::CbRefUsage<'s>, _resouce_level: u8) -> Self::Future_init<'s> {
+    fn usage_ind<'s>(&'s self, _cb: udi::init::CbRefUsage<'s>, _resouce_level: u8) -> Self::Future_init<'s> {
         async move { }
     }
 
     type Future_enumerate<'s> = impl ::core::future::Future<Output=(udi::init::EnumerateResult,udi::init::AttrSink<'s>)> + 's;
     fn enumerate_req<'s>(
-        &'s mut self,
+        &'s self,
         _cb: udi::init::CbRefEnumerate<'s>,
         level: udi::init::EnumerateLevel,
         attrs_out: udi::init::AttrSink<'s>
@@ -36,7 +36,7 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
     }
 
     type Future_devmgmt<'s> = impl ::core::future::Future<Output=::udi::Result<u8>> + 's;
-    fn devmgmt_req<'s>(&'s mut self, _cb: udi::init::CbRefMgmt<'s>, _mgmt_op: udi::init::MgmtOp, _parent_id: udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
+    fn devmgmt_req<'s>(&'s self, _cb: udi::init::CbRefMgmt<'s>, _mgmt_op: udi::init::MgmtOp, _parent_id: udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
         async move {
             todo!("devmgmt_req");
         }
@@ -46,11 +46,13 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
 {
     type Future_bind_ack<'s> = impl ::core::future::Future<Output=()>;
-    fn bind_ack<'s>(&'s mut self, cb: ::udi::cb::CbRef<'s,::udi::ffi::meta_gio::udi_gio_bind_cb_t>, size: ::udi::Result<u64>) -> Self::Future_bind_ack<'s> {
+    fn bind_ack<'s>(&'s self, cb: ::udi::cb::CbRef<'s,::udi::ffi::meta_gio::udi_gio_bind_cb_t>, size: ::udi::Result<u64>) -> Self::Future_bind_ack<'s> {
         async move {
             match size {
             Ok(0) => {
-                self.parent_channel = Some(cb.gcb.channel);
+                if let Err(_) = self.parent_channel.set( cb.gcb.channel ) {
+                    panic!("Bound twice?")
+                }
                 
                 // Allocate a pool of CBs with 1KiB buffers
                 let mut cbs = ::udi::cb::alloc_batch::<CbList::Xfer>(cb.gcb(), 3, Some((1024, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
@@ -60,7 +62,7 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
                     unsafe {
                         xfer_cb.get_mut().gcb.channel = cb.gcb.channel;
                     }
-                    self.cb_pool.push_front(xfer_cb);
+                    self.cb_pool.push_back(xfer_cb);
                 }
 
                 // TEST: Send some data
@@ -81,12 +83,12 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
     }
 
     type Future_unbind_ack<'s> = impl ::core::future::Future<Output=()>;
-    fn unbind_ack<'s>(&'s mut self, _cb: ::udi::cb::CbRef<'s,::udi::ffi::meta_gio::udi_gio_bind_cb_t>) -> Self::Future_unbind_ack<'s> {
+    fn unbind_ack<'s>(&'s self, _cb: ::udi::cb::CbRef<'s,::udi::ffi::meta_gio::udi_gio_bind_cb_t>) -> Self::Future_unbind_ack<'s> {
         async move { todo!("unbind_ack") }
     }
 
     type Future_xfer_ack<'s> = impl ::core::future::Future<Output=()>;
-    fn xfer_ack<'s>(&'s mut self, cb: ::udi::cb::CbRef<'s, ::udi::ffi::meta_gio::udi_gio_xfer_cb_t>) -> Self::Future_xfer_ack<'s> {
+    fn xfer_ack<'s>(&'s self, cb: ::udi::cb::CbRef<'s, ::udi::ffi::meta_gio::udi_gio_xfer_cb_t>) -> Self::Future_xfer_ack<'s> {
         async move {
             match cb.op
             {
@@ -104,7 +106,7 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
     }
 
     type Future_xfer_nak<'s> = impl ::core::future::Future<Output=()>;
-    fn xfer_nak<'s>(&'s mut self, _cb: ::udi::cb::CbRef<'s, ::udi::ffi::meta_gio::udi_gio_xfer_cb_t>, res: ::udi::Result<()>) -> Self::Future_xfer_nak<'s> {
+    fn xfer_nak<'s>(&'s self, _cb: ::udi::cb::CbRef<'s, ::udi::ffi::meta_gio::udi_gio_xfer_cb_t>, res: ::udi::Result<()>) -> Self::Future_xfer_nak<'s> {
         async move {
             match res {
             Ok(_) => {},
@@ -114,11 +116,11 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
     }
 
     fn xfer_ret(&mut self, cb: ::udi::cb::CbHandle<udi::ffi::meta_gio::udi_gio_xfer_cb_t>) {
-        self.cb_pool.push_front(cb);
+        self.cb_pool.push_back(cb);
     }
 
     type Future_event_ind<'s> = impl ::core::future::Future<Output=()>;
-    fn event_ind<'s>(&'s mut self, _cb: ::udi::cb::CbRef<'s,::udi::ffi::meta_gio::udi_gio_event_cb_t>) -> Self::Future_event_ind<'s> {
+    fn event_ind<'s>(&'s self, _cb: ::udi::cb::CbRef<'s,::udi::ffi::meta_gio::udi_gio_event_cb_t>) -> Self::Future_event_ind<'s> {
         async move {
             // Grab a CB and populate it for read
             if let Some(mut xfer_cb) = self.cb_pool.pop_front() {

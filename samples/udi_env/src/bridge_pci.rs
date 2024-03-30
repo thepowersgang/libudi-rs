@@ -1,6 +1,6 @@
 #[derive(Default)]
 struct Driver {
-    enum_dev_idx: usize,
+    enum_dev_idx: ::std::cell::Cell<usize>,
 }
 
 struct EmulatedDevice {
@@ -24,22 +24,22 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 {
     const MAX_ATTRS: u8 = 6;
     type Future_init<'s> = impl ::core::future::Future<Output=()>;
-    fn usage_ind<'s>(&'s mut self, _cb: udi::init::CbRefUsage<'s>, _resouce_level: u8) -> Self::Future_init<'s> {
+    fn usage_ind<'s>(&'s self, _cb: udi::init::CbRefUsage<'s>, _resouce_level: u8) -> Self::Future_init<'s> {
         async move { }
     }
 
     type Future_enumerate<'s> = impl ::core::future::Future<Output=(udi::init::EnumerateResult,udi::init::AttrSink<'s>)> + 's;
     fn enumerate_req<'s>(
-        &'s mut self,
+        &'s self,
         _cb: udi::init::CbRefEnumerate<'s>,
         level: udi::init::EnumerateLevel,
         mut attrs_out: udi::init::AttrSink<'s>
     ) -> Self::Future_enumerate<'s>
     {
-        fn enumerate_dev(this: &mut Driver, attrs_out: &mut udi::init::AttrSink<'_>) -> ::udi::init::EnumerateResult {
-            let child_idx = this.enum_dev_idx;
+        fn enumerate_dev(this: &Driver, attrs_out: &mut udi::init::AttrSink<'_>) -> ::udi::init::EnumerateResult {
+            let child_idx = this.enum_dev_idx.get();
             if let Some(c) = DEVICES.get(child_idx) {
-                this.enum_dev_idx += 1;
+                this.enum_dev_idx.set( child_idx + 1 );
 				attrs_out.push_string("bus_type", "pci");
 				attrs_out.push_u32("pci_vendor_id", c.vendor_id as _);
 				attrs_out.push_u32("pci_device_id", c.device_id as _);
@@ -57,7 +57,7 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 			{
 			::udi::init::EnumerateLevel::Start
 			|::udi::init::EnumerateLevel::StartRescan => {
-                self.enum_dev_idx = 0;
+                self.enum_dev_idx.set( 0 );
                 let rv = enumerate_dev(self, &mut attrs_out);
                 (rv, attrs_out)
 				},
@@ -73,7 +73,7 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
     }
 
     type Future_devmgmt<'s> = impl ::core::future::Future<Output=::udi::Result<u8>> + 's;
-    fn devmgmt_req<'s>(&'s mut self, _cb: udi::init::CbRefMgmt<'s>, _mgmt_op: udi::init::MgmtOp, _parent_id: udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
+    fn devmgmt_req<'s>(&'s self, _cb: udi::init::CbRefMgmt<'s>, _mgmt_op: udi::init::MgmtOp, _parent_id: udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
         async move {
             todo!("devmgmt_req");
         }
@@ -83,8 +83,8 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 #[derive(Default)]
 struct ChildState {
     irq_cbs: ::std::sync::Arc<CbQueue>,
-    handler: Option<::std::sync::Arc<InterruptHandler>>,
-    min_event_pend: u8,
+    handler: ::core::cell::Cell<Option< ::std::sync::Arc<InterruptHandler> >>,
+    min_event_pend: ::core::cell::Cell<u8>,
     intr_enabled: bool,
 }
 struct InterruptHandler {
@@ -99,7 +99,7 @@ struct CbQueue {
 impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,ChildState>
 {
     type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::Result<(::udi::meta_bridge::PreferredEndianness,)>> + 's;
-    fn bus_bind_req<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefBind<'a>) -> Self::Future_bind_req<'a> {
+    fn bus_bind_req<'a>(&'a self, cb: ::udi::meta_bridge::CbRefBind<'a>) -> Self::Future_bind_req<'a> {
         async move {
             println!("PCI Bind Request: #{:#x}", self.child_id());
             let di = get_driver_instance(cb.gcb());
@@ -115,7 +115,7 @@ impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,ChildState>
     }
 
     type Future_unbind_req<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn bus_unbind_req<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefBind<'a>) -> Self::Future_unbind_req<'a> {
+    fn bus_unbind_req<'a>(&'a self, cb: ::udi::meta_bridge::CbRefBind<'a>) -> Self::Future_unbind_req<'a> {
         async move {
             let di = get_driver_instance(cb.gcb());
             assert!(di.device.get().is_some());
@@ -123,7 +123,7 @@ impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,ChildState>
     }
 
     type Future_intr_attach_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
-    fn intr_attach_req<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrAttach<'a>) -> Self::Future_intr_attach_req<'a> {
+    fn intr_attach_req<'a>(&'a self, cb: ::udi::meta_bridge::CbRefIntrAttach<'a>) -> Self::Future_intr_attach_req<'a> {
         async move {
             let channel = ::udi::imc::channel_spawn::<OpsList::Interrupt>(
                 cb.gcb(), self, cb.interrupt_index
@@ -136,8 +136,8 @@ impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,ChildState>
                 channel,
                 preproc: preproc_handle,
             });
-            self.min_event_pend = cb.min_event_pend;
-            self.handler = Some(handler.clone());
+            self.min_event_pend.set( cb.min_event_pend );
+            self.handler.set( Some(handler.clone()) );
 
             let di = get_driver_instance(cb.gcb());
             di.device.get().expect("Driver instance not bound to a device")
@@ -148,7 +148,7 @@ impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,ChildState>
     }
 
     type Future_intr_detach_req<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn intr_detach_req<'a>(&'a mut self, cb: ::udi::meta_bridge::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_req<'a> {
+    fn intr_detach_req<'a>(&'a self, cb: ::udi::meta_bridge::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_req<'a> {
         let di = get_driver_instance(cb.gcb());
         di.device.get().expect("Driver instance not bound to a device")
             .irq(cb.interrupt_idx.0)
@@ -159,19 +159,19 @@ impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,ChildState>
 impl ::udi::meta_bridge::IntrDispatcher for ::udi::ChildBind<Driver,ChildState>
 {
     type Future_intr_event_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn intr_event_rdy<'a>(&'a mut self, _cb: ::udi::meta_bridge::CbRefEvent) -> Self::Future_intr_event_rdy<'a> {
+    fn intr_event_rdy<'a>(&'a self, _cb: ::udi::meta_bridge::CbRefEvent) -> Self::Future_intr_event_rdy<'a> {
         async move {
         }
     }
 
     fn intr_event_ret(&mut self, cb: udi::meta_bridge::CbHandleEvent) {
-        if let Some(ref handler) = self.handler {
+        if let Some(handler) = self.handler.take() {
             if handler.channel.raw() == cb.gcb.channel {
                 let sufficient = {
                     let mut cbs = self.irq_cbs.queue.lock().unwrap();
                     cbs.push_front(cb);
                     //println!("intr_event_ret: {} ? >= {}", cbs.count(), self.min_event_pend);
-                    cbs.count() >= self.min_event_pend as usize
+                    cbs.count() >= self.min_event_pend.get() as usize
                 };
                 if sufficient && !self.intr_enabled {
                     handler.enable();
@@ -181,6 +181,7 @@ impl ::udi::meta_bridge::IntrDispatcher for ::udi::ChildBind<Driver,ChildState>
             else {
                 panic!("");
             }
+            self.handler.set(Some(handler));
         }
         else {
             panic!("intr_event_ret with no registered handler");

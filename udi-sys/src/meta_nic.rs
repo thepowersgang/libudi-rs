@@ -1,4 +1,4 @@
-
+#![allow(non_camel_case_types)]
 use crate::{udi_ubit32_t, udi_ubit8_t};
 use crate::{udi_index_t, udi_status_t, udi_boolean_t};
 use crate::{udi_cb_t, udi_buf_t};

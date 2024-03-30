@@ -29,13 +29,13 @@ pub trait Driver: 'static + crate::async_trickery::CbContext {
 	const MAX_ATTRS: u8;
 
 	type Future_init<'s>: Future<Output=()> + 's;
-	fn usage_ind<'s>(&'s mut self, cb: CbRefUsage<'s>, resouce_level: u8) -> Self::Future_init<'s>;
+	fn usage_ind<'s>(&'s self, cb: CbRefUsage<'s>, resouce_level: u8) -> Self::Future_init<'s>;
 
 	type Future_enumerate<'s>: Future<Output=(EnumerateResult,AttrSink<'s>)> + 's;
-	fn enumerate_req<'s>(&'s mut self, cb: CbRefEnumerate<'s>, level: EnumerateLevel, attrs_out: AttrSink<'s>) -> Self::Future_enumerate<'s>;
+	fn enumerate_req<'s>(&'s self, cb: CbRefEnumerate<'s>, level: EnumerateLevel, attrs_out: AttrSink<'s>) -> Self::Future_enumerate<'s>;
 
 	type Future_devmgmt<'s>: Future<Output=crate::Result<u8>> + 's;
-	fn devmgmt_req<'s>(&'s mut self, cb: CbRefMgmt<'s>, mgmt_op: MgmtOp, parent_id: crate::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s>;
+	fn devmgmt_req<'s>(&'s self, cb: CbRefMgmt<'s>, mgmt_op: MgmtOp, parent_id: crate::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s>;
 }
 pub enum EnumerateLevel
 {

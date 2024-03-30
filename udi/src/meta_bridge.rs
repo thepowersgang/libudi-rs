@@ -44,7 +44,7 @@ pub enum PreferredEndianness {
 
 /// Trait for a device on a bus
 pub trait BusDevice: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
-    async_method!(fn bus_bind_ack(&'a mut self,
+    async_method!(fn bus_bind_ack(&'a self,
         cb: crate::CbRef<'a, udi_bus_bind_cb_t>,
         dma_constraints: crate::ffi::physio::udi_dma_constraints_t,
         preferred_endianness: PreferredEndianness,
@@ -52,9 +52,9 @@ pub trait BusDevice: 'static + crate::async_trickery::CbContext + crate::imc::Ch
         )->crate::Result<()> as Future_bind_ack
     );
 
-    async_method!(fn bus_unbind_ack(&'a mut self, cb: CbRefBind<'a>) -> () as Future_unbind_ack);
-    async_method!(fn intr_attach_ack(&'a mut self, cb: CbRefIntrAttach<'a>, status: crate::ffi::udi_status_t) -> () as Future_intr_attach_ack);
-    async_method!(fn intr_detach_ack(&'a mut self, cb: CbRefIntrDetach<'a>) -> () as Future_intr_detach_ack);
+    async_method!(fn bus_unbind_ack(&'a self, cb: CbRefBind<'a>) -> () as Future_unbind_ack);
+    async_method!(fn intr_attach_ack(&'a self, cb: CbRefIntrAttach<'a>, status: crate::ffi::udi_status_t) -> () as Future_intr_attach_ack);
+    async_method!(fn intr_detach_ack(&'a self, cb: CbRefIntrDetach<'a>) -> () as Future_intr_detach_ack);
 
     fn intr_attach_cb_ret(&mut self, cb: CbHandleIntrAttach) { let _ = cb;}
     fn intr_detach_cb_ret(&mut self, cb: CbHandleIntrDetach) { let _ = cb;}
@@ -73,10 +73,10 @@ where
 }
 
 pub trait BusBridge: 'static + crate::imc::ChannelInit + crate::async_trickery::CbContext {
-    async_method!(fn bus_bind_req(&'a mut self, cb: CbRefBind<'a>) -> crate::Result<(PreferredEndianness,)> as Future_bind_req);
-    async_method!(fn bus_unbind_req(&'a mut self, cb: CbRefBind<'a>) -> () as Future_unbind_req);
-    async_method!(fn intr_attach_req(&'a mut self, cb: CbRefIntrAttach<'a>) -> crate::Result<()> as Future_intr_attach_req);
-    async_method!(fn intr_detach_req(&'a mut self, cb: CbRefIntrDetach<'a>) -> () as Future_intr_detach_req);
+    async_method!(fn bus_bind_req(&'a self, cb: CbRefBind<'a>) -> crate::Result<(PreferredEndianness,)> as Future_bind_req);
+    async_method!(fn bus_unbind_req(&'a self, cb: CbRefBind<'a>) -> () as Future_unbind_req);
+    async_method!(fn intr_attach_req(&'a self, cb: CbRefIntrAttach<'a>) -> crate::Result<()> as Future_intr_attach_req);
+    async_method!(fn intr_detach_req(&'a self, cb: CbRefIntrDetach<'a>) -> () as Future_intr_detach_req);
 }
 struct MarkerBusBridge;
 impl<T> crate::imc::ChannelHandler<MarkerBusBridge> for T
@@ -205,7 +205,7 @@ impl super::cb::CbHandle<udi_intr_attach_cb_t>
 
 pub trait IntrHandler: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit
 {
-    async_method!(fn intr_event_ind(&'a mut self, cb: CbRefEvent<'a>, flags: u8)->() as Future_intr_event_ind);
+    async_method!(fn intr_event_ind(&'a self, cb: CbRefEvent<'a>, flags: u8)->() as Future_intr_event_ind);
 }
 struct MarkerIntrHandler;
 impl<T> crate::imc::ChannelHandler<MarkerIntrHandler> for T
@@ -233,7 +233,7 @@ map_ops_structure!{
 /// Interrupte dispatcher trait
 pub trait IntrDispatcher: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit
 {
-    async_method!(fn intr_event_rdy(&'a mut self, cb: CbRefEvent)->() as Future_intr_event_rdy);
+    async_method!(fn intr_event_rdy(&'a self, cb: CbRefEvent)->() as Future_intr_event_rdy);
     fn intr_event_ret(&mut self, cb: CbHandleEvent);
 }
 struct MarkerIntrDispatcher;

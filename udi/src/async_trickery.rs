@@ -387,22 +387,22 @@ pub(crate) fn signal_waiter(gcb: &mut udi_cb_t, res: WaitRes) {
 /// ```ignore
 /// trait Foo
 /// {
-///   ::udi::async_method!(fn bar(&mut self, arg: u8) -> u16 as Future_bar);
+///   ::udi::async_method!(fn bar(&self, arg: u8) -> u16 as Future_bar);
 /// }
 /// ```
 #[macro_export]
 macro_rules! async_method {
-    ($(#[$a:meta])* fn $fcn_name:ident(&mut self$(, $a_n:ident: $a_ty:ty)*) -> $ret_ty:ty as $future_name:ident) => {
+    ($(#[$a:meta])* fn $fcn_name:ident(&self$(, $a_n:ident: $a_ty:ty)*) -> $ret_ty:ty as $future_name:ident) => {
         #[allow(non_camel_case_types)]
         type $future_name<'s>: ::core::future::Future<Output=$ret_ty>;
 		$( #[$a] )*
-        fn $fcn_name<'s>(&'s mut self$(, $a_n: $a_ty)*) -> Self::$future_name<'s>;
+        fn $fcn_name<'s>(&'s self$(, $a_n: $a_ty)*) -> Self::$future_name<'s>;
     };
-    ($(#[$a:meta])* fn $fcn_name:ident(&$lft:lifetime mut self$(, $a_n:ident: $a_ty:ty)*) -> $ret_ty:ty as $future_name:ident) => {
+    ($(#[$a:meta])* fn $fcn_name:ident(&$lft:lifetime self$(, $a_n:ident: $a_ty:ty)*) -> $ret_ty:ty as $future_name:ident) => {
         #[allow(non_camel_case_types)]
         type $future_name<'s>: ::core::future::Future<Output=$ret_ty>;
 		$( #[$a] )*
-        fn $fcn_name<$lft>(&$lft mut self$(, $a_n: $a_ty)*) -> Self::$future_name<$lft>;
+        fn $fcn_name<$lft>(&$lft self$(, $a_n: $a_ty)*) -> Self::$future_name<$lft>;
     };
 }
 /// Define a FFI wrapper that invokes a future
