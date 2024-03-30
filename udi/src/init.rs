@@ -228,6 +228,7 @@ where
 	fn maybe_init(&mut self) {
 		if !self.is_init {
 			unsafe { ::core::ptr::write(&mut self.inner, Default::default()); }
+			self.is_init = true;
 		}
 	}
     fn channel_cb_slot(&mut self) -> &mut *mut ::udi_sys::imc::udi_channel_event_cb_t {

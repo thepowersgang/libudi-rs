@@ -16,14 +16,14 @@ use crate::ffi::udi_cb_t;
 
 /// Trait for the `context` field in a CB
 // TODO: Init is covered for now, but what about deallocation
-// - On unbind it can be dropped, but it's possible to use the same context for multiple channel
+// - On unbind it can be dropped, but it's possible to use the same context for multiple channels
 pub trait CbContext {
 	fn maybe_init(&mut self);
 	fn channel_cb_slot(&mut self) -> &mut *mut crate::ffi::imc::udi_channel_event_cb_t;
 	unsafe fn drop_in_place(&mut self);
 }
 
-/// Result of a wait operation, stored in scratch
+/// Result of a wait operation, stored in `gcb.scratch`
 #[derive(Copy,Clone)]
 pub(crate) enum WaitRes {
 	//Unit,
@@ -34,7 +34,7 @@ pub(crate) enum WaitRes {
 
 /// Initialise a task
 /// 
-/// SAFETY: Caller must ensure that `cb`'s `scratch` is valid for this task
+/// SAFETY: Caller must ensure that `cb`'s `scratch` is valid for this task (correct size, not yet initialised)
 pub(crate) unsafe fn init_task<Cb, T, R, F>(cb: &Cb, inner: T, finally: F)
 where
 	Cb: GetCb,
@@ -50,6 +50,8 @@ pub(crate) const fn task_size<T: 'static>() -> usize {
 	::core::mem::size_of::<Task<udi_cb_t,T,(),()>>()
 }
 /// Drop a task (due to a channel op_abort event)
+/// 
+/// SAFETY: Takes a raw pointer, that pointer must be the valid CB for an aborted task
 pub(crate) unsafe fn abort_task(cb: *mut udi_cb_t)
 {
 	let task = &mut *((*cb).scratch as *mut TaskStub);
@@ -58,12 +60,16 @@ pub(crate) unsafe fn abort_task(cb: *mut udi_cb_t)
 }
 
 /// Obtain a pointer to the driver instance from a cb
+/// 
+/// SAFETY: Caller must ensure that `T` is valid for the context paraneter of the Cb
 pub(crate) unsafe fn get_rdata_t<T: CbContext, Cb: GetCb>(cb: &Cb) -> &mut T {
 	let rv = &mut *(cb.get_gcb().context as *mut T);
 	rv.maybe_init();
 	rv
 }
 /// Set the channel operation cb
+/// 
+/// SAFETY: Caller must ensure that `cb` is a valid pointer, and that the context field points to a `T`
 pub(crate) unsafe fn set_channel_cb<T: CbContext>(cb: *mut crate::ffi::imc::udi_channel_event_cb_t) {
 	let slot = get_rdata_t::<T,_>(&*cb).channel_cb_slot();
 	if *slot != ::core::ptr::null_mut() {
@@ -72,10 +78,12 @@ pub(crate) unsafe fn set_channel_cb<T: CbContext>(cb: *mut crate::ffi::imc::udi_
 	}
 	*slot = cb;
 }
+/// Call `udi_channel_event_complete` using the saved event CB (not the passed cb)
+/// 
+/// SAFETY: Caller must ensure that `cb` is a valid pointer, and that the context field points to a `T`
 pub(crate) unsafe fn channel_event_complete<T: CbContext, Cb: GetCb>(cb: *mut Cb, status: crate::ffi::udi_status_t) {
 	let slot = get_rdata_t::<T,_>(&*cb).channel_cb_slot();
-	let channel_cb = *slot;
-	*slot = ::core::ptr::null_mut();
+	let channel_cb = ::core::mem::replace(slot, ::core::ptr::null_mut());
 	if channel_cb == ::core::ptr::null_mut() {
 		// Uh-oh, no channel CB set
 		panic!("no channel CB set")
@@ -85,7 +93,7 @@ pub(crate) unsafe fn channel_event_complete<T: CbContext, Cb: GetCb>(cb: *mut Cb
 
 /// Run async state stored in `cb`
 /// 
-/// SAFETY: Caller must ensure that the cb is async
+/// SAFETY: Caller must ensure that the cb has been initialised with an async state
 unsafe fn run<Cb: GetCb>(cb: &Cb) {
 	let gcb = cb.get_gcb();
 	let waker = make_waker(gcb);
@@ -124,15 +132,11 @@ where
 	Cb: GetCb,
 	F: FnOnce(&Cb) -> U + Unpin,
 {
-	return W::<Cb,F,U,> {
-		f: Some(f),
-		_pd: Default::default()
-		};
-	struct W<Cb,F,U> {
+	struct WithCbFuture<Cb,F,U> {
 		f: Option<F>,
 		_pd: PhantomData<(fn(&Cb)->U,)>,
 	}
-	impl<Cb,F,U> Future for W<Cb,F,U>
+	impl<Cb,F,U> Future for WithCbFuture<Cb,F,U>
 	where
 		Cb: GetCb,
 		F: FnOnce(&Cb)->U + Unpin,
@@ -145,9 +149,14 @@ where
 			Poll::Ready(fcn(cb))
 		}
 	}
+
+	WithCbFuture::<Cb,F,U,> {
+		f: Some(f),
+		_pd: Default::default()
+		}
 }
 
-/// Top-level async task state (`gcb.scratch`)
+/// Top-level async task state (stored in `gcb.scratch`)
 #[repr(C)]
 struct Task<Cb,T,R,F> {
 	pd: PhantomData<(Cb,R,)>,
