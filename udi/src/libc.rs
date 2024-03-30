@@ -1,5 +1,10 @@
+//! Helpers for handling libc-ish portions of the UDI bindings
+
+/// A trait for all types that can be passed to `snprintf`
 pub trait SnprintfArg {
+    /// True FFI argument type
     type Output;
+    /// Convert the type into a FFI argument
     fn into_arg(self) -> Self::Output;
 }
 

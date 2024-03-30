@@ -2,7 +2,7 @@
 //!
 //! An absolutely evil attempt at making bindings for the various UDI interfaces 
 #![no_std]
-//#![warn(missing_docs)]
+#![warn(missing_docs)]
 #![feature(waker_getters)]	// For evil with contexts
 #![feature(const_trait_impl)]
 #![feature(const_mut_refs)]	// Used for getting size of tasks
@@ -55,12 +55,13 @@ pub use self::channel_context::ChildBind;
 
 pub use self::error::{Result,Error};
 
+/// Obtain the `channel` field from the current async operation CB
 pub fn get_gcb_channel() -> impl ::core::future::Future<Output=ffi::udi_channel_t> {
 	async_trickery::with_cb::<ffi::udi_cb_t,_,_>(|cb| cb.channel)
 }
-pub fn get_gcb_context() -> impl ::core::future::Future<Output=*mut ::core::ffi::c_void> {
-	async_trickery::with_cb::<ffi::udi_cb_t,_,_>(|cb| cb.context)
-}
+//pub fn get_gcb_context() -> impl ::core::future::Future<Output=*mut ::core::ffi::c_void> {
+//	async_trickery::with_cb::<ffi::udi_cb_t,_,_>(|cb| cb.context)
+//}
 
 /// HELPER: A constant `max` operation on `usize`
 pub const fn const_max(a: usize, b: usize) -> usize {
@@ -128,9 +129,13 @@ pub struct OpsStructure<Ops, T, CbList>
 	pd: ::core::marker::PhantomData<(Ops,T,CbList)>,
 }
 
+/// Traits used in [crate::define_driver] to specify different wrappers on the context
 pub mod ops_wrapper_markers {
 	/// Indicates that the ops entry is a valid ChildBind
 	pub trait ChildBind: super::ops_markers::Ops {
+		/// Operations index for the enumeration result
+		///
+		/// See [crate::init::EnumerateResultOk]
 		const IDX: crate::ffi::udi_index_t;
 	}
 }
@@ -138,17 +143,22 @@ pub mod ops_wrapper_markers {
 pub mod ops_markers {
 	/// Trait for an entry in `OpsList` created by [super::define_driver]
 	pub trait Ops {
+		/// Actual metalanguage FFI operations structure
 		type OpsTy;
+		/// Type to be stored in the `context` feld of the CB
 		type Context;
+		/// Operations index for channel spawn
 		const INDEX: ::udi_sys::udi_index_t;
 	}
 	/// Trait for `udi_*_ops_t` structures indicating that they expect to be a parent binding with the given
 	/// cb.
 	pub trait ParentBind<Cb> {
+		/// An associated type that just exists to assert that this trait is implemented
 		const ASSERT: ();
 	}
 	/// Trait for `udi_*_ops_t` structures indicating that they expect to be a child binding
 	pub trait ChildBind {
+		/// An associated type that just exists to assert that this trait is implemented
 		const ASSERT: ();
 	}
 }

@@ -1,5 +1,6 @@
+//! Helper typs for async operations
 
-/// Synchronous point, useful to wait for metalang operation to complete
+/// Synchronise two different async tasks, useful to wait for metalang operation to complete
 /// 
 /// E.g. Use to check the result of [crate::meta_bridge::attach_req] within the `bind_req` handler
 pub struct Wait<R>

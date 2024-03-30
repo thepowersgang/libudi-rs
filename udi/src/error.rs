@@ -1,26 +1,32 @@
+//! A wrapper around `udi_status_t`
 use ::udi_sys as ffi;
 
+/// UDI result type
 pub type Result<T> = ::core::result::Result<T,Error>;
 
 /// A wrapper around `udi_status_t` that cannot be `UDI_OK`
 #[derive(Copy,Clone)]
 pub struct Error(::core::num::NonZeroU32);
 impl Error {
+	/// Get the `udi_status_t` value
 	pub fn into_inner(self) -> ffi::udi_status_t {
 		self.0.get()
 	}
+	/// Construct from a `udi_status_t` - returning `Ok( () )` if `UDI_OK`
 	pub fn from_status(s: ffi::udi_status_t) -> Result<()> {
 		match ::core::num::NonZeroU32::new(s) {
 		Some(v) => Err(Error(v)),
 		None => Ok( () ),
 		}
 	}
+	/// Consume a result into a `udi_status_t`
 	pub fn to_status(r: Result<()>) -> ffi::udi_status_t {
 		match r {
 		Ok(()) => ffi::UDI_OK as _,
 		Err(e) => e.into_inner(),
 		}
 	}
+	/// Get the UDI status value name as a string
 	pub fn as_str(&self) -> Option<&str> {
 		macro_rules! v {
 			( $($name:ident) *) => {

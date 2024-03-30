@@ -59,7 +59,9 @@ macro_rules! impl_metalanguage
         OPS $( $ops_idx:literal => $ops_ty:ty),* $(,)? ;
         CBS $( $cb_idx:literal => $cb_ty:ty $(: BUF $buf_fld:ident)? $(: INLINE_DATA $inline_data_fld:ident)? $(: CHAIN $chain_fld:ident)? ),* $(,)? ;
     ) => {
+        #[doc(hidden)]
         pub struct Metalang;
+        /// Metalanguage specification
         pub static $spec_name: Metalang = Metalang;
         impl $crate::metalang_trait::Metalanguage for Metalang {
             fn name() -> &'static str {
@@ -164,12 +166,14 @@ macro_rules! map_ops_structure {
             T: $trait,
             $( CbList: crate::HasCb<$cb>, )*
         {
+            /// Obtain the amount of scratch space required for ops in this structure
             pub const fn scratch_requirement() -> usize {
                 let v = crate::imc::task_size::<T, $marker>();
                 $(let v = crate::const_max(v, $name::task_size::<T>());)*
                 $(let v = crate::const_max(v, $extra_op::task_size::<T>());)*
                 v
             }
+            /// Generate an ops structure for a driver
             /// SAFETY: Caller must ensure that the ops are only used with matching `T` region
             /// SAFETY: The scratch size must be >= value returned by [Self::scratch_requirement]
             pub const unsafe fn for_driver() -> $struct {

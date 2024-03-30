@@ -1,8 +1,11 @@
+//! UDI structure/memory layout handling
 
+/// Iterate a buffer using a provided layout to provide the data structure
 pub unsafe fn iter_with_layout<'a,'b>(layout: &'a *const crate::ffi::udi_layout_t, buffer: &'b mut *mut crate::ffi::c_void) -> DataIter<'a, 'b> {
     DataIter { layout: *layout, ptr: *buffer, _pd: ::core::marker::PhantomData }
 }
 
+/// Iterator over a buffer using a layout (see [iter_with_layout])
 pub struct DataIter<'a, 'data> {
     layout: *const crate::ffi::udi_layout_t,
     ptr: *mut crate::ffi::c_void,
@@ -110,34 +113,54 @@ impl<'layout, 'data> Iterator for DataIter<'layout, 'data>
     
 }
 
+/// A data element decoded using a layout
 pub enum LayoutItem<'layout, 'data>
 {
+    /// 8 bit unsigned (`udi_ubit8_t`)
     UBit8(&'data mut crate::ffi::udi_ubit8_t),
+    /// 8 bit signed (`udi_sbit8_t`)
     SBit8(&'data mut crate::ffi::udi_sbit8_t),
+    /// 16 bit unsigned (`udi_ubit16_t`)
     UBit16(&'data mut crate::ffi::udi_ubit16_t),
+    /// 16 bit signed (`udi_sbit16_t`)
     SBit16(&'data mut crate::ffi::udi_sbit16_t),
+    /// 32 bit unsigned (`udi_ubit32_t`)
     UBit32(&'data mut crate::ffi::udi_ubit32_t),
+    /// 32 bit signed (`udi_sbit32_t`)
     SBit32(&'data mut crate::ffi::udi_sbit32_t),
+    /// Boolean value
     Boolean(&'data mut crate::ffi::udi_boolean_t),
 
+    /// An 8-bit index
     Index(&'data mut crate::ffi::udi_index_t),
 
+    /// A channel handle
     Channel(&'data mut crate::ffi::udi_channel_t),
+    /// An origin handle
     Origin(&'data mut crate::ffi::udi_origin_t),
 
+    /// Another buffer
     Buf(&'data mut *mut crate::ffi::udi_buf_t, BufPreserveFlag),
+    /// A control block
     Cb(&'data mut *mut crate::ffi::udi_cb_t),
 
+    /// Inline data pointer with no associated type information
     InlineUntyped(&'data mut *mut crate::ffi::c_void),
+    /// Inline data pointer with a type provided by the driver
     InlineDriverTyped(&'data mut *mut crate::ffi::c_void),
+    /// Inline and movable data pointer with no associated type information
     InlineMovableUntyped(&'data mut *mut crate::ffi::c_void),
 
+    /// Inline data pointer with a known type (includes layout/iterator)
     InlineTyped(&'data mut *mut crate::ffi::c_void, DataIter<'layout, 'data>),
+    /// Inline and movable data pointer with a known type (includes layout/iterator)
     InlineMovableTyped(&'data mut *mut crate::ffi::c_void, DataIter<'layout, 'data>),
+    /// An array (includes layout/iterator)
     Array(*mut crate::ffi::c_void, u8, DataIter<'layout, 'data>)
 }
 
 // TODO: To check this, the layout is needed
+/// Information required to know if a buffer needs to be preserved
 pub struct BufPreserveFlag(u8,u8,u8);
 impl BufPreserveFlag {
     //pub unsafe fn test(cb: *const udi_cb_t) -> bool {
@@ -145,9 +168,12 @@ impl BufPreserveFlag {
 }
 
 
+/// Trait used to obtain the layout of a data type
 pub unsafe trait GetLayout
 {
+    /// Length of the data
     const LEN: usize;
+    /// Layout entries
     const LAYOUT: &'static [u8];
 }
 macro_rules! impl_layout_simple {
@@ -169,7 +195,7 @@ impl_layout_simple!{
     crate::ffi::udi_sbit32_t => UDI_DL_SBIT32_T,
     crate::ffi::udi_boolean_t => UDI_DL_BOOLEAN_T,
 
-    crate::ffi::udi_index_t => UDI_DL_INDEX_T,    // Conflicts as index is a u8
+    crate::ffi::udi_index_t => UDI_DL_INDEX_T,
     crate::ffi::udi_channel_t => UDI_DL_CHANNEL_T,
     crate::ffi::udi_origin_t => UDI_DL_ORIGIN_T,
     // The rest are more complex, so are handled in the derive

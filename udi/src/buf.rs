@@ -12,6 +12,7 @@ use crate::ffi::buf::udi_tagtype_t;
 pub struct Handle(*mut udi_buf_t);
 
 #[repr(transparent)]
+/// A buffer path, used to determine what devices will be involved in handling a buffer.
 pub struct Path(udi_buf_path_t);
 
 impl Default for Handle {
@@ -27,9 +28,15 @@ impl Default for Path {
 
 impl Handle
 {
+    /// Create a buffer handle from a pre-existing raw `*mut udi_buf_t` - mutable
+    /// 
+    /// UNSAFE: Caller must ensure either ownership or mutable access to `raw` (it can be null)
     pub unsafe fn from_ref(raw: &*mut udi_buf_t) -> &Self {
         &*(raw as *const _ as *const Self)
     }
+    /// Create a buffer handle from a pre-existing raw `*mut udi_buf_t` - shared
+    /// 
+    /// UNSAFE: Caller must ensure either ownership or mutable access to `raw` (it can be null)
     pub unsafe fn from_mut(raw: &mut *mut udi_buf_t) -> &mut Self {
         &mut *(raw as *mut _ as *mut Self)
     }
@@ -201,6 +208,7 @@ impl Handle
             )
     }
 
+    /// Read data from a buffer into a slice
     pub fn read(&self, ofs: usize, dst: &mut [u8]) {
         assert!(ofs <= self.len());
         assert!(ofs + dst.len() <= self.len());
@@ -232,6 +240,7 @@ impl Handle
 }
 impl Handle
 {
+    /// Determine which of `path_handles` would give the best performance for allocating new buffers
     pub fn best_path_buf(&self, path_handles: &[Path], best_fit_array: &mut [u8], last_fit: usize) {
         assert!(path_handles.len() <= u8::MAX as usize);
         assert!(path_handles.len() == best_fit_array.len());
@@ -248,6 +257,7 @@ impl Handle
 /// Value tags - associated data outside of the buffer itself
 impl Handle
 {
+    /// Set a collection of tags in the buffer
     pub fn tag_set<'a>(&'a mut self, cb: crate::CbRef<crate::ffi::udi_cb_t>, tags: &'a [udi_buf_tag_t]) -> impl Future<Output=()>+'a {
         let self_buf = self.0;
         #[cfg(debug_assertions)]
@@ -267,12 +277,14 @@ impl Handle
             self.cb_update()
             )
     }
+    /// Get a collection of tags from the buffer
     pub fn tag_get<'a>(&self, tag_type_mask: udi_tagtype_t, dst: &'a mut [udi_buf_tag_t], skip: usize) -> &'a mut [udi_buf_tag_t] {
         let len = unsafe {
             crate::ffi::buf::udi_buf_tag_get(self.0, tag_type_mask, dst.as_mut_ptr(), dst.len() as u16, skip as u16)
         };
         &mut dst[..len as usize]
     }
+    /// Compute a particular computable tag on the buffer range, and return the value
     pub fn tag_compute(&mut self, range: impl ::core::ops::RangeBounds<usize>, tag_type: udi_tagtype_t) -> crate::ffi::udi_ubit32_t {
         let range = self.get_range(range);
         debug_assert!(tag_type.count_ones() == 1);
@@ -283,6 +295,7 @@ impl Handle
             crate::ffi::buf::udi_buf_tag_compute(self.0, off, len, tag_type)
         }
     }
+    /// Apply/update computable tags on a buffer
     pub fn tag_apply<'a>(&'a mut self, cb: crate::CbRef<crate::ffi::udi_cb_t>, tag_types_mask: udi_tagtype_t) -> impl Future<Output=()>+'a {
         debug_assert!(tag_types_mask & crate::ffi::buf::UDI_BUFTAG_UPDATES != 0);
 
@@ -299,6 +312,7 @@ impl Handle
 
 impl Path
 {
+    /// Create a new path handle
     pub fn new(gcb: crate::CbRef<crate::ffi::udi_cb_t>) -> impl Future<Output=Path> {
         unsafe extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, handle: udi_buf_path_t) {
             unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }

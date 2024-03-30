@@ -1,3 +1,4 @@
+//! Wrapper types for channel `context` structures (i.e. the structures used as the `context` field of a CB)
 
 // TODO: Figure out a way to get `&mut` to region data (or channel context?) without technically violating aliasing
 // - Could just leave interior mutability to the driver
@@ -19,14 +20,13 @@ pub struct ChildBind<Driver,ChildData>
 }
 impl<Driver,ChildData> ChildBind<Driver,ChildData>
 {
+	/// `udi_child_chan_context_t` `child_id` field
 	pub fn child_id(&self) -> ::udi_sys::udi_ubit32_t {
 		self.inner.child_id
 	}
+	/// Reference to the driver (region data)
 	pub fn dev(&self) -> &Driver {
 		unsafe { & (*(self.inner.rdata as *const crate::init::RData<Driver>)).inner }
-	}
-	pub fn dev_mut(&mut self) -> &mut Driver {
-		unsafe { &mut (*(self.inner.rdata as *mut crate::init::RData<Driver>)).inner }
 	}
 }
 impl<Driver,ChildData> AsRef<Self> for ChildBind<Driver,ChildData> {

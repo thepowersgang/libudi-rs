@@ -1,6 +1,6 @@
 //! Inter-Module Communication
 //! 
-//! 
+//! Defines channels and methods on them
 use ::udi_sys::imc::udi_channel_event_cb_t;
 
 /// Channel handle
@@ -19,12 +19,15 @@ impl Default for ChannelHandle {
     }
 }
 impl ChannelHandle {
+    /// Create a new invalid channel handle
     pub const fn null() -> Self {
         ChannelHandle(::core::ptr::null_mut())
     }
+    /// Create a safe channel handle from a raw handle
     pub const unsafe fn from_raw(h: ::udi_sys::udi_channel_t) -> Self {
         ChannelHandle(h)
     }
+    /// Get the raw UDI channel handle
     pub fn raw(&self) -> ::udi_sys::udi_channel_t{
         self.0
     }
@@ -93,6 +96,7 @@ pub unsafe fn channel_spawn_ex(
 		)
 }
 
+/// Trait handling initialisation/de-initialisation of channel context blobs
 pub trait ChannelInit {
     /// SAFETY: Caller must ensure that this is only called once (on channel bind)
     unsafe fn init(&mut self) {}
@@ -100,10 +104,15 @@ pub trait ChannelInit {
     unsafe fn deinit(&mut self) {}
 }
 
+/// Handler trait for generic operations on a channel
+///
+/// The marker here is to allow multiple implementations depending on the metalanguage
 pub trait ChannelHandler<Marker>: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
+    /// Channel has been closed
     fn channel_closed(&mut self) {
-
     }
+    /// The channel has been bound to an endpoint, this must always call `udi_channel_event_complete` on `*self.channel_cb_slot()`
+    /// eventually.
     fn channel_bound(&mut self, params: &::udi_sys::imc::udi_channel_event_cb_t_params) {
         let _ = params;
         let slot = self.channel_cb_slot();
@@ -112,9 +121,11 @@ pub trait ChannelHandler<Marker>: 'static + crate::async_trickery::CbContext + c
     }
 }
 
+/// Task size helper function for a default channel handler
 pub const fn task_size<T: ChannelHandler<Marker>,Marker: 'static>() -> usize {
     0
 }
+/// Generic handler for `channel_event_ind` to be stored in metalanguage ops structures
 pub unsafe extern "C" fn channel_event_ind_op<T: ChannelHandler<Marker>, Marker: 'static>(cb: *mut udi_channel_event_cb_t) {
     // NOTE: There's no scratch availble to this function, so cannot use async
 

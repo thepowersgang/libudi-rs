@@ -1,3 +1,5 @@
+//! DMA structures and helpers
+
 use ::core::future::Future;
 use ::udi_sys::physio as ffi;
 use ::udi_sys::physio::udi_dma_constraints_attr_spec_t;
@@ -5,6 +7,7 @@ use ::udi_sys::physio::udi_dma_constraints_t;
 use ::udi_sys::physio::udi_dma_handle_t;
 
 #[derive(Debug)]
+/// Handle to a collection of DMA constraints
 pub struct DmaConstraints(udi_dma_constraints_t);
 impl Drop for DmaConstraints
 {
@@ -21,9 +24,11 @@ impl Default for DmaConstraints {
 }
 impl DmaConstraints
 {
+    /// Create a null/invalid set of DMA constraints
     pub fn null() -> DmaConstraints {
         DmaConstraints(::udi_sys::physio::UDI_NULL_DMA_CONSTRAINTS)
     }
+    /// Construct a handle from a provided raw pointer. The pointer must be valid (i.e. obtained from the environment)
     pub unsafe fn from_raw(v: udi_dma_constraints_t) -> Self {
         DmaConstraints(v)
     }
@@ -68,9 +73,13 @@ impl DmaConstraints
     }
 }
 
+/// DMA direction specification
 pub enum Direction {
+    /// Data is coming IN to the CPU
     In,
+    /// Data is going OUT of the CPU
     Out,
+    /// Data could flow both ways
     Both,
 }
 impl Direction {
@@ -82,9 +91,13 @@ impl Direction {
         }
     }
 }
+/// Data endianness for a DMA binding
 pub enum Endianness {
+    /// Hardware expects Big Endian (most significant byte first)
     Big,
+    /// Hardware expects Little Endian (least significant byte first)
     Little,
+    /// No endian swapping shall be peformed (?byte accesses only)
     NeverSwap,
 }
 impl Endianness {
@@ -310,6 +323,7 @@ impl DmaBuf {
     }
 }
 
+/// A handle to a DMA-allocated block of memory
 pub struct DmaAlloc {
     /// DMA allocation handle
     handle: DmaHandle,
@@ -461,11 +475,13 @@ impl DmaAlloc {
 }
 
 // Note: I'm assuming that it's a borrow from the DMA handle
+/// A scatter-gather table/list handle
 pub struct ScGth<'a>(&'a ffi::udi_scgth_t);
 impl<'a> ScGth<'a> {
     unsafe fn from_raw(p: *const ffi::udi_scgth_t) -> Self {
         ScGth(&*p)
     }
+    /// Get the raw scatter-gather table data
     pub fn raw_entries(&self) -> ScgthRaw {
         let len = self.0.scgth_num_elements as _;
         unsafe {
@@ -476,6 +492,7 @@ impl<'a> ScGth<'a> {
             }
         }
     }
+    /// Obtain a the only 32-bit scatter-gather entry from this table, or None if there are multiple or the entry is 64-bit
     pub fn single_entry_32(&self) -> Option<&ffi::udi_scgth_element_32_t> {
         match self.raw_entries() {
         ScgthRaw::Bits32(&[ref ent]) => Some(ent),
@@ -486,6 +503,8 @@ impl<'a> ScGth<'a> {
 }
 /// Raw IEEE 1212.1 Scatter-gather elements
 pub enum ScgthRaw<'a> {
+    /// 32-bit entries
     Bits32(&'a [ffi::udi_scgth_element_32_t]),
+    /// 64-bit entries
     Bits64(&'a [ffi::udi_scgth_element_64_t]),
 }

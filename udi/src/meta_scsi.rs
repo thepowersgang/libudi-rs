@@ -1,3 +1,4 @@
+//! SCSI metalanguage definition
 use ::udi_sys::meta_scsi as ffi;
 
 impl_metalanguage!{
@@ -15,19 +16,24 @@ impl_metalanguage!{
         ;
 }
 
+/// Request unbind from the host
 pub fn unbind_req(cb: crate::cb::CbHandle<ffi::udi_scsi_bind_cb_t>) {
     unsafe { ffi::udi_scsi_unbind_req(cb.into_raw()) }
 }
+/// Start a new IO operation
 pub fn io_req(cb: crate::cb::CbHandle<ffi::udi_scsi_io_cb_t>) {
     unsafe { ffi::udi_scsi_io_req(cb.into_raw()) }
 }
+/// Make a control request
 pub fn ctl_req(cb: crate::cb::CbHandle<ffi::udi_scsi_ctl_cb_t>) {
     unsafe { ffi::udi_scsi_ctl_req(cb.into_raw()) }
 }
+/// Indicate to the peripheral that an event has occurred
 pub fn event_ind(cb: crate::cb::CbHandle<ffi::udi_scsi_event_cb_t>) {
     unsafe { ffi::udi_scsi_event_ind(cb.into_raw()) }
 }
 
+/// Options for binding a peripheral to a host
 pub struct BindOpts
 {
     bind_flags: ::udi_sys::udi_ubit16_t,
@@ -36,27 +42,78 @@ pub struct BindOpts
     aen_buf_size: ::udi_sys::udi_ubit16_t
 }
 
+/// Trait to be implemented by SCSI peripheral drivers
 pub trait Peripheral: 'static + crate::imc::ChannelInit + crate::async_trickery::CbContext
 {
+    /// Obtain binding options to send to the host when binding
     fn bind_opts(&mut self) -> BindOpts;
-    async_method!(fn bind_ack  (&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>, hd_timeout_increase: crate::Result<u32>)->() as Future_bind_ack);
-    async_method!(fn unbind_ack(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>)->() as Future_unbind_ack);
+    async_method!(
+        /// Acknowledgement of a successful binding
+        fn bind_ack  (&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>, hd_timeout_increase: crate::Result<u32>)->()
+        as Future_bind_ack
+    );
+    async_method!(
+        /// Acknowledgement of a successful un-binding
+        fn unbind_ack(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>)->()
+        as Future_unbind_ack
+    );
+    /// Release the CB used for an unbind request
     fn unbind_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_scsi_bind_cb_t>) { let _ = cb; }
-    async_method!(fn io_ack(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_io_cb_t>)->() as Future_io_ack);
-    async_method!(fn io_nak(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_io_cb_t>, res: ffi::udi_scsi_status_t, sense: crate::buf::Handle)->() as Future_io_nak);
+    async_method!(
+        /// Acknowledgement of successful IO
+        fn io_ack(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_io_cb_t>)->() as Future_io_ack
+    );
+    async_method!(
+        /// IO has failed, includes the status and SCSI sense value
+        fn io_nak(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_io_cb_t>, res: ffi::udi_scsi_status_t, sense: crate::buf::Handle)->()
+        as Future_io_nak
+    );
+    /// Release the CB used for an IO request
     fn io_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_scsi_io_cb_t>) { let _ = cb; }
-    async_method!(fn ctl_ack(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_ctl_cb_t>, res: crate::Result<()>)->() as Future_ctl_ack);
+    async_method!(
+        /// Handle completion of a control request
+        fn ctl_ack(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_ctl_cb_t>, res: crate::Result<()>)->()
+        as Future_ctl_ack
+    );
+    /// Release the CB used for an IO control
     fn ctl_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_scsi_ctl_cb_t>) { let _ = cb; }
-    async_method!(fn event_ind(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_event_cb_t>)->() as Future_event_ind);
+    async_method!(
+        /// Handle an event
+        fn event_ind(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_event_cb_t>)->()
+        as Future_event_ind
+    );
 }
+/// Trait to be implemented by SCSI host drivers
 pub trait Host: 'static + crate::imc::ChannelInit + crate::async_trickery::CbContext
 {
-    async_method!(fn bind_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>, opts: BindOpts)->crate::Result<u32> as Future_bind_ack);
-    async_method!(fn unbind_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>)->() as Future_unbind_req);
-    // For NAK, it should return the buffer
-    async_method!(fn io_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_io_cb_t>)->(ffi::udi_scsi_status_t,crate::buf::Handle) as Future_io_req);
-    async_method!(fn ctl_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_ctl_cb_t>)->crate::Result<()> as Future_ctl_ack);
-    async_method!(fn event_res(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_event_cb_t>)->() as Future_event_res);
+    async_method!(
+        /// Handle an incoming binding request with a peripheral device driver
+        fn bind_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>, opts: BindOpts)->crate::Result<u32>
+        as Future_bind_ack
+    );
+    async_method!(
+        /// Handle an incoming un--binding request from the peripheral device driver
+        fn unbind_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>)->()
+        as Future_unbind_req
+    );
+    async_method!(
+        /// Handle an incoming IO request from the peripheral device driver
+        ///
+        /// NOTE: The buffer should be returned if the result is a NAK
+        fn io_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_io_cb_t>)->(ffi::udi_scsi_status_t,crate::buf::Handle)
+        as Future_io_req
+    );
+    async_method!(
+        /// Handle an incoming control request from the peripheral device driver
+        fn ctl_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_ctl_cb_t>)->crate::Result<()>
+        as Future_ctl_ack
+    );
+    async_method!(
+        /// Called when the peripheral device driver has handled an event
+        fn event_res(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_event_cb_t>)->()
+        as Future_event_res
+    );
+    /// Return/release an event CB
     fn event_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_scsi_event_cb_t>);
 }
 

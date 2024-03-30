@@ -8,8 +8,11 @@ use crate::ffi::meta_mgmt::udi_usage_cb_t;
 use crate::ffi::meta_mgmt::udi_enumerate_cb_t;
 use crate::ffi::meta_mgmt::udi_mgmt_cb_t;
 
+/// Non-owned `udi_usage_cb_t`
 pub type CbRefUsage<'a> = crate::CbRef<'a, udi_usage_cb_t>;
+/// Non-owned `udi_enumerate_cb_t`
 pub type CbRefEnumerate<'a> = crate::CbRef<'a, udi_enumerate_cb_t>;
+/// Non-owned `udi_mgmt_cb_t`
 pub type CbRefMgmt<'a> = crate::CbRef<'a, udi_mgmt_cb_t>;
 
 unsafe impl crate::async_trickery::GetCb for udi_enumerate_cb_t {
@@ -26,62 +29,95 @@ unsafe impl crate::async_trickery::GetCb for udi_mgmt_cb_t {
 #[allow(non_camel_case_types)]
 /// Trait for all drivers
 pub trait Driver: 'static + crate::async_trickery::CbContext {
+	/// Maximum number of enumeration attributes that will be needed
 	const MAX_ATTRS: u8;
 
+	/// Future type of `usage_ind`
 	type Future_init<'s>: Future<Output=()> + 's;
+	/// Handle a change in availble resources
 	fn usage_ind<'s>(&'s self, cb: CbRefUsage<'s>, resouce_level: u8) -> Self::Future_init<'s>;
 
+	/// Future type for `enumerate_req`
 	type Future_enumerate<'s>: Future<Output=(EnumerateResult,AttrSink<'s>)> + 's;
+	/// Request an update/restart of child device enumeration, see [EnumerateLevel] and [EnumerateResult]
 	fn enumerate_req<'s>(&'s self, cb: CbRefEnumerate<'s>, level: EnumerateLevel, attrs_out: AttrSink<'s>) -> Self::Future_enumerate<'s>;
 
+	/// Future type for `devmgmt_req`
 	type Future_devmgmt<'s>: Future<Output=crate::Result<u8>> + 's;
+	/// Request a device management change, see [MgmtOp]
 	fn devmgmt_req<'s>(&'s self, cb: CbRefMgmt<'s>, mgmt_op: MgmtOp, parent_id: crate::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s>;
 }
+
+/// Enumeration operation to perform in [Driver::enumerate_req]
 pub enum EnumerateLevel
 {
+	/// Start a fresh round of enumeration
 	Start,
+	/// Start a fresh round of enumeration, but don't use any cached information
 	StartRescan,
+	/// Get the next device in the current round of enumeration
 	Next,
+	/// Start enumerating any devices that weren't present last time enumeration was run.
 	New,
+	/// Create a new child with the attributes already in the list - used for external configuration
 	Directed,
+	/// Release resources associated with a child (TODO: Unimplemented - cannot be represented)
 	Release,
 }
+/// Successful enumeration of a child
 pub struct EnumerateResultOk {
 	ops_idx: crate::ffi::udi_index_t,
 	child_id: crate::ffi::udi_ubit32_t,
 }
 impl EnumerateResultOk {
+	/// Define a child communicated with using `Ops` (from the driver definition/`udiprops`)
 	pub fn new<Ops: crate::ops_wrapper_markers::ChildBind>(child_id: crate::ffi::udi_ubit32_t) -> Self {
 		Self {
 			ops_idx: Ops::IDX,
 			child_id,
 		}
 	}
+	/// Define a child using raw indexes
 	pub unsafe fn from_raw(ops_idx: crate::ffi::udi_index_t, child_id: crate::ffi::udi_ubit32_t) -> Self {
 		Self {
 			ops_idx,
 			child_id,
 		}
 	}
+	/// Get the `ops_idx` value
 	pub fn ops_idx(&self) -> crate::ffi::udi_index_t {
 		self.ops_idx
 	}
+	/// Get the child ID
 	pub fn child_id(&self) -> crate::ffi::udi_ubit32_t {
 		self.child_id
 	}
 }
+/// Result of [Driver::enumerate_req]
 pub enum EnumerateResult
 {
+	/// Successfully enumerated a child
 	Ok(EnumerateResultOk),
+	/// This device is a leaf - so has no children
 	Leaf,
+	/// All children have been enumerated
 	Done,
+	/// Request that the management agent restart enumeration, because something has changed that invalidated earlier responses.
     Rescan,
-    Removed,
+	/// (Only valid for [EnumerateLevel::New]) Indicates that the contained child ID has been removed
+	///
+	/// The child ID must be kept unused/valid until a [EnumerateLevel::Release] call
+    Removed(crate::ffi::udi_ubit32_t),
+	/// ?This device has been removed, and all children are now invalid
+	// "Treated like `UDI_ENUMERATE_REMOVED`, except that this indicates that the enumerating device itself has been removed."
     RemovedSelf,
+	/// (Only valid for [EnumerateLevel::Release]) Confirms that the child ID has been released/deallocated
     Released,
+	/// (Only valid for [EnumerateLevel::New] or [EnumerateLevel::Directed]) Indicates targeted or direct enumeration has failed
 	Failed,
 }
 impl EnumerateResult {
+	/// Create an `Ok` variant using `Ops` (defined in `udiprops`)
 	pub fn ok<Ops: crate::ops_wrapper_markers::ChildBind>(child_id: crate::ffi::udi_ubit32_t) -> Self {
 		EnumerateResult::Ok(EnumerateResultOk::new::<Ops>(child_id))
 	}
@@ -122,6 +158,7 @@ impl<'a> AttrSink<'a>
 		}
 		e.attr_type = ty as _;
 	}
+	/// Add a `u32` attribute
 	pub fn push_u32(&mut self, name: &str, val: u32) {
 		if let Some(e) = self.get_entry() {
 			Self::set_name_and_type(e, name, crate::ffi::attr::UDI_ATTR_UBIT32);
@@ -129,6 +166,7 @@ impl<'a> AttrSink<'a>
 			e.attr_value[..4].copy_from_slice(&val.to_ne_bytes());
 		}
 	}
+	/// Add a string attribute
 	pub fn push_string(&mut self, name: &str, val: &str) {
 		if let Some(e) = self.get_entry() {
 			Self::set_name_and_type(e, name, crate::ffi::attr::UDI_ATTR_STRING);
@@ -136,6 +174,7 @@ impl<'a> AttrSink<'a>
 			e.attr_value[..val.len()].copy_from_slice(val.as_bytes());
 		}
 	}
+	/// Add a string attribute using rust string formatting
 	pub fn push_string_fmt(&mut self, name: &str, val: ::core::fmt::Arguments) {
 		if let Some(e) = self.get_entry() {
 			Self::set_name_and_type(e, name, crate::ffi::attr::UDI_ATTR_STRING);
@@ -160,6 +199,7 @@ impl<'a> AttrSink<'a>
 	}
 }
 
+/// Operations for [Driver::devmgmt_req]
 pub enum MgmtOp
 {
 	/// Indicates that a Suspend operation is about to take place relative to the indicated parent.
@@ -212,6 +252,7 @@ pub struct RData<T> {
 	// So, this field will be `false` on first use
 	// Needed because `usage_ind` can be called multiple times
 	is_init: bool,
+	/// The driver's provided region data, public to allow easier borrowing
     pub inner: T,
 }
 impl<Driver> AsRef<RData<Driver>> for RData<Driver> {
@@ -279,14 +320,17 @@ future_wrapper!{enumerate_req_op => <T as Driver>(cb: *mut udi_enumerate_cb_t, e
 		use ffi::udi_index_t;
 		let (res,ops_idx) = match res
 			{
-			EnumerateResult::Ok(child) => {
-				(*cb).child_id = child.child_id;
-				(0,child.ops_idx)
+			EnumerateResult::Ok(res) => {
+				(*cb).child_id = res.child_id;
+				(0,res.ops_idx)
 				},
 			EnumerateResult::Leaf => (1,udi_index_t(0)),
 			EnumerateResult::Done => (2,udi_index_t(0)),
 			EnumerateResult::Rescan => (3,udi_index_t(0)),
-			EnumerateResult::Removed => (4,udi_index_t(0)),
+			EnumerateResult::Removed(child) => {
+				(*cb).child_id = child;
+				(4,udi_index_t(0))
+				},
 			EnumerateResult::RemovedSelf => (5,udi_index_t(0)),
 			EnumerateResult::Released => (6,udi_index_t(0)),
 			EnumerateResult::Failed => (255,udi_index_t(0)),
@@ -332,6 +376,7 @@ where
 	RData<T>: Driver,
 	T: Default,
 {
+	/// The amount of scratch space required for tasks within this type
     pub const fn scratch_requirement() -> usize {
         let rv = 0;
 		let rv = crate::const_max(rv, async_trickery::task_size::< <RData<T> as Driver>::Future_init<'static> >());
@@ -340,6 +385,7 @@ where
 		let rv = crate::const_max(rv, final_cleanup_req_op::task_size::<RData<T>>());
 		rv
     }
+	/// Generate an ops instance for this `T`
     pub const unsafe fn for_driver() -> ffi::meta_mgmt::udi_mgmt_ops_t {
         // ENTRYPOINT: mgmt_ops.usage_ind
         unsafe extern "C" fn usage_ind<T>(cb: *mut udi_usage_cb_t, resource_level: u8)

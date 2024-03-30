@@ -19,6 +19,9 @@ impl<'a, T: 'static> CbRef<'a, T>
 where
     T: crate::async_trickery::GetCb
 {
+    /// Create a new reference from a shared pointer to a CB
+    ///
+    /// SAFETY: The CB must be fully valid, but doesn't need to be uniquely owned
     pub unsafe fn new(p: *mut T) -> Self {
         CbRef(p, ::core::marker::PhantomData)
     }
@@ -26,10 +29,13 @@ where
     pub fn to_raw(&self) -> *mut T {
         self.0
     }
+    /// Convert this shared handle into an owned handle
+    ///
     /// UNSAFE: Caller must ensure that this is the only reference
     pub unsafe fn into_owned(self) -> CbHandle<T> {
         CbHandle(self.0)
     }
+    /// Obtain a `udi_cb_t` reference from any other CB type
     pub fn gcb(&self) -> CbRef<'a, crate::ffi::udi_cb_t>
     where
         T: crate::async_trickery::GetCb,
@@ -67,11 +73,13 @@ where
     pub unsafe fn from_raw(v: *mut T) -> Self {
         Self(v)
     }
+    /// Convert into a raw handle
     pub fn into_raw(self) -> *mut T {
         let CbHandle(rv) = self;
         ::core::mem::forget(self);
         rv
     }
+    /// Get a reference to the Generic Control Block
     pub fn gcb(&self) -> CbRef<'_, crate::ffi::udi_cb_t>
     where
         T: crate::async_trickery::GetCb,
@@ -107,7 +115,9 @@ where
 
 /// Trait covering the definition of a Control Block (in [crate::define_driver])
 pub trait CbDefinition {
+    /// Control block index, matching udiprops
     const INDEX: crate::ffi::udi_index_t;
+    /// Metalanguage control block data type
     type Cb: crate::metalang_trait::MetalangCb;
 }
 

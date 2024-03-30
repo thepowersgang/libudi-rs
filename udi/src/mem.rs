@@ -1,5 +1,4 @@
-/// UDI memory management
-/// 
+//! UDI memory management 
 
 // TODO: Add a `Vec` type too, can't use `alloc` as it won't support the async allocation callbacks
 // - `Vec` could have to `push` methods, one that is fallible the other being async
