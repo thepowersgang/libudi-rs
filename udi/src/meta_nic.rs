@@ -171,74 +171,19 @@ impl crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>
 
 // TODO: `CbHandleNicTx`/`CbHandleNicRx` could be a wrapper type to provide safe access to fields
 
-/// A queue of RX CBs
-pub struct ReadCbQueue
-{
-    inner: ::core::cell::Cell<ReadCbQueueInner>,
-}
-#[derive(Copy,Clone)]
-struct ReadCbQueueInner {
-    head: *mut ffi::udi_nic_rx_cb_t,
-    tail: *mut ffi::udi_nic_rx_cb_t,
-}
-impl Default for ReadCbQueue {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+/// A FIFO queue of RX CBs
+#[derive(Default)]
+pub struct ReadCbQueue( crate::cb::SharedQueue<ffi::udi_nic_rx_cb_t> );
 impl ReadCbQueue
 {
     pub const fn new() -> Self {
-        Self {
-            inner: ::core::cell::Cell::new(ReadCbQueueInner {
-                head: ::core::ptr::null_mut(),
-                tail: ::core::ptr::null_mut(),
-            })
-        }
+        Self(crate::cb::SharedQueue::new())
     }
     pub fn push(&self, cb: CbHandleNicRx) {
-        let cb = cb.into_raw();
-        let s = self.inner.get();
-        self.inner.set(if s.head.is_null() {
-            ReadCbQueueInner {
-                head: cb,
-                tail: cb,
-            }
-        }
-        else {
-            // SAFE: This type logically owns these pointers (so they're non-NULL)
-            // SAFE: Trusting the `chain` on incoming cbs to be a valid single-linked list
-            let mut tail = s.tail;
-            unsafe {
-                (*tail).chain = cb;
-                while !(*tail).chain.is_null() {
-                    tail = (*tail).chain;
-                }
-            }
-            ReadCbQueueInner { head: s.head, tail: tail }
-        })
+        self.0.push_back(cb)
     }
     pub fn pop(&self) -> Option< CbHandleNicRx > {
-        let ReadCbQueueInner { mut head, mut tail } = self.inner.get();
-        if head.is_null() {
-            None
-        }
-        else {
-            let rv = head;
-            // SAFE: The chain is a valid singularly-linked list of owned pointers
-            unsafe {
-                head = (*rv).chain;
-                if head.is_null() {
-                    // Defensive measure.
-                    tail = ::core::ptr::null_mut();
-                }
-                else {
-                    (*rv).chain = ::core::ptr::null_mut();
-                }
-                self.inner.set(ReadCbQueueInner { head, tail });
-                Some( CbHandleNicRx::from_raw(rv) )
-            }
-        }
+        self.0.pop_front()
     }
 }
 
