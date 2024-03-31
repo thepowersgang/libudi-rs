@@ -5,10 +5,15 @@ use ::udi_sys::meta_bridge::udi_bus_device_ops_t;
 use ::udi_sys::meta_bridge::udi_bus_bridge_ops_t;
 use ::udi_sys::meta_bridge::udi_bus_bind_cb_t;
 
+/// Reference to a `udi_bus_bind_cb_t`
 pub type CbRefBind<'a> = crate::CbRef<'a, udi_bus_bind_cb_t>;
+/// Reference to a `udi_intr_attach_cb_t`
 pub type CbRefIntrAttach<'a> = crate::CbRef<'a, crate::ffi::meta_bridge::udi_intr_attach_cb_t>;
+/// Reference to a `udi_intr_detach_cb_t`
 pub type CbRefIntrDetach<'a> = crate::CbRef<'a, crate::ffi::meta_bridge::udi_intr_detach_cb_t>;
+/// Owned handle to a `udi_intr_attach_cb_t`
 pub type CbHandleIntrAttach<'a> = crate::cb::CbHandle<crate::ffi::meta_bridge::udi_intr_attach_cb_t>;
+/// Owned handle to a `udi_intr_detach_cb_t`
 pub type CbHandleIntrDetach<'a> = crate::cb::CbHandle<crate::ffi::meta_bridge::udi_intr_detach_cb_t>;
 
 
@@ -36,27 +41,50 @@ impl_metalanguage!{
         ;
 }
 
+/// Preferred endianness of the bus, used in [BusDevice::bus_bind_ack]
+///
+/// "... device endianness which works most effectively with the bridges in this path."
 pub enum PreferredEndianness {
+    /// Any endianness will work just as well
     Any,
+    /// Little endian preferred (least significant byte first)
     Little,
+    /// Big endian preferred (most significant byte first)
     Big,
 }
 
 /// Trait for a device on a bus
 pub trait BusDevice: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
-    async_method!(fn bus_bind_ack(&'a self,
-        cb: crate::CbRef<'a, udi_bus_bind_cb_t>,
-        dma_constraints: crate::ffi::physio::udi_dma_constraints_t,
-        preferred_endianness: PreferredEndianness,
-        status: crate::ffi::udi_status_t
-        )->crate::Result<()> as Future_bind_ack
+    async_method!(
+        /// Acknowledge a successful binding of this device to the bus
+        fn bus_bind_ack(&'a self,
+            cb: crate::CbRef<'a, udi_bus_bind_cb_t>,
+            dma_constraints: crate::ffi::physio::udi_dma_constraints_t,
+            preferred_endianness: PreferredEndianness,
+            status: crate::ffi::udi_status_t
+            )->crate::Result<()>
+        as Future_bind_ack
     );
 
-    async_method!(fn bus_unbind_ack(&'a self, cb: CbRefBind<'a>) -> () as Future_unbind_ack);
-    async_method!(fn intr_attach_ack(&'a self, cb: CbRefIntrAttach<'a>, status: crate::ffi::udi_status_t) -> () as Future_intr_attach_ack);
-    async_method!(fn intr_detach_ack(&'a self, cb: CbRefIntrDetach<'a>) -> () as Future_intr_detach_ack);
+    async_method!(
+        /// Acknowledge unbinding of this device driver from the bus
+        fn bus_unbind_ack(&'a self, cb: CbRefBind<'a>) -> ()
+        as Future_unbind_ack
+    );
+    async_method!(
+        /// Acknowledge the attachment of an interrupt, with status
+        fn intr_attach_ack(&'a self, cb: CbRefIntrAttach<'a>, status: crate::ffi::udi_status_t) -> ()
+        as Future_intr_attach_ack
+    );
+    async_method!(
+        /// Acknowledge successful detatchment of an interrupt
+        fn intr_detach_ack(&'a self, cb: CbRefIntrDetach<'a>) -> ()
+        as Future_intr_detach_ack
+    );
 
+    /// Return/release an interrupt-attach CB
     fn intr_attach_cb_ret(&mut self, cb: CbHandleIntrAttach) { let _ = cb;}
+    /// Return/release an interrupt-detach CB
     fn intr_detach_cb_ret(&mut self, cb: CbHandleIntrDetach) { let _ = cb;}
 }
 struct MarkerBusDevice;
@@ -72,11 +100,29 @@ where
     }
 }
 
+
+/// Trait for a bus bridge (i.e. the bus itself. well, the binding between the bus and UDI for a device)
 pub trait BusBridge: 'static + crate::imc::ChannelInit + crate::async_trickery::CbContext {
-    async_method!(fn bus_bind_req(&'a self, cb: CbRefBind<'a>) -> crate::Result<(PreferredEndianness,)> as Future_bind_req);
-    async_method!(fn bus_unbind_req(&'a self, cb: CbRefBind<'a>) -> () as Future_unbind_req);
-    async_method!(fn intr_attach_req(&'a self, cb: CbRefIntrAttach<'a>) -> crate::Result<()> as Future_intr_attach_req);
-    async_method!(fn intr_detach_req(&'a self, cb: CbRefIntrDetach<'a>) -> () as Future_intr_detach_req);
+    async_method!(
+        /// Handle a request to bind to the bus
+        fn bus_bind_req(&'a self, cb: CbRefBind<'a>) -> crate::Result<(PreferredEndianness,)>
+        as Future_bind_req
+    );
+    async_method!(
+        /// Handle a request to unbind from the bus
+        fn bus_unbind_req(&'a self, cb: CbRefBind<'a>) -> ()
+        as Future_unbind_req
+    );
+    async_method!(
+        /// Handle a request to attach an interrupt handler to an interrupt
+        fn intr_attach_req(&'a self, cb: CbRefIntrAttach<'a>) -> crate::Result<()>
+        as Future_intr_attach_req
+    );
+    async_method!(
+        /// Handle a request to detach a previously attached interrupt handler
+        fn intr_detach_req(&'a self, cb: CbRefIntrDetach<'a>) -> ()
+        as Future_intr_detach_req
+    );
 }
 struct MarkerBusBridge;
 impl<T> crate::imc::ChannelHandler<MarkerBusBridge> for T
@@ -182,19 +228,23 @@ map_ops_structure!{
     }
 }
 
-
-pub fn attach_req(cb: super::cb::CbHandle<udi_intr_attach_cb_t>) {
+/// Initiate an interrupt attach operation
+pub fn intr_attach_req(cb: super::cb::CbHandle<udi_intr_attach_cb_t>) {
     unsafe { crate::ffi::meta_bridge::udi_intr_attach_req(cb.into_raw()) }
 }
-pub fn event_rdy(cb: CbHandleEvent) {
+/// Return a handled interrupt event CB to the bus driver 
+pub fn intr_event_rdy(cb: CbHandleEvent) {
     unsafe { crate::ffi::meta_bridge::udi_intr_event_rdy(cb.into_raw()) }
 }
 
+/// Reference to a `udi_intr_event_cb_t`
 pub type CbRefEvent<'a> = crate::CbRef<'a, udi_intr_event_cb_t>;
+/// Owned handle to a `udi_intr_event_cb_t`
 pub type CbHandleEvent = crate::cb::CbHandle<udi_intr_event_cb_t>;
 
 impl super::cb::CbHandle<udi_intr_attach_cb_t>
 {
+    /// Populate a `udi_intr_attach_cb_t` with a basic set of information
     pub fn init(&mut self, interrupt_index: ::udi_sys::udi_index_t, min_event_pend: u8, preprocessing_handle: crate::pio::Handle) {
         let cb = unsafe { self.get_mut() };
         cb.interrupt_index = interrupt_index;
@@ -203,9 +253,16 @@ impl super::cb::CbHandle<udi_intr_attach_cb_t>
     }
 }
 
+/// Trait for an interrupt handler endpoint
 pub trait IntrHandler: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit
 {
-    async_method!(fn intr_event_ind(&'a self, cb: CbRefEvent<'a>, flags: u8)->() as Future_intr_event_ind);
+    async_method!(
+        /// Handle an interrupt indication
+        ///
+        /// TODO: Translate flags - `UDI_INTR_MASKING_NOT_REQUIRED`, `UDI_INTR_OVERRUN_OCCURRED`, `UDI_INTR_PREPROCESSED`
+        fn intr_event_ind(&'a self, cb: CbRefEvent<'a>, flags: u8)->()
+        as Future_intr_event_ind
+    );
 }
 struct MarkerIntrHandler;
 impl<T> crate::imc::ChannelHandler<MarkerIntrHandler> for T
@@ -230,10 +287,15 @@ map_ops_structure!{
 }
 
 
-/// Interrupte dispatcher trait
+/// Interrupt dispatcher trait (the endpoint that sends interrupt events)
 pub trait IntrDispatcher: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit
 {
-    async_method!(fn intr_event_rdy(&'a self, cb: CbRefEvent)->() as Future_intr_event_rdy);
+    async_method!(
+        /// Handle an interrupt being handled (or just a new event CB being available/returned for use)
+        fn intr_event_rdy(&'a self, cb: CbRefEvent)->()
+        as Future_intr_event_rdy
+    );
+    /// Take ownership of an incoming event CB
     fn intr_event_ret(&mut self, cb: CbHandleEvent);
 }
 struct MarkerIntrDispatcher;

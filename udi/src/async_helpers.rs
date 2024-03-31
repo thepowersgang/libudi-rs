@@ -2,7 +2,7 @@
 
 /// Synchronise two different async tasks, useful to wait for metalang operation to complete
 /// 
-/// E.g. Use to check the result of [crate::meta_bridge::attach_req] within the `bind_req` handler
+/// E.g. Use to check the result of [crate::meta_bridge::intr_attach_req] within the `bind_req` handler
 pub struct Wait<R>
 {
     result: ::core::cell::Cell<Option<R>>,

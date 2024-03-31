@@ -179,7 +179,7 @@ impl ManagementAgent
         udi::init::EnumerateResult::Leaf => { *flagged_complete = true; },
         udi::init::EnumerateResult::Done => { *flagged_complete = true; },
         udi::init::EnumerateResult::Rescan => todo!(),
-        udi::init::EnumerateResult::Removed => todo!(),
+        udi::init::EnumerateResult::Removed(_) => todo!(),
         udi::init::EnumerateResult::RemovedSelf => todo!(),
         udi::init::EnumerateResult::Released => todo!(),
         udi::init::EnumerateResult::Failed => { *flagged_complete = true; },

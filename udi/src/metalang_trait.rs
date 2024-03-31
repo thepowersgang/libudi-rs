@@ -3,6 +3,7 @@
 /// A trait used to get metalanguage ops and CB structures from numbers
 pub trait Metalanguage
 {
+    /// Metalanguage name, as would be written in `udiprops`
     fn name() -> &'static str where Self: Sized;
     /// Cast `ops_vector` into a ops structure
     unsafe fn get_ops(&self, ops_idx: ::udi_sys::udi_index_t, ops_vector: crate::ffi::udi_ops_vector_t) -> Option<&'static dyn MetalangOpsHandler>;
@@ -26,16 +27,21 @@ pub trait MetalangOpsHandler: 'static
 /// SAFETY: The pointed data must be valid as [crate::ffi::init::udi_ops_init_t]
 pub unsafe trait MetalangOps: MetalangOpsHandler
 {
+    /// Operations number for `udi_init_t`
     const META_OPS_NUM: crate::ffi::udi_index_t;
 }
 
 /// Trait used for dynamic dispatch on a CB definition
 pub trait MetalangCbHandler
 {
+    /// Statically knwon size of the CB
     fn size(&self) -> usize;
 
+    /// Gets a pointer to the contained buffer, if there is one
     unsafe fn get_buffer<'a>(&self, cb: &'a mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::udi_buf_t> { let _ = cb; None }
+    /// Obtain a pointer to the inline data pointer present in the CB, if there is one.
     unsafe fn get_inline_data<'a>(&self, cb: &'a mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::c_void> { let _ = cb; None }
+    /// Gets a pointer to a CB pointer used to chain CBs together, otherwise `initiator_context` is used
     unsafe fn get_chain<'a>(&self, cb: &'a mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::udi_cb_t> { let _ = cb; None }
 }
 /// Trait for to hold a CB's metalanguage number
@@ -43,11 +49,14 @@ pub trait MetalangCbHandler
 /// SAFETY: The underlying type must start with a `udi_cb_t` structure
 pub unsafe trait MetalangCb
 {
+    /// Associated metalanguage, as a type to allow compile-time dispatch
     type MetalangSpec: Metalanguage;
+    /// Control block type number for `udi_init_t`
     const META_CB_NUM: crate::ffi::udi_index_t;
 
     //fn get_buffer<'a>(&self, cb: &'a mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::udi_buf_t> { let _ = cb; None }
     //fn get_inline_data<'a>(&self, cb: &'a mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::c_void> { let _ = cb; None }
+    /// Gets a pointer to a CB pointer used to chain CBs together, otherwise `initiator_context` is used
     fn get_chain(&mut self) -> Option<&mut *mut crate::ffi::udi_cb_t> { None }
 }
 

@@ -186,7 +186,7 @@ pub trait SnprintfSink {
         }
     }
 }
-/// The innards of [udi_snprintf]/[udi_vsnprintf]/[super::log::udi_debug_printf]
+/// The innards of [udi_snprintf]/[super::log::udi_debug_printf]
 pub unsafe fn snprintf_inner(rv: &mut dyn SnprintfSink, format: &[u8], mut ap: ::core::ffi::VaList)
 {
     let mut p = ::udi_macro_helpers::printf::Parser::new(format);

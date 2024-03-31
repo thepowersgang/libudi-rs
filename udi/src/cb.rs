@@ -93,6 +93,7 @@ where
         unsafe { &mut *self.0 }
     }
 
+    /// Set the channel field of the CB from a channel handle
     // TODO - Is there a safety requirement for the channel to be matched to the CB
     // - Might be the same as ensuring the right channel endpoint matching - environment can detect and crash on it.
     pub fn set_channel(&mut self, channel: &crate::imc::ChannelHandle) {

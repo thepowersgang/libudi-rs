@@ -4,11 +4,14 @@
 //! instead of needing drivers to run with direct IO access.
 
 #[derive(Debug)]
+/// Handle to a registered PIO operation
 pub struct Handle(crate::ffi::pio::udi_pio_handle_t);
 impl Handle {
+	/// Construct a handle from a raw UDI PIO handle
 	pub unsafe fn from_raw(h: crate::ffi::pio::udi_pio_handle_t) -> Self {
 		Handle(h)
 	}
+	/// Convert into a raw UDI PIO handle
 	pub fn as_raw(&self) -> crate::ffi::pio::udi_pio_handle_t {
 		self.0
 	}

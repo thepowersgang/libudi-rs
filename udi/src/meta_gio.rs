@@ -5,6 +5,7 @@
 use ::udi_sys::meta_gio::*;
 use ::udi_sys::meta_gio as ffi;
 
+/// Dispatch a transfer request CB to the other end of the associated channel
 pub fn xfer_req(cb: crate::cb::CbHandle<ffi::udi_gio_xfer_cb_t>) {
     unsafe { ffi::udi_gio_xfer_req(cb.into_raw()) }
 }
@@ -25,6 +26,7 @@ impl_metalanguage!{
 
 impl crate::cb::CbRef<'_, ffi::udi_gio_xfer_cb_t>
 {
+    /// Read from the data buffer in the CB
     pub fn data_buf(&self) -> &crate::buf::Handle {
         // SAFE: Valid pointers
         unsafe {
@@ -34,6 +36,7 @@ impl crate::cb::CbRef<'_, ffi::udi_gio_xfer_cb_t>
 }
 impl crate::cb::CbHandle<ffi::udi_gio_xfer_cb_t>
 {
+    /// Get a mutable handle to the data buffer
     pub fn data_buf_mut(&mut self) -> &mut crate::buf::Handle {
         // SAFE: Valid pointers, validity will be maintained (`get_mut`)
         unsafe {
@@ -41,6 +44,7 @@ impl crate::cb::CbHandle<ffi::udi_gio_xfer_cb_t>
         }
     }
 
+    /// Set the operation code
     pub fn set_op(&mut self, op: u8) {
         unsafe {
             self.get_mut().op = op;
@@ -58,12 +62,33 @@ impl crate::ops_markers::ChildBind for ::udi_sys::meta_gio::udi_gio_provider_ops
 /// GIO Client (e.g. the user of a serial port)
 pub trait Client: 'static + crate::imc::ChannelInit + crate::async_trickery::CbContext
 {
-    async_method!(fn bind_ack  (&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_bind_cb_t>, size: crate::Result<u64>)->() as Future_bind_ack);
-    async_method!(fn unbind_ack(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_bind_cb_t>)->() as Future_unbind_ack);
-    async_method!(fn xfer_ack  (&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_xfer_cb_t>)->() as Future_xfer_ack);
-    async_method!(fn xfer_nak  (&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_xfer_cb_t>, res: crate::Result<()>)->() as Future_xfer_nak);
-    async_method!(fn event_ind (&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_event_cb_t>)->() as Future_event_ind);
+    async_method!(
+        /// Acknowledge a successful binding with a provider
+        fn bind_ack  (&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_bind_cb_t>, size: crate::Result<u64>)->()
+        as Future_bind_ack
+    );
+    async_method!(
+        /// Acknowledge a successful un-binding from the provider
+        fn unbind_ack(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_bind_cb_t>)->()
+        as Future_unbind_ack
+    );
+    async_method!(
+        /// A transfer has completed successfully
+        fn xfer_ack  (&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_xfer_cb_t>)->()
+        as Future_xfer_ack
+    );
+    async_method!(
+        /// A transfer failed somehow
+        fn xfer_nak  (&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_xfer_cb_t>, res: crate::Result<()>)->()
+        as Future_xfer_nak
+    );
+    async_method!(
+        /// Handle an event from the provider
+        fn event_ind (&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_event_cb_t>)->()
+        as Future_event_ind
+    );
 
+    /// Release/return ownership of a now-unused transfer CB
     fn xfer_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_gio_xfer_cb_t>);
 }
 struct MarkerClient;
@@ -127,10 +152,28 @@ map_ops_structure!{
 /// GIO Provider (e.g. a serial port)
 pub trait Provider: 'static + crate::imc::ChannelInit + crate::async_trickery::CbContext
 {
-    async_method!(fn bind_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_bind_cb_t>)->() as Future_bind_req);
-    async_method!(fn unbind_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_bind_cb_t>)->() as Future_unbind_req);
-    async_method!(fn xfer_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_xfer_cb_t>)->() as Future_xfer_req);
-    async_method!(fn event_res(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_event_cb_t>)->() as Future_event_res);
+    async_method!(
+        /// A binding has been requested
+        fn bind_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_bind_cb_t>)->()
+        as Future_bind_req
+    );
+    async_method!(
+        /// Unbinding as been requested by the bounc client
+        fn unbind_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_bind_cb_t>)->()
+        as Future_unbind_req
+    );
+    async_method!(
+        /// A transfer has been requested
+        fn xfer_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_xfer_cb_t>)->()
+        as Future_xfer_req
+    );
+    async_method!(
+        /// The event has been handled
+        fn event_res(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_event_cb_t>)->()
+        as Future_event_res
+    );
+    /// Return/relase an event CB
+    fn event_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_gio_event_cb_t>);
 }
 struct MarkerProvider;
 impl<T> crate::imc::ChannelHandler<MarkerProvider> for T
@@ -150,6 +193,8 @@ future_wrapper!(gio_xfer_req_op => <T as Provider>(cb: *mut ffi::udi_gio_xfer_cb
 });
 future_wrapper!(gio_event_res_op => <T as Provider>(cb: *mut ffi::udi_gio_event_cb_t) val @ {
     val.event_res(cb)
+} finally( () ) {
+    val.event_ret(unsafe { crate::cb::CbHandle::from_raw(cb) })
 });
 map_ops_structure!{
     ffi::udi_gio_provider_ops_t => Provider,MarkerProvider {

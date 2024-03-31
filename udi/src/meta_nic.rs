@@ -10,45 +10,62 @@
  * The implementation of these methods can avoid UB by storing the cb passed in the
  * region data after the last async call. This ensures that it will not be reused
  * until after the future has been cleaned up.
+ * 
+ * # Terms
+ * - ND: "Network Device" - the network card driver
+ * - NSR: "Network Service Requestor" - The UDI network stack interface
+ * - expedited - There are operations that request high-priority handling of packets.
+ *               It is expected that these packets are handled (sent or processed) before
+ *               any lower-priority packets are.
  */
 use crate::ffi::udi_index_t;
 use crate::ffi::meta_nic as ffi;
 
-
+/// Request enabling of a network device
 pub fn nd_enable_req(cb: crate::cb::CbHandle<ffi::udi_nic_cb_t>) {
     unsafe { ffi::udi_nd_enable_req(cb.into_raw()) }
 }
+/// Request disabling of a network device
 pub fn nd_disable_req(cb: crate::cb::CbHandle<ffi::udi_nic_cb_t>) {
     unsafe { ffi::udi_nd_disable_req(cb.into_raw()) }
 }
+/// Send a control request to a network device
 pub fn nd_ctrl_req(cb: crate::cb::CbHandle<ffi::udi_nic_ctrl_cb_t>) {
     unsafe { ffi::udi_nd_ctrl_req(cb.into_raw()) }
 }
+/// Send a information request to a network device
 pub fn nd_info_req(cb: crate::cb::CbHandle<ffi::udi_nic_info_cb_t>, reset_statistics: bool) {
     unsafe { ffi::udi_nd_info_req(cb.into_raw(), reset_statistics.into()) }
 }
+/// Inform the NSR that a device's status has changed
 pub fn nsr_status_ind(cb: crate::cb::CbHandle<ffi::udi_nic_status_cb_t>) {
     unsafe { ffi::udi_nsr_status_ind(cb.into_raw()) }
 }
 
+/// Inform the NSR that a packet has been recived
 pub fn nsr_rx_ind(rx_cb: CbHandleNicRx) {
     unsafe { ffi::udi_nsr_rx_ind(rx_cb.into_raw()) }
 }
+/// Hand/return the network device a CB to use for incoming packets
 pub fn nd_rx_rdy(cb: CbHandleNicRx) {
     unsafe { ffi::udi_nd_rx_rdy(cb.into_raw()) }
 }
+/// Request the network device send a packet
 pub fn nd_tx_req(tx_cb: CbHandleNicTx) {
     unsafe { ffi::udi_nd_tx_req(tx_cb.into_raw()) }
 }
+/// Request the network device send a packet (expedited)
 pub fn nd_exp_tx_req(tx_cb: CbHandleNicTx) {
     unsafe { ffi::udi_nd_exp_tx_req(tx_cb.into_raw()) }
 }
+/// Hand the NSR a CB to use for outgoing packets
 pub fn nsr_tx_rdy(cb: CbHandleNicTx) {
     unsafe { ffi::udi_nsr_tx_rdy(cb.into_raw()) }
 }
 
 macro_rules! def_cb {
     (unsafe $ref_name:ident => $t:ty : $cb_num:expr) => {
+        #[doc=concat!("Reference to a [", stringify!($t), "]")]
         pub type $ref_name<'a> = crate::CbRef<'a, $t>;
     }
 }
@@ -96,7 +113,9 @@ def_cb!(unsafe CbRefNicInfo => ffi::udi_nic_info_cb_t : 5);
 def_cb!(unsafe CbRefNicTx => ffi::udi_nic_tx_cb_t : 6);
 // SAFE: Follows the contract, gcb is first field
 def_cb!(unsafe CbRefNicRx => ffi::udi_nic_rx_cb_t : 7);
+/// An owned handle to a [ffi::udi_nic_tx_cb_t]
 pub type CbHandleNicTx = crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>;
+/// An owned handle to a [ffi::udi_nic_rx_cb_t]
 pub type CbHandleNicRx = crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>;
 
 impl crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>
@@ -112,6 +131,7 @@ impl crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>
             (*cursor).chain = ::core::mem::replace(self, Self::from_raw(other)).into_raw();
         }
     }
+    /// Remove this CB from its current chain (i.e. `pop_front`)
     pub fn unlink(mut self) -> (Self,Option<Self>) {
         unsafe {
             let chain = &mut self.get_mut().chain;
@@ -125,9 +145,11 @@ impl crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>
         }
     }
 
+    /// Get a reference to the buffer
     pub fn tx_buf_ref(&self) -> &crate::buf::Handle {
         unsafe { crate::buf::Handle::from_ref( &self.tx_buf ) }
     }
+    /// Get a mutable reference to the buffer
     pub fn tx_buf_mut(&mut self) -> &mut crate::buf::Handle {
         unsafe { crate::buf::Handle::from_mut( &mut self.get_mut().tx_buf ) }
     }
@@ -146,6 +168,7 @@ impl crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>
             (*cursor).chain = ::core::mem::replace(self, Self::from_raw(other)).into_raw();
         }
     }
+    /// Remove this CB from its current chain (i.e. `pop_front`)
     pub fn unlink(mut self) -> (Self,Option<Self>) {
         unsafe {
             let chain = &mut self.get_mut().chain;
@@ -159,9 +182,11 @@ impl crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>
         }
     }
 
+    /// Get a reference to the buffer
     pub fn rx_buf_ref(&self) -> &crate::buf::Handle {
         unsafe { crate::buf::Handle::from_ref( &self.rx_buf ) }
     }
+    /// Get a mutable reference to the buffer
     pub fn rx_buf_mut(&mut self) -> &mut crate::buf::Handle {
         unsafe { crate::buf::Handle::from_mut( &mut self.get_mut().rx_buf ) }
     }
@@ -169,24 +194,26 @@ impl crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>
     //pub fn set_rx_status(&mut self, 
 }
 
-// TODO: `CbHandleNicTx`/`CbHandleNicRx` could be a wrapper type to provide safe access to fields
-
 /// A FIFO queue of RX CBs
 #[derive(Default)]
 pub struct ReadCbQueue( crate::cb::SharedQueue<ffi::udi_nic_rx_cb_t> );
 impl ReadCbQueue
 {
+    /// Create a new (empty) queue
     pub const fn new() -> Self {
         Self(crate::cb::SharedQueue::new())
     }
+    /// Push a CB onto the back of the queue
     pub fn push(&self, cb: CbHandleNicRx) {
         self.0.push_back(cb)
     }
+    /// Pop a CB from the front of the queue
     pub fn pop(&self) -> Option< CbHandleNicRx > {
         self.0.pop_front()
     }
 }
 
+#[cfg(false_)]
 #[repr(u8)]
 pub enum OpsNum
 {
@@ -198,13 +225,43 @@ pub enum OpsNum
     NsrRx,
 }
 
+/// Trait for the control endpoint on a network device
 pub trait Control: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
-    async_method!(fn bind_req(&'a self, cb: CbRefNicBind<'a>, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->crate::Result<NicInfo> as Future_bind_req);
-    async_method!(fn unbind_req(&'a self, cb: CbRefNic<'a>)->crate::Result<()> as Future_unbind_req);
-    async_method!(fn enable_req(&'a self, cb: CbRefNic<'a>)->crate::Result<()> as Future_enable_req);
-    async_method!(fn disable_req(&'a self, cb: CbRefNic<'a>)->() as Future_disable_req);
-    async_method!(fn ctrl_req(&'a self, cb: CbRefNicCtrl<'a>)->crate::Result<()> as Future_ctrl_req);
-    async_method!(fn info_req(&'a self, cb: CbRefNicInfo<'a>, reset_statistics: bool)->() as Future_info_req);
+    async_method!(
+        /// Handle a binding request with a NSR
+        ///
+        /// The `tx_chan_index` and `rx_chan_index` values are channel indexes used to match created channels
+        /// with the channel halves already created by the NSR
+        fn bind_req(&'a self, cb: CbRefNicBind<'a>, tx_chan_index: udi_index_t, rx_chan_index: udi_index_t)->crate::Result<NicInfo>
+        as Future_bind_req
+    );
+    async_method!(
+        /// Handle a request to unbind from the NSR
+        fn unbind_req(&'a self, cb: CbRefNic<'a>)->crate::Result<()>
+        as Future_unbind_req
+    );
+    async_method!(
+        /// Handle a request to enable full operation (e.g. RX) of the device
+        fn enable_req(&'a self, cb: CbRefNic<'a>)->crate::Result<()>
+        as Future_enable_req
+    );
+    async_method!(
+        /// Handle a request to disable operation of the device
+        fn disable_req(&'a self, cb: CbRefNic<'a>)->()
+        as Future_disable_req
+    );
+    async_method!(
+        /// Handle a control request
+        fn ctrl_req(&'a self, cb: CbRefNicCtrl<'a>)->crate::Result<()>
+        as Future_ctrl_req
+    );
+    async_method!(
+        /// Handle an information request
+        ///
+        /// - `reset_statistics` is a request to reset the internal statistics counters
+        fn info_req(&'a self, cb: CbRefNicInfo<'a>, reset_statistics: bool)->()
+        as Future_info_req
+    );
 }
 struct MarkerControl;
 impl<T> crate::imc::ChannelHandler<MarkerControl> for T
@@ -280,20 +337,54 @@ map_ops_structure!{
 // --------------------------------------------------------------------
 /// Bind channel indexes between `bind_ack` and `bind_req`
 pub struct BindChannels {
+    /// Transmit channel index
     pub tx: udi_index_t,
+    /// Recieve channel index
     pub rx: udi_index_t,
 }
 
+/// Trait for the NSR's side of the control channel
 pub trait NsrControl: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
-    async_method!(fn get_bind_channels(&'a self, cb: CbRefNicBind<'a>)->BindChannels as Future_gbc);
-    async_method!(fn bind_ack(&'a self, cb: CbRefNicBind<'a>, res: crate::Result<()>)->() as Future_bind_ack);
-    async_method!(fn unbind_ack(&'a self, cb: CbRefNic<'a>, res: crate::Result<()>)->() as Future_unbind_ack);
-    async_method!(fn enable_ack(&'a self, cb: CbRefNic<'a>, res: crate::Result<()>)->() as Future_enable_ack);
-    async_method!(fn ctrl_ack(&'a self, cb: CbRefNicCtrl<'a>, res: crate::Result<()>)->() as Future_ctrl_ack);
-    async_method!(fn info_ack(&'a self, cb: CbRefNicInfo<'a>)->() as Future_info_ack);
-    async_method!(fn status_ind(&'a self, cb: CbRefNicStatus<'a>)->() as Future_status_ind);
+    async_method!(
+        /// Get the bind channel indexes pass to the ND when binding (called when the control channel is bound)
+        fn get_bind_channels(&'a self, cb: CbRefNicBind<'a>)->BindChannels
+        as Future_gbc
+    );
+    async_method!(
+        /// Acknowlegement of binding to the ND, with result
+        fn bind_ack(&'a self, cb: CbRefNicBind<'a>, res: crate::Result<()>)->()
+        as Future_bind_ack
+    );
+    async_method!(
+        /// Acknowledgement of unbinding
+        fn unbind_ack(&'a self, cb: CbRefNic<'a>, res: crate::Result<()>)->()
+        as Future_unbind_ack
+    );
+    async_method!(
+        /// Acknowledgemnet of the device being enabled, with result
+        fn enable_ack(&'a self, cb: CbRefNic<'a>, res: crate::Result<()>)->()
+        as Future_enable_ack
+    );
+    async_method!(
+        /// Handle the response to an control request (see [nd_ctrl_req])
+        fn ctrl_ack(&'a self, cb: CbRefNicCtrl<'a>, res: crate::Result<()>)->()
+        as Future_ctrl_ack
+    );
+    async_method!(
+        /// Handle the response to an information request (see [nd_info_req])
+        fn info_ack(&'a self, cb: CbRefNicInfo<'a>)->()
+        as Future_info_ack
+    );
+    async_method!(
+        /// Handle a change in status from the device
+        fn status_ind(&'a self, cb: CbRefNicStatus<'a>)->()
+        as Future_status_ind
+    );
+    /// Return/release a generic NIC CB
     fn ret_cb_nic(&mut self, cb: crate::cb::CbHandle<ffi::udi_nic_cb_t>) { let _ = cb; }
+    /// Return/release a control CB
     fn ret_cb_nic_ctrl(&mut self, cb: crate::cb::CbHandle<ffi::udi_nic_ctrl_cb_t>) { let _ = cb; }
+    /// Return/release an info CB
     fn ret_cb_nic_info(&mut self, cb: crate::cb::CbHandle<ffi::udi_nic_info_cb_t>) { let _ = cb; }
 }
 future_wrapper!(nsr_channel_bound => <T as NsrControl>(cb: *mut ffi::udi_nic_bind_cb_t) val @ {
@@ -381,8 +472,16 @@ map_ops_structure!{
 /// 
 /// Failure to do so can lead to crashes. See the module documentation for more details
 pub unsafe trait NdTx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
-    async_method!(fn tx_req(&'a self, cb: CbHandleNicTx)->() as Future_tx_req);
-    async_method!(fn exp_tx_req(&'a self, cb: CbHandleNicTx)->() as Future_exp_tx_req);
+    async_method!(
+        /// Schedule transmission of a packet, using normal priority rules
+        fn tx_req(&'a self, cb: CbHandleNicTx)->()
+        as Future_tx_req
+    );
+    async_method!(
+        /// Schedule transmission of a packet, expediting the transmission
+        fn exp_tx_req(&'a self, cb: CbHandleNicTx)->()
+        as Future_exp_tx_req
+    );
 }
 struct MarkerNdTx;
 impl<T> crate::imc::ChannelHandler<MarkerNdTx> for T
@@ -416,7 +515,11 @@ map_ops_structure!{
 /// 
 /// Failure to do so can lead to crashes. See the module documentation for more details
 pub unsafe trait NsrTx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
-    async_method!(fn tx_rdy(&'a self, cb: CbHandleNicTx)->() as Future_tx_rdy);
+    async_method!(
+        /// Return a TX CB to the pool
+        fn tx_rdy(&'a self, cb: CbHandleNicTx)->()
+        as Future_tx_rdy
+    );
 }
 struct MarkerNsrTx;
 impl<T> crate::imc::ChannelHandler<MarkerNsrTx> for T
@@ -446,7 +549,11 @@ map_ops_structure!{
 /// 
 /// Failure to do so can lead to crashes. See the module documentation for more details
 pub unsafe trait NdRx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
-    async_method!(fn rx_rdy(&'a self, cb: CbHandleNicRx)->() as Future_rx_rdy);
+    async_method!(
+        /// Add a RX CB to the pool of available CBs for incoming packets
+        fn rx_rdy(&'a self, cb: CbHandleNicRx)->()
+        as Future_rx_rdy
+    );
 }
 struct MarkerNdRx;
 impl<T> crate::imc::ChannelHandler<MarkerNdRx> for T
@@ -479,7 +586,11 @@ pub unsafe trait NsrRx: 'static + crate::async_trickery::CbContext + crate::imc:
         /// Indication of a received packet
         fn rx_ind(&'a self, cb: CbHandleNicRx)->() as Future_rx_ind
     }
-    async_method!(fn exp_rx_ind(&'a self, cb: CbHandleNicRx)->() as Future_exp_rx_ind);
+    async_method!(
+        /// Indication of a newly recivied packet that should be processed in an expedited manner
+        fn exp_rx_ind(&'a self, cb: CbHandleNicRx)->()
+        as Future_exp_rx_ind
+    );
 }
 struct MarkerNsrRx;
 impl<T> crate::imc::ChannelHandler<MarkerNsrRx> for T
@@ -509,13 +620,22 @@ map_ops_structure!{
 
 /// Result type from a bind
 pub struct NicInfo {
+    /// Type of media used for the network device
     pub media_type: ffi::MediaType,
+    /// Minimum packet size the device can send - if zero then a value is assumed from `media_type`
     pub min_pdu_size: u32,
+    /// Maximum packet size the device can send - if zero then a value is assumed from `media_type`
     pub max_pdu_size: u32,
+    /// A hint to the NSR as to how many RX slots the device has (thus how many RX CBs to allocate)
     pub rx_hw_threshold: u32,
+    /// Bitset listing device capabilities
     pub capabilities: u32,
+    /// Number of multicast addresses that can be perfectly handled (i.e. not using fuzzy matching)
     pub max_perfect_multicast: u8,
+    /// Total number of multicast addresses that can be handled
     pub max_total_multicast: u8,
+    /// Length of the MAC (physical layer) address
     pub mac_addr_len: u8,
+    /// MAC (physical layer) address of the network device
     pub mac_addr: [u8; ffi::UDI_NIC_MAC_ADDRESS_SIZE],
 }

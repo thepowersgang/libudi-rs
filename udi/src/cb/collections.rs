@@ -14,6 +14,7 @@ impl<T> Default for SharedQueue<T> {
 }
 impl<T> SharedQueue<T>
 {
+    /// Create a new empty queue
     pub const fn new() -> Self {
         SharedQueue {
             head: ::core::cell::Cell::new(::core::ptr::null_mut()),
@@ -25,6 +26,7 @@ impl<T> SharedQueue<T>
 where
     T: crate::metalang_trait::MetalangCb + crate::async_trickery::GetCb
 {
+    /// Push a (potentially chained) CB onto the end of the queue
     pub fn push_back(&self, cb: CbHandle<T>) {
         let cb = cb.into_raw();
         if self.head.get().is_null() {
@@ -52,6 +54,7 @@ where
             self.tail.set(tail);
         }
     }
+    /// Pop a single CB from the front of the queue
     pub fn pop_front(&self) -> Option< CbHandle<T> > {
         let rv = self.head.get();
         if rv.is_null() {
@@ -71,7 +74,7 @@ where
     }
 }
 
-/// A chain of CBs, as returned by [alloc_batch]
+/// A chain of CBs, as returned by [super::alloc_batch]
 /// 
 /// This is a last-in-first-out collection (aka a stack)
 pub struct Chain<T>( *mut T );
@@ -81,9 +84,11 @@ impl<T> Default for Chain<T> {
     }
 }
 impl<T> Chain<T> {
+    /// Create a new empty chain, suitable for pushing/popping
     pub const fn new() -> Self {
         Chain( ::core::ptr::null_mut() )
     }
+    /// Create a new chain from a raw CB pointer
     pub const unsafe fn from_raw(p: *mut T) -> Self {
         Chain( p )
     }
@@ -92,9 +97,11 @@ impl<T> Chain<T>
 where
     T: crate::metalang_trait::MetalangCb + crate::async_trickery::GetCb
 {
+    /// Test if the chain is currently empty
     pub fn is_empty(&self) -> bool {
         self.0.is_null()
     }
+    /// Count the number of CBs in the chain by iterating it
     pub fn count(&self) -> usize {
         unsafe {
             let mut rv = 0;
@@ -106,6 +113,7 @@ where
             rv
         }
     }
+    /// Remove the first CB from the chain
     pub fn pop_front(&mut self) -> Option<CbHandle<T>> {
         if self.0.is_null() {
             None
@@ -121,6 +129,7 @@ where
             Some(CbHandle(rv))
         }
     }
+    /// Place a new CB onto the front of the chain
     pub fn push_front(&mut self, cb: CbHandle<T>) {
         let cb = cb.into_raw();
         // SAFE: `cb` is from a `CbHandle` which is valid

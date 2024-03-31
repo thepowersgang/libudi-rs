@@ -121,7 +121,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 
 			// Spawn channel
 			let intr_channel = ::udi::imc::channel_spawn::<OpsList::Irq>(cb.gcb(), self, /*interrupt number*/0.into()).await;
-			::udi::meta_bridge::attach_req({
+			::udi::meta_bridge::intr_attach_req({
 				let mut intr_cb = ::udi::cb::alloc::<CbList::Intr>(cb.gcb(), ::udi::get_gcb_channel().await).await;
 				intr_cb.init(0.into(), 2, pio_irq_ack);	// NOTE: This transfers ownership
 				intr_cb});
@@ -129,7 +129,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 
 			for _ in 0 .. 4/*NE2K_NUM_INTR_EVENT_CBS*/ {
 				let intr_event_cb = ::udi::cb::alloc::<CbList::IntrEvent>(cb.gcb(), intr_channel.raw()).await;
-				::udi::meta_bridge::event_rdy(intr_event_cb);
+				::udi::meta_bridge::intr_event_rdy(intr_event_cb);
 			}
 
 			// Reset the hardware, and get the MAC addres
