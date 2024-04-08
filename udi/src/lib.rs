@@ -31,7 +31,6 @@ pub mod channel_context;
 mod error;
 pub mod buf;
 pub mod init;
-pub mod cb;
 pub mod mem;
 pub mod layout;
 pub mod libc;
@@ -45,6 +44,8 @@ pub mod meta_bridge;
 pub mod meta_gio;
 pub mod meta_nic;
 pub mod meta_scsi;
+// Note: This is at the bottom in order to order the `impl` block docs for `CbRef`
+pub mod cb;
 
 
 pub use ::udi_macros::{debug_printf,/*GetLayout,*/};
@@ -171,15 +172,15 @@ pub mod ops_markers {
 /// # impl ::udi::init::Driver for ::udi::init::RData<Driver> {
 /// #  const MAX_ATTRS: u8 = 0;
 /// #  type Future_init<'s> = ::core::future::Pending<()>;
-/// #  fn usage_ind<'s>(&'s mut self, _cb: ::udi::meta_mgmt::CbRefUsage<'s>, _resouce_level: u8) -> Self::Future_init<'s> {
+/// #  fn usage_ind<'s>(&'s self, _cb: ::udi::meta_mgmt::CbRefUsage<'s>, _resouce_level: u8) -> Self::Future_init<'s> {
 /// #    ::core::future::pending()
 /// #  }
 /// #  type Future_enumerate<'s> = ::core::future::Pending<(::udi::init::EnumerateResult,::udi::init::AttrSink<'s>)>;
-/// #  fn enumerate_req<'s>(&'s mut self, _cb: ::udi::init::CbRefEnumerate<'s>, level: ::udi::init::EnumerateLevel, mut attrs_out: ::udi::init::AttrSink<'s> ) -> Self::Future_enumerate<'s> {
+/// #  fn enumerate_req<'s>(&'s self, _cb: ::udi::init::CbRefEnumerate<'s>, level: ::udi::init::EnumerateLevel, mut attrs_out: ::udi::init::AttrSink<'s> ) -> Self::Future_enumerate<'s> {
 /// #    ::core::future::pending()
 /// #  }
 /// #  type Future_devmgmt<'s> = ::core::future::Pending<::udi::Result<u8>>;
-/// #  fn devmgmt_req<'s>(&'s mut self,  _cb: ::udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, _parent_id: ::udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
+/// #  fn devmgmt_req<'s>(&'s self,  _cb: ::udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, _parent_id: ::udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
 /// #    ::core::future::pending()
 /// #  }
 /// # }
