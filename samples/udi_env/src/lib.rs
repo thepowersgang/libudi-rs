@@ -41,7 +41,7 @@ impl<'a> DriverModule<'a> {
         }
 
         // TODO: Pre-cache/check some entries
-        #[cfg(false_)]
+        #[cfg(any())]
         for ent in udiprops.clone()
         {
             match ent

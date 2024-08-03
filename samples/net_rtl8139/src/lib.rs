@@ -477,7 +477,7 @@ unsafe impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 		}
     }
 
-	type Future_exp_tx_req<'s> = Self::Future_tx_req<'s>;
+	type Future_exp_tx_req<'s> = impl ::core::future::Future<Output=()> + 's;
     fn exp_tx_req<'a>(&'a self, cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_exp_tx_req<'a> {
         self.tx_req(cb)
     }

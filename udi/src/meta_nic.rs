@@ -213,7 +213,7 @@ impl ReadCbQueue
     }
 }
 
-#[cfg(false_)]
+#[cfg(any())]
 #[repr(u8)]
 pub enum OpsNum
 {

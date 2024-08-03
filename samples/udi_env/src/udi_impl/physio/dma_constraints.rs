@@ -82,7 +82,7 @@ unsafe extern "C" fn udi_dma_constraints_attr_reset(
 #[no_mangle]
 pub unsafe extern "C" fn udi_dma_constraints_free(constraints: physio::udi_dma_constraints_t)
 {
-    if constraints != physio::UDI_NULL_DMA_CONSTRAINTS {
+    if ! ::std::ptr::addr_eq(constraints, physio::UDI_NULL_DMA_CONSTRAINTS) {
         drop(Box::from_raw(constraints as *mut ConstaintsReal));
     }
 }

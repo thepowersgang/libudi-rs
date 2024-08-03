@@ -95,6 +95,11 @@ impl ::core::str::FromStr for Version {
         }
     }
 }
+impl ::core::fmt::Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}", self.0 >> 8, self.0 & 0xFF)
+    }
+}
 
 #[derive(Debug,PartialEq,Eq,Hash,PartialOrd,Ord,Clone,Copy)]
 pub struct MsgNum(pub u16);
@@ -330,7 +335,7 @@ impl<'a> Entry<'a>
         {
             Ok(get_str(ents)?.parse().map_err(|e: T::Err| e.into())?)
         }
-        #[cfg(false_)]
+        #[cfg(any())]
         fn get_remainder<'a>(ents: &mut ::core::str::SplitWhitespace<'a>) -> Result<&'a str,Box<dyn ::std::error::Error>> {
             let rv = ents.remainder().ok_or("Unexpected EOL")?;
             while let Some(_) = ents.next() {

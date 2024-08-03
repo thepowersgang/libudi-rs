@@ -461,7 +461,7 @@ impl DmaAlloc {
     }
 
     // TODO: `mem_to_buf`
-    #[cfg(false_)]
+    #[cfg(any())]
     /// Free the DMA handle, and copy the data within `src_range` to the output buffer (as the full buffer contents)
     pub fn mem_to_buf(
         self,
