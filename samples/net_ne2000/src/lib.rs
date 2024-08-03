@@ -107,7 +107,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
     fn bus_bind_ack<'a>(
 		&'a self,
 		cb: ::udi::meta_bridge::CbRefBind<'a>,
-		_dma_constraints: ::udi::ffi::physio::udi_dma_constraints_t,
+		_dma_constraints: ::udi::physio::dma::DmaConstraints,
 		_preferred_endianness: ::udi::meta_bridge::PreferredEndianness,
 		_status: ::udi::ffi::udi_status_t
 	) -> Self::Future_bind_ack<'a> {

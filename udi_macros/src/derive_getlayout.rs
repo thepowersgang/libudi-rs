@@ -115,7 +115,7 @@ pub fn derive(input: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream
                         let &(_,idx) = match field_idents.iter().find(|(ident,_)| *ident == a.field)
                             {
                             Some(v) => v,
-                            None => todo!(),
+                            None => panic!("Unable to find field {} for buf flag", a.field),
                             };
                         let lens = &lengths[..idx];
                         (::quote::quote!( 0 #( + #lens)* ), a.val_mask, a.val_match)

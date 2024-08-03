@@ -7,17 +7,21 @@ mod pio_ops;
 
 const MTU: usize = 1520;
 const RX_BUF_LENGTH: usize = 0x2000+16;
-//const RX_BUF_CAPACITY: usize = RX_BUF_LENGTH+0x000;	// Extra page, to allow one page past the end
-const RX_BUF_CAPACITY: usize = RX_BUF_LENGTH+MTU+8;//0x3000;	// Extra page, to allow one page past the end
+//const RX_BUF_CAPACITY: usize = RX_BUF_LENGTH+0x1000;	// Extra page, to allow one page past the end
+const RX_BUF_CAPACITY: usize = RX_BUF_LENGTH+MTU+8;	// Add a single MTU, plus a header
 
 #[derive(Default)]
 struct Driver
 {
+	/// Driver state populated at the end of bus bind (see `Driver::bus_bind_ack`)
 	init: ::core::cell::OnceCell<InitState>,
+	/// Wait state for the interrupt handler registration/binding
 	intr_bound: ::udi::async_helpers::Wait< ::udi::Result<()> >,
 
+	/// A FIFO queue of RX CBs for incoming packets
 	rx_cb_queue: ::udi::meta_nic::ReadCbQueue,
 	
+	/// Handles to the RX/TX channels, just to keep the channels open
 	channels: ::core::cell::OnceCell<Channels>,
 
 	/// Next TX slot (out of four) that will be used by the hardware
@@ -28,14 +32,20 @@ struct Driver
 	tx_cbs: [::core::cell::Cell<Option<TxSlot>>; 4],
 }
 struct InitState {
+	/// Programmed IO operation handles
 	pio_handles: pio_ops::PioHandles,
+	/// DMA memory access handles
+	dma_handles: ::core::cell::RefCell<DmaStructures>,
+
 	#[allow(dead_code)]
+	/// A handle to the interrupt channel, keeping it open as long as we need it
 	intr_channel: ::udi::imc::ChannelHandle,
 
+	/// Hardware (MAC) address
 	mac_addr: [u8; 6],
+
 	#[allow(dead_code)]
 	dma_constraints: ::udi::physio::dma::DmaConstraints,
-	dma_handles: ::core::cell::RefCell<DmaStructures>,
 }
 #[allow(dead_code)]
 struct Channels {
@@ -112,7 +122,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
     fn bus_bind_ack<'a>(
 		&'a self,
 		cb: ::udi::meta_bridge::CbRefBind<'a>,
-		dma_constraints: ::udi::ffi::physio::udi_dma_constraints_t,
+		dma_constraints: ::udi::physio::dma::DmaConstraints,
 		_preferred_endianness: ::udi::meta_bridge::PreferredEndianness,
 		_status: ::udi::ffi::udi_status_t
 	) -> Self::Future_bind_ack<'a> {
@@ -126,10 +136,10 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 			::udi::meta_bridge::intr_attach_req(intr_cb);
 			self.intr_bound.wait(cb.gcb()).await?;
 
-			let dma_constraints = unsafe {
+			let dma_constraints = {
 				use ::udi::ffi::physio::udi_dma_constraints_attr_spec_t as Spec;
 				use ::udi::ffi::physio;
-				let mut dc = ::udi::physio::dma::DmaConstraints::from_raw(dma_constraints);
+				let mut dc = dma_constraints;
 				dc.set(cb.gcb(), &[
 					// 32-bit device
 					Spec { attr_type: physio::UDI_DMA_ADDRESSABLE_BITS, attr_value: 32 },

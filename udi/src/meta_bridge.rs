@@ -59,7 +59,7 @@ pub trait BusDevice: 'static + crate::async_trickery::CbContext + crate::imc::Ch
         /// Acknowledge a successful binding of this device to the bus
         fn bus_bind_ack(&'a self,
             cb: crate::CbRef<'a, udi_bus_bind_cb_t>,
-            dma_constraints: crate::ffi::physio::udi_dma_constraints_t,
+            dma_constraints: crate::physio::dma::DmaConstraints,
             preferred_endianness: PreferredEndianness,
             status: crate::ffi::udi_status_t
             )->crate::Result<()>
@@ -144,6 +144,8 @@ future_wrapper!(bus_bind_ack_op => <T as BusDevice>(
         crate::ffi::meta_bridge::UDI_DMA_LITTLE_ENDIAN => PreferredEndianness::Little,
         _ => PreferredEndianness::Any,
         };
+    // SAFE: This comes from the environment, so is correct
+    let dma_constraints = unsafe { crate::physio::dma::DmaConstraints::from_raw(dma_constraints) };
     val.bus_bind_ack(cb, dma_constraints, preferred_endianness, status)
 } finally(res) {
     unsafe { crate::async_trickery::channel_event_complete::<T,udi_bus_bind_cb_t>(cb, crate::Error::to_status(res)) }

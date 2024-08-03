@@ -166,7 +166,7 @@ pub fn create_module_body(outfp: &mut dyn ::std::io::Write, props: &[String], em
             },
         parsed::Entry::Message(msg_id, body) => {
 
-            // TODO: Parse the message for formatting fragments
+            // Parse the message for formatting fragments, and build up an argument set for type checking
             let mut p = ::udi_macro_helpers::printf::Parser::new(body.as_bytes());
             let mut types = Vec::new();
             loop {

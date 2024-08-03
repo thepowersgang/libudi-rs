@@ -15,6 +15,7 @@ impl<'a, T: 'static> Copy for CbRef<'a, T> {
 impl<'a, T: 'static> Clone for CbRef<'a, T> {
     fn clone(&self) -> Self { *self }
 }
+/// Methods common to all CbRef instances - additional methods can be present on specific CB types
 impl<'a, T: 'static> CbRef<'a, T>
 where
     T: crate::async_trickery::GetCb
@@ -65,6 +66,7 @@ where
         //todo!("What to do when dropping a CbHandle")
     }
 }
+/// Methods common to all CbHandle instances - additional methods can be present on specific CB types
 impl<T> CbHandle<T>
 where
     T: crate::async_trickery::GetCb

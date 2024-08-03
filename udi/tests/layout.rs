@@ -12,7 +12,7 @@ fn test1() {
         pub gcb: udi_cb_t,
         #[layout(chain_cb)]
         pub chain: *mut udi_nic_rx_cb_t,
-        //#[layout(buf())]
+        //#[layout(buf(rx_status & 0x1 == 0x1))]
         pub rx_buf: *mut udi_buf_t,
         pub rx_status: udi_ubit8_t,
         pub addr_match: udi_ubit8_t,
