@@ -35,14 +35,14 @@ pub(crate) enum WaitRes {
 /// Initialise a task
 /// 
 /// SAFETY: Caller must ensure that `cb`'s `scratch` is valid for this task (correct size, not yet initialised)
-pub(crate) unsafe fn init_task<Cb, T, R, F>(cb: &Cb, inner: T, finally: F)
+pub(crate) unsafe fn init_task<Cb, T, R, F>(cb: *mut Cb, inner: T, finally: F)
 where
 	Cb: GetCb,
 	T: 'static + Future<Output=R>,
 	R: 'static,
 	F: 'static + FnMut(*mut Cb, R),
 {
-	::core::ptr::write(cb.get_gcb().scratch as *mut _, Task::<Cb,T,R,F>::new(inner, finally));
+	::core::ptr::write((*cb).get_gcb().scratch as *mut _, Task::<Cb,T,R,F>::new(inner, finally));
 	run(cb);
 }
 /// Get the size of the task state (for scratch) for a given async state structure
@@ -54,9 +54,9 @@ pub(crate) const fn task_size<T: 'static>() -> usize {
 /// SAFETY: Takes a raw pointer, that pointer must be the valid CB for an aborted task
 pub(crate) unsafe fn abort_task(cb: *mut udi_cb_t)
 {
-	let task = &mut *((*cb).scratch as *mut TaskStub);
-	let get_inner = task.get_inner;
-	(*get_inner(task)).drop_in_place();
+	let task = &mut *((*cb).scratch as *mut TaskHeader);
+	let vt = task.vtable;
+	(vt.drop_in_place)( (*cb).scratch as *mut () );
 }
 
 /// Obtain a pointer to the driver instance from a cb
@@ -94,13 +94,13 @@ pub(crate) unsafe fn channel_event_complete<T: CbContext, Cb: GetCb>(cb: *mut Cb
 /// Run async state stored in `cb`
 /// 
 /// SAFETY: Caller must ensure that the cb has been initialised with an async state
-unsafe fn run<Cb: GetCb>(cb: &Cb) {
-	let gcb = cb.get_gcb();
-	let waker = make_waker(gcb);
+unsafe fn run<Cb: GetCb>(cb: *mut Cb) {
+	let scratch = (*cb).get_gcb().scratch;
+	let waker = make_waker(cb);
 	let mut ctxt = ::core::task::Context::from_waker(&waker);
-	let mut scratch = Pin::new(&mut *( (*gcb).scratch as *mut TaskStub));
-
-	match scratch.as_mut().poll(&mut ctxt)
+	let vtable = (*(scratch as *mut TaskHeader)).vtable;
+	
+	match (vtable.poll)( scratch as *mut (), &mut ctxt )
 	{
 	Poll::Ready( () ) => { },
 	Poll::Pending => {},
@@ -160,13 +160,22 @@ where
 #[repr(C)]
 struct Task<Cb,T,R,F> {
 	pd: PhantomData<(Cb,R,)>,
-	/// Current waiting state
-	state: ::core::cell::Cell<TaskState>,
-	/// Effectively the vtable for this task
-	get_inner: unsafe fn(*mut TaskStub)->*mut dyn TaskTrait,
+	/// Common header, must be the first field
+	header: TaskHeader,
 	/// Actual task/future data
 	inner: T,
 	finally: ::core::mem::ManuallyDrop<F>,
+}
+struct TaskHeader {
+	/// Current waiting state
+	state: ::core::cell::Cell<TaskState>,
+	/// Effectively the vtable for this task
+	vtable: &'static TaskVtable,
+}
+struct TaskVtable {
+	poll: unsafe fn(*mut (), &mut ::core::task::Context<'_>) -> ::core::task::Poll<()>,
+	get_cb_type: fn()->::core::any::TypeId,
+	drop_in_place: unsafe fn(*mut ()),
 }
 #[derive(Default,Copy,Clone)]
 enum TaskState {
@@ -179,6 +188,7 @@ enum TaskState {
 	Ready(WaitRes),
 }
 
+#[cfg(any())]
 trait TaskTrait {
 	/// Poll the inner future
 	/// 
@@ -186,7 +196,6 @@ trait TaskTrait {
 	/// - `self` must be pinned (i.e. once `poll` is called, it should never move)
 	/// - Once this returns `Poll::Ready`, `self` must be considered invalid (it's dropped)
 	unsafe fn poll<'a>(&mut self, cx: &mut ::core::task::Context<'_>) -> ::core::task::Poll<()>;
-	fn get_cb_type(&self) -> ::core::any::TypeId;
 	/// Early drop the task (for cancellation)
 	unsafe fn drop_in_place(&mut self);
 }
@@ -200,50 +209,31 @@ where
 	fn new(inner: T, finally: F) -> Self {
 		Task {
 			pd: PhantomData,
-			state: Default::default(),
-			get_inner: Self::get_inner,
+			header: TaskHeader {
+				state: Default::default(),
+				vtable: &TaskVtable {
+					poll: Self::poll_raw,
+					get_cb_type: || ::core::any::TypeId::of::<Cb>(),
+					drop_in_place: |this| unsafe { ::core::ptr::drop_in_place(this as *mut Self) },
+					}
+			},
 			finally: ::core::mem::ManuallyDrop::new(finally),
 			inner,
 		}
 	}
-	unsafe fn get_inner(this: *mut TaskStub) -> *mut dyn TaskTrait {
-		this as *mut Self
-	}
-}
-impl<Cb, T, R, F> TaskTrait for Task<Cb, T, R, F>
-where
-	Cb: GetCb,
-	T: 'static + Future<Output=R>,
-	F: 'static + FnOnce(*mut Cb, R)
-{
-    unsafe fn poll<'a>(&mut self, cx: &mut ::core::task::Context<'_>) -> ::core::task::Poll<()> {
-        match Pin::new_unchecked(&mut self.inner).poll(cx)
+	unsafe fn poll_raw(this: *mut (), cx: &mut ::core::task::Context<'_>) -> ::core::task::Poll<()> {
+		let this = this as *mut Self;
+        match Pin::new_unchecked(&mut (*this).inner).poll(cx)
 		{
 		Poll::Ready(res) => {
-			let cb = cb_from_waker::<Cb>(cx.waker());
-			let finally = ::core::ptr::read(&mut *self.finally);
-			self.drop_in_place();
-			(finally)(cb as *const _ as *mut _, res);
+			{ let _cb = cb_from_waker::<Cb>(cx.waker()); }
+			let finally = ::core::ptr::read(&mut *(*this).finally);
+			::core::ptr::drop_in_place(this);
+			(finally)(gcb_from_waker_raw(cx.waker()) as *mut _, res);
 			Poll::Ready(())
 		},
 		Poll::Pending => Poll::Pending,
 		}
-    }
-    fn get_cb_type(&self) -> ::core::any::TypeId {
-        ::core::any::TypeId::of::<Cb>()
-    }
-	unsafe fn drop_in_place(&mut self) {
-		::core::ptr::drop_in_place(self);
-	}
-}
-type TaskStub = Task<udi_cb_t,(),(),()>;
-impl TaskStub
-{
-	pub fn poll(self: Pin<&mut Self>, cx: &mut ::core::task::Context<'_>) -> ::core::task::Poll<()> {
-		let get_inner = self.get_inner;
-		let this = unsafe { Pin::get_unchecked_mut(self) };
-		// SAFE: Pinned
-		unsafe { (*(get_inner)(this)).poll(cx) }
 	}
 }
 
@@ -282,39 +272,38 @@ where
 }
 
 /// Obtain the GCB (`udi_cb_t`) from a waker
-pub fn gcb_from_waker(waker: &::core::task::Waker) -> &udi_cb_t {
+fn gcb_from_waker_raw(waker: &::core::task::Waker) -> *const udi_cb_t {
 	let raw_waker = waker.as_raw();
 	let have_vt = raw_waker.vtable();
 	if have_vt as *const _ != &VTABLE_CB_T as *const _ {
 		panic!("Unexpected context used!");
 	}
-	// SAFE: As this waker is for a CB, it has to be pointing at a valid CB
-	unsafe { &*(raw_waker.data() as *const udi_cb_t) }
+	raw_waker.data() as *const udi_cb_t
 }
 /// Obtain any CB (checked) from the waker
 pub(crate) fn cb_from_waker<Cb: GetCb>(waker: &::core::task::Waker) -> &Cb {
 	let exp_typeid = ::core::any::TypeId::of::<Cb>();
-	let gcb = gcb_from_waker(waker);
+	let gcb = gcb_from_waker_raw(waker);
 	// Special case: If we're asking for `udi_cb_t` then allow it
 	if exp_typeid == ::core::any::TypeId::of::<udi_cb_t>() {
 		// SAFE: Same type!
-		return unsafe { &*(gcb as *const udi_cb_t as *const Cb) };
+		return unsafe { &*(gcb as *const Cb) };
 	}
 
-	// A null scratch indicates that no state was needed
-	assert!( !gcb.scratch.is_null(), "cb_from_waker with no state?" );
 	// SAFE: Since the waker is from a cb, that cb has/should have been for an active task. The scratch is non-null
 	let cb_type = unsafe {
-		let task = gcb.scratch as *mut TaskStub;
-		(*((*task).get_inner)(task)).get_cb_type()
+		// A null scratch indicates that no state was needed
+		assert!( !(*gcb).scratch.is_null(), "cb_from_waker with no state?" );
+		let vtable = (*((*gcb).scratch as *mut TaskHeader)).vtable;
+		(vtable.get_cb_type)()
 		};
 	assert!(cb_type == ::core::any::TypeId::of::<Cb>(),
 		"cb_from_waker with mismatched types: {:?} != {:?}", cb_type, ::core::any::TypeId::of::<Cb>());
 	// SAFE: Correct type
-	unsafe { &*(gcb as *const udi_cb_t as *const Cb) }
+	unsafe { &*(gcb as *const Cb) }
 }
-unsafe fn make_waker(cb: &udi_cb_t) -> ::core::task::Waker {
-	::core::task::Waker::from_raw( ::core::task::RawWaker::new(cb as *const _ as *const _, &VTABLE_CB_T) )
+unsafe fn make_waker<Cb: GetCb>(cb: *mut Cb) -> ::core::task::Waker {
+	::core::task::Waker::from_raw( ::core::task::RawWaker::new(cb as *mut Cb as *const (), &VTABLE_CB_T) )
 }
 static VTABLE_CB_T: ::core::task::RawWakerVTable = ::core::task::RawWakerVTable::new(
 	|_| panic!("Cloning would be unsound"),
@@ -347,7 +336,7 @@ unsafe impl<T: crate::metalang_trait::MetalangCb + ::core::any::Any + Unpin> Get
 /// Obtain the TaskState result given a GCB
 fn get_result(gcb: *const udi_cb_t) -> Option<WaitRes>
 {
-	let state = unsafe { &*((*gcb).scratch as *mut TaskStub) };
+	let state = unsafe { &*((*gcb).scratch as *mut TaskHeader) };
 	match state.state.replace(TaskState::Waiting)
 	{
 	TaskState::Idle => None,
@@ -364,7 +353,7 @@ fn get_result(gcb: *const udi_cb_t) -> Option<WaitRes>
 
 /// Flag that an operation is complete. This might be run downstream of the main task.
 pub(crate) fn signal_waiter(gcb: &mut udi_cb_t, res: WaitRes) {
-	let scratch = unsafe { &mut *(gcb.scratch as *mut TaskStub) };
+	let scratch = unsafe { &mut *(gcb.scratch as *mut TaskHeader) };
 	match scratch.state.replace(TaskState::Ready(res))
 	{
 	TaskState::Idle => {
@@ -427,7 +416,7 @@ macro_rules! future_wrapper {
 				let $cb = unsafe { $crate::CbRef::new($cb) };
                 $b
                 };
-            $crate::async_trickery::init_task(&*$cb, job, |$cb, res| {
+            $crate::async_trickery::init_task(&mut *$cb, job, |$cb, res| {
 				let $val = unsafe { $crate::async_trickery::get_rdata_t::<T,_>(&*$cb) };
 				let _ = $val;
 				let _ = res;

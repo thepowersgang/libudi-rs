@@ -63,7 +63,6 @@ where
 {
     fn drop(&mut self) {
         unsafe { ::udi_sys::cb::udi_cb_free(self.0 as *mut ::udi_sys::udi_cb_t); }
-        //todo!("What to do when dropping a CbHandle")
     }
 }
 /// Methods common to all CbHandle instances - additional methods can be present on specific CB types

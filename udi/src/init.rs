@@ -296,7 +296,6 @@ impl<Driver> ::core::ops::DerefMut for RData<Driver>
 // TODO: Figure out where we can store state properly
 // - Probably in `context`, as `scratch` is limited and not always available :(
 // - But, what are the rules for `context` being updated?
-
 future_wrapper!{enumerate_req_op => <T as Driver>(cb: *mut udi_enumerate_cb_t, enumeration_level: u8) val @ {
 	let attrs = AttrSink {
 		dst: cb.attr_list,
@@ -400,7 +399,7 @@ where
 				(*rd).is_init = true;
 				::core::ptr::write(&mut (*rd).inner, Default::default());
 			}
-			async_trickery::init_task(&*cb,
+			async_trickery::init_task(cb,
 				(*rd).usage_ind(crate::CbRef::new(cb), resource_level),
 				|cb,()| ffi::meta_mgmt::udi_usage_res(cb)
 			);
