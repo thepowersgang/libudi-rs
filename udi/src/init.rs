@@ -403,6 +403,7 @@ where
 				(*rd).usage_ind(crate::CbRef::new(cb), resource_level),
 				|cb,()| ffi::meta_mgmt::udi_usage_res(cb)
 			);
+			async_trickery::run(cb);
         }
         ffi::meta_mgmt::udi_mgmt_ops_t {
 			usage_ind_op: usage_ind::<T>,

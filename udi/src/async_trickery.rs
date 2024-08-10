@@ -43,7 +43,7 @@ where
 	F: 'static + FnMut(*mut Cb, R),
 {
 	::core::ptr::write((*cb).get_gcb().scratch as *mut _, Task::<Cb,T,R,F>::new(inner, finally));
-	run(cb);
+	// NOTE: Can't run here, as that makes miri unhappy (if the task doesn't yield, and the drop happens in here)
 }
 /// Get the size of the task state (for scratch) for a given async state structure
 pub(crate) const fn task_size<T: 'static>() -> usize {
@@ -94,7 +94,7 @@ pub(crate) unsafe fn channel_event_complete<T: CbContext, Cb: GetCb>(cb: *mut Cb
 /// Run async state stored in `cb`
 /// 
 /// SAFETY: Caller must ensure that the cb has been initialised with an async state
-unsafe fn run<Cb: GetCb>(cb: *mut Cb) {
+pub unsafe fn run<Cb: GetCb>(cb: *mut Cb) {
 	let scratch = (*cb).get_gcb().scratch;
 	let waker = make_waker(cb);
 	let mut ctxt = ::core::task::Context::from_waker(&waker);
@@ -221,14 +221,20 @@ where
 			inner,
 		}
 	}
+	/// SAFETY: `this` must point to a valid instance of `Self`
+	/// After this returns `Poll::Ready` - `this` is invalid
 	unsafe fn poll_raw(this: *mut (), cx: &mut ::core::task::Context<'_>) -> ::core::task::Poll<()> {
 		let this = this as *mut Self;
-        match Pin::new_unchecked(&mut (*this).inner).poll(cx)
+		match Pin::new_unchecked(&mut (*this).inner).poll(cx)
 		{
 		Poll::Ready(res) => {
+			// Request the CB, to assert that the CB type is valid
 			{ let _cb = cb_from_waker::<Cb>(cx.waker()); }
+			// Read `finally` out of the ManuallDrop before dropping all of `this`
 			let finally = ::core::ptr::read(&mut *(*this).finally);
+			// Drop the future in `self.inner` (and everything else)
 			::core::ptr::drop_in_place(this);
+			// Call the cleanup function
 			(finally)(gcb_from_waker_raw(cx.waker()) as *mut _, res);
 			Poll::Ready(())
 		},
@@ -422,6 +428,7 @@ macro_rules! future_wrapper {
 				let _ = res;
 				$( let $res = res; $f )?
 			});
+			$crate::async_trickery::run($cb);
         }
         mod $name {
             use super::*;
