@@ -36,7 +36,7 @@ struct ChannelRef<'a>(&'a ChannelInner, bool);
 impl<'a> ChannelRef<'a> {
     unsafe fn from_handle(h: ::udi::ffi::udi_channel_t) -> Self {
         assert!(!h.is_null());
-        let (ptr,is_b) = ((h as usize & !1) as *const ChannelInner, h as usize & 1 != 0);
+        let (ptr,is_b) = (h.with_addr(h as usize & !1) as *const ChannelInner, h as usize & 1 != 0);
         ChannelRef(&*ptr, is_b)
     }
     fn get_handle_reversed(&self) -> ::udi::ffi::udi_channel_t {
@@ -82,7 +82,7 @@ pub fn spawn_raw() -> (::udi::ffi::udi_channel_t,::udi::ffi::udi_channel_t)
         spawns: Default::default(),
         sides: Default::default(),
         })) as ::udi::ffi::udi_channel_t;
-    (h, (h as usize | 1) as ::udi::ffi::udi_channel_t,)
+    (h, h.with_addr(h as usize | 1),)
 }
 /// Spawn a new channel end (matching to an existing call from the same base channel)
 pub unsafe fn spawn(
