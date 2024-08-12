@@ -58,7 +58,7 @@ where
     let expected_context = context as *const _;
     let channel_context = context.as_ref() as *const _;
 	extern "C" fn callback(gcb: *mut ::udi_sys::udi_cb_t, handle: ::udi_sys::udi_channel_t) {
-		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }
+		unsafe { crate::async_trickery::signal_waiter(gcb, crate::WaitRes::Pointer(handle as *mut ())); }
 	}
 	crate::async_trickery::wait_task::<::udi_sys::udi_cb_t, _,_,_>(
         cb,
@@ -129,12 +129,12 @@ pub const fn task_size<T: ChannelHandler<Marker>,Marker: 'static>() -> usize {
 pub unsafe extern "C" fn channel_event_ind_op<T: ChannelHandler<Marker>, Marker: 'static>(cb: *mut udi_channel_event_cb_t) {
     // NOTE: There's no scratch availble to this function, so cannot use async
 
-    // SAFE: Caller has ensured that the context is valid for this type
-    let state: &mut T = crate::async_trickery::get_rdata_t(&*cb);
     match (*cb).event
     {
     // Called when the remote end of the channel is closed, this function is expected to close the channel afer `udi_channel_event_complete`
     ::udi_sys::imc::UDI_CHANNEL_CLOSED => {
+        // SAFE: Caller has ensured that the context is valid for this type
+        let state: &mut T = crate::async_trickery::get_rdata_t(&*cb);
         state.channel_closed();
         let channel = (*cb).gcb.channel;
         crate::ffi::imc::udi_channel_event_complete(cb, ::udi_sys::UDI_OK as _);
@@ -144,6 +144,8 @@ pub unsafe extern "C" fn channel_event_ind_op<T: ChannelHandler<Marker>, Marker:
     // Note: Only called for the non-initiating end (for child for a parent-child, and for primary for sec-primary)
     ::udi_sys::imc::UDI_CHANNEL_BOUND => {
         crate::async_trickery::set_channel_cb::<T>(cb);
+        // SAFE: Caller has ensured that the context is valid for this type
+        let state: &mut T = crate::async_trickery::get_rdata_t(&*cb);
         crate::imc::ChannelInit::init(state);
         state.channel_bound( &(*cb).params );
         // no `udi_channel_event_complete` call, it's done by `channel_bound` (maybe indirectly)

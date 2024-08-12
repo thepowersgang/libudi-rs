@@ -358,8 +358,9 @@ fn get_result(gcb: *const udi_cb_t) -> Option<WaitRes>
 }
 
 /// Flag that an operation is complete. This might be run downstream of the main task.
-pub(crate) fn signal_waiter(gcb: &mut udi_cb_t, res: WaitRes) {
-	let scratch = unsafe { &mut *(gcb.scratch as *mut TaskHeader) };
+/// SAFETY: Caller must ensure that `gcb` is a valid async CB
+pub(crate) unsafe fn signal_waiter(gcb: *mut udi_cb_t, res: WaitRes) {
+	let scratch = unsafe { &mut *( (*gcb).scratch as *mut TaskHeader) };
 	match scratch.state.replace(TaskState::Ready(res))
 	{
 	TaskState::Idle => {
