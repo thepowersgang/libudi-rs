@@ -80,10 +80,10 @@ impl<'layout, 'data> Iterator for DataIter<'layout, 'data>
         crate::ffi::layout::UDI_DL_ORIGIN_T => LayoutItem::Origin(self.advance()),
 
         crate::ffi::layout::UDI_DL_BUF => {
-            let preserve_flag_ofs = self.next_layout();
-            let preserve_flag_mask = self.next_layout();
-            let preserve_flag_match = self.next_layout();
-            LayoutItem::Buf(self.advance(), BufPreserveFlag(preserve_flag_ofs, preserve_flag_mask, preserve_flag_match))
+            let flag_ofs = self.next_layout();
+            let mask = self.next_layout();
+            let test_val = self.next_layout();
+            LayoutItem::Buf(self.advance(), BufPreserveFlag { index: flag_ofs, mask, test_val })
             },
         crate::ffi::layout::UDI_DL_CB                 => LayoutItem::Cb(self.advance()),
         crate::ffi::layout::UDI_DL_INLINE_UNTYPED     => LayoutItem::InlineUntyped(self.advance()),
@@ -161,7 +161,14 @@ pub enum LayoutItem<'layout, 'data>
 
 // TODO: To check this, the layout is needed
 /// Information required to know if a buffer needs to be preserved
-pub struct BufPreserveFlag(u8,u8,u8);
+pub struct BufPreserveFlag {
+    /// Index into the control block to the field that contains the relevant flag
+    index: u8,
+    /// Mask applied to the low-order byte of the above-selected field
+    mask: u8,
+    /// If the field masked with the above equals this value, the buffer contents should be preserved
+    test_val: u8
+}
 impl BufPreserveFlag {
     //pub unsafe fn test(cb: *const udi_cb_t) -> bool {
     //}
