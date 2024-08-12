@@ -44,20 +44,17 @@ fn main() {
     });
 
     // ----
-    #[cfg(not(miri))]
     let driver_module_ne2000 = unsafe {
         let udiprops = ::udiprops_parse::load_from_raw_section({
-            let ptr = driver::libudi_rs_udiprops.as_ptr();
-            let len = driver::libudi_rs_udiprops_len;
+            let ptr = udi_net_ne2000::udiprops::udiprops.as_ptr();
+            let len = udi_net_ne2000::udiprops::_LEN;
             ::core::slice::from_raw_parts(ptr, len)
             });
-        ::std::sync::Arc::new(DriverModule::new(&driver::udi_init_info, udiprops))
-    };
-    #[cfg(not(miri))]
+        ::std::sync::Arc::new(DriverModule::new(&udi_net_ne2000::udi_init_info, udiprops))
+        };
     let _ = driver_module_ne2000;
     
     let mut is_nic = false;
-    #[cfg(not(miri))]
     if let None = ::std::env::args_os().skip(1).next() {
         is_nic = true;
         register_driver_module(&mut state, driver_module_ne2000);
@@ -136,7 +133,7 @@ fn main() {
                 }
             }
         }
-        assert!( actions.is_empty() );
+        assert!( actions.is_empty(), "Devices did not pull the actions" );
         if !new_instances.is_empty() {
             action_happened = true;
         }

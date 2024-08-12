@@ -422,7 +422,7 @@ mod mem {
 }
 
 
-mod udiprops {
+pub mod udiprops {
 	include!{ concat!(env!("OUT_DIR"), "/udiprops.rs") }
 }
 
