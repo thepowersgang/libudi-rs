@@ -36,6 +36,9 @@ pub fn debug_printf(input: ::proc_macro::TokenStream) -> ::proc_macro::TokenStre
     ::proc_macro::TokenStream::from(::quote::quote!{
         {
             fn udi_debug_printf( #( #arg_name: #exp_arg_tys ),* ) {
+                if cfg!(miri) {
+                    return ;
+                }
                 unsafe {
                     ::udi::ffi::log::udi_debug_printf( concat!(#format,"\0").as_ptr() as _ #(, ::udi::libc::SnprintfArg::into_arg(#arg_name) )* );
                 }
