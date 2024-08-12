@@ -40,7 +40,8 @@ impl<'a> ChannelRef<'a> {
         ChannelRef(&*ptr, is_b)
     }
     fn get_handle_reversed(&self) -> ::udi::ffi::udi_channel_t {
-        ((self.0 as *const _) as usize | (!self.1 as usize)) as *mut _
+        let p = self.0 as *const ChannelInner;
+        p.with_addr(p as usize | (!self.1 as usize)) as *mut _
     }
     fn get_side(&self) -> Option<&ChannelInnerSide> {
         self.0.sides[self.1 as usize].get()
