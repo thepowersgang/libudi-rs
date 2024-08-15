@@ -115,7 +115,7 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
         }
     }
 
-    fn xfer_ret(&mut self, cb: ::udi::cb::CbHandle<udi::ffi::meta_gio::udi_gio_xfer_cb_t>) {
+    fn xfer_ret(&self, cb: ::udi::cb::CbHandle<udi::ffi::meta_gio::udi_gio_xfer_cb_t>) {
         self.cb_pool.push_back(cb);
     }
 

@@ -134,7 +134,7 @@ pub unsafe extern "C" fn channel_event_ind_op<T: ChannelHandler<Marker>, Marker:
     // Called when the remote end of the channel is closed, this function is expected to close the channel afer `udi_channel_event_complete`
     ::udi_sys::imc::UDI_CHANNEL_CLOSED => {
         // SAFE: Caller has ensured that the context is valid for this type
-        let state: &mut T = crate::async_trickery::get_rdata_t(&*cb);
+        let state: &mut T = crate::async_trickery::get_rdata_t_mut(&*cb);
         state.channel_closed();
         let channel = (*cb).gcb.channel;
         crate::ffi::imc::udi_channel_event_complete(cb, ::udi_sys::UDI_OK as _);
@@ -145,7 +145,7 @@ pub unsafe extern "C" fn channel_event_ind_op<T: ChannelHandler<Marker>, Marker:
     ::udi_sys::imc::UDI_CHANNEL_BOUND => {
         crate::async_trickery::set_channel_cb::<T>(cb);
         // SAFE: Caller has ensured that the context is valid for this type
-        let state: &mut T = crate::async_trickery::get_rdata_t(&*cb);
+        let state: &mut T = crate::async_trickery::get_rdata_t_mut(&*cb);
         crate::imc::ChannelInit::init(state);
         state.channel_bound( &(*cb).params );
         // no `udi_channel_event_complete` call, it's done by `channel_bound` (maybe indirectly)

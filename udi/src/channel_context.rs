@@ -56,6 +56,9 @@ impl<Driver,ChildData> crate::async_trickery::CbContext for ChildBind<Driver,Chi
 where
 	ChildData: Default,
 {
+	fn is_init(&self) -> bool {
+		self.is_init
+	}
     fn maybe_init(&mut self) {
         if !self.is_init {
 			unsafe {

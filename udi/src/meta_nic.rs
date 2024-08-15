@@ -381,11 +381,11 @@ pub trait NsrControl: 'static + crate::async_trickery::CbContext + crate::imc::C
         as Future_status_ind
     );
     /// Return/release a generic NIC CB
-    fn ret_cb_nic(&mut self, cb: crate::cb::CbHandle<ffi::udi_nic_cb_t>) { let _ = cb; }
+    fn ret_cb_nic(&self, cb: crate::cb::CbHandle<ffi::udi_nic_cb_t>) { let _ = cb; }
     /// Return/release a control CB
-    fn ret_cb_nic_ctrl(&mut self, cb: crate::cb::CbHandle<ffi::udi_nic_ctrl_cb_t>) { let _ = cb; }
+    fn ret_cb_nic_ctrl(&self, cb: crate::cb::CbHandle<ffi::udi_nic_ctrl_cb_t>) { let _ = cb; }
     /// Return/release an info CB
-    fn ret_cb_nic_info(&mut self, cb: crate::cb::CbHandle<ffi::udi_nic_info_cb_t>) { let _ = cb; }
+    fn ret_cb_nic_info(&self, cb: crate::cb::CbHandle<ffi::udi_nic_info_cb_t>) { let _ = cb; }
 }
 future_wrapper!(nsr_channel_bound => <T as NsrControl>(cb: *mut ffi::udi_nic_bind_cb_t) val @ {
     val.get_bind_channels(cb)

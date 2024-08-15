@@ -83,9 +83,9 @@ pub trait BusDevice: 'static + crate::async_trickery::CbContext + crate::imc::Ch
     );
 
     /// Return/release an interrupt-attach CB
-    fn intr_attach_cb_ret(&mut self, cb: CbHandleIntrAttach) { let _ = cb;}
+    fn intr_attach_cb_ret(&self, cb: CbHandleIntrAttach) { let _ = cb; }
     /// Return/release an interrupt-detach CB
-    fn intr_detach_cb_ret(&mut self, cb: CbHandleIntrDetach) { let _ = cb;}
+    fn intr_detach_cb_ret(&self, cb: CbHandleIntrDetach) { let _ = cb; }
 }
 struct MarkerBusDevice;
 impl<T> crate::imc::ChannelHandler<MarkerBusDevice> for T
@@ -298,7 +298,7 @@ pub trait IntrDispatcher: 'static + crate::async_trickery::CbContext + crate::im
         as Future_intr_event_rdy
     );
     /// Take ownership of an incoming event CB
-    fn intr_event_ret(&mut self, cb: CbHandleEvent);
+    fn intr_event_ret(&self, cb: CbHandleEvent);
 }
 struct MarkerIntrDispatcher;
 impl<T> crate::imc::ChannelHandler<MarkerIntrDispatcher> for T

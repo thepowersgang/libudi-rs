@@ -85,7 +85,7 @@ struct ChildState {
     irq_cbs: ::std::sync::Arc<CbQueue>,
     handler: ::core::cell::Cell<Option< ::std::sync::Arc<InterruptHandler> >>,
     min_event_pend: ::core::cell::Cell<u8>,
-    intr_enabled: bool,
+    intr_enabled: ::core::cell::Cell<bool>,
 }
 struct InterruptHandler {
     cbs: ::std::sync::Arc<CbQueue>,
@@ -164,7 +164,7 @@ impl ::udi::meta_bridge::IntrDispatcher for ::udi::ChildBind<Driver,ChildState>
         }
     }
 
-    fn intr_event_ret(&mut self, cb: udi::meta_bridge::CbHandleEvent) {
+    fn intr_event_ret(&self, cb: udi::meta_bridge::CbHandleEvent) {
         if let Some(handler) = self.handler.take() {
             if handler.channel.raw() == cb.gcb.channel {
                 let sufficient = {
@@ -173,9 +173,9 @@ impl ::udi::meta_bridge::IntrDispatcher for ::udi::ChildBind<Driver,ChildState>
                     //println!("intr_event_ret: {} ? >= {}", cbs.count(), self.min_event_pend);
                     cbs.count() >= self.min_event_pend.get() as usize
                 };
-                if sufficient && !self.intr_enabled {
+                if sufficient && !self.intr_enabled.get() {
                     handler.enable();
-                    self.intr_enabled = true;
+                    self.intr_enabled.set(true);
                 }
             }
             else {

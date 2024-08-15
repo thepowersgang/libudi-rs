@@ -266,6 +266,9 @@ impl<Driver> crate::async_trickery::CbContext for RData<Driver>
 where
 	Driver: Default,
 {
+	fn is_init(&self) -> bool {
+		self.is_init
+	}
 	fn maybe_init(&mut self) {
 		if !self.is_init {
 			unsafe { ::core::ptr::write(&mut self.inner, Default::default()); }
@@ -362,9 +365,12 @@ future_wrapper!{devmgmt_req_op => <T as Driver>(cb: *mut udi_mgmt_cb_t, mgmt_op:
 }}
 future_wrapper!{final_cleanup_req_op => <T as Driver>(cb: *mut udi_mgmt_cb_t) val @ {
 	async move {
-		let _ = cb;
+		let _ = val;
 		// SAFE: We're trusting the environment to only call this once per region
-		unsafe { ::core::ptr::drop_in_place(val); }
+		unsafe {
+			let val: &mut T = crate::async_trickery::get_rdata_t_mut(&*cb);
+			::core::ptr::drop_in_place(val);
+		}
 	}
 } finally( () ) {
 	unsafe { crate::ffi::meta_mgmt::udi_final_cleanup_ack(cb) }

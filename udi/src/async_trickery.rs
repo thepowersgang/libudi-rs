@@ -18,6 +18,7 @@ use crate::ffi::udi_cb_t;
 // TODO: Init is covered for now, but what about deallocation
 // - On unbind it can be dropped, but it's possible to use the same context for multiple channels
 pub trait CbContext {
+	fn is_init(&self) -> bool;
 	fn maybe_init(&mut self);
 	fn channel_cb_slot(&mut self) -> &mut *mut crate::ffi::imc::udi_channel_event_cb_t;
 	unsafe fn drop_in_place(&mut self);
@@ -62,7 +63,17 @@ pub(crate) unsafe fn abort_task(cb: *mut udi_cb_t)
 /// Obtain a pointer to the driver instance from a cb
 /// 
 /// SAFETY: Caller must ensure that `T` is valid for the context paraneter of the Cb
-pub(crate) unsafe fn get_rdata_t<T: CbContext, Cb: GetCb>(cb: &Cb) -> &mut T {
+pub(crate) unsafe fn get_rdata_t<T: CbContext, Cb: GetCb>(cb: &Cb) -> &T {
+	let rv_raw = cb.get_gcb().context as *mut T;
+	if !(*rv_raw).is_init() {
+		(*rv_raw).maybe_init();
+	}
+	&*rv_raw
+}
+/// Obtain a pointer to the driver instance from a cb
+/// 
+/// SAFETY: Caller must ensure that `T` is valid for the context paraneter of the Cb
+pub(crate) unsafe fn get_rdata_t_mut<T: CbContext, Cb: GetCb>(cb: &Cb) -> &mut T {
 	let rv = &mut *(cb.get_gcb().context as *mut T);
 	rv.maybe_init();
 	rv
@@ -71,7 +82,7 @@ pub(crate) unsafe fn get_rdata_t<T: CbContext, Cb: GetCb>(cb: &Cb) -> &mut T {
 /// 
 /// SAFETY: Caller must ensure that `cb` is a valid pointer, and that the context field points to a `T`
 pub(crate) unsafe fn set_channel_cb<T: CbContext>(cb: *mut crate::ffi::imc::udi_channel_event_cb_t) {
-	let slot = get_rdata_t::<T,_>(&*cb).channel_cb_slot();
+	let slot = get_rdata_t_mut::<T,_>(&*cb).channel_cb_slot();
 	if *slot != ::core::ptr::null_mut() {
 		// Uh-oh, 
 		panic!("Channel CB was already set");
@@ -82,7 +93,7 @@ pub(crate) unsafe fn set_channel_cb<T: CbContext>(cb: *mut crate::ffi::imc::udi_
 /// 
 /// SAFETY: Caller must ensure that `cb` is a valid pointer, and that the context field points to a `T`
 pub(crate) unsafe fn channel_event_complete<T: CbContext, Cb: GetCb>(cb: *mut Cb, status: crate::ffi::udi_status_t) {
-	let slot = get_rdata_t::<T,_>(&*cb).channel_cb_slot();
+	let slot = get_rdata_t_mut::<T,_>(&*cb).channel_cb_slot();
 	let channel_cb = ::core::mem::replace(slot, ::core::ptr::null_mut());
 	if channel_cb == ::core::ptr::null_mut() {
 		// Uh-oh, no channel CB set

@@ -58,7 +58,7 @@ pub trait Peripheral: 'static + crate::imc::ChannelInit + crate::async_trickery:
         as Future_unbind_ack
     );
     /// Release the CB used for an unbind request
-    fn unbind_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_scsi_bind_cb_t>) { let _ = cb; }
+    fn unbind_ret(&self, cb: crate::cb::CbHandle<ffi::udi_scsi_bind_cb_t>) { let _ = cb; }
     async_method!(
         /// Acknowledgement of successful IO
         fn io_ack(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_io_cb_t>)->() as Future_io_ack
@@ -69,14 +69,14 @@ pub trait Peripheral: 'static + crate::imc::ChannelInit + crate::async_trickery:
         as Future_io_nak
     );
     /// Release the CB used for an IO request
-    fn io_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_scsi_io_cb_t>) { let _ = cb; }
+    fn io_ret(&self, cb: crate::cb::CbHandle<ffi::udi_scsi_io_cb_t>) { let _ = cb; }
     async_method!(
         /// Handle completion of a control request
         fn ctl_ack(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_ctl_cb_t>, res: crate::Result<()>)->()
         as Future_ctl_ack
     );
     /// Release the CB used for an IO control
-    fn ctl_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_scsi_ctl_cb_t>) { let _ = cb; }
+    fn ctl_ret(&self, cb: crate::cb::CbHandle<ffi::udi_scsi_ctl_cb_t>) { let _ = cb; }
     async_method!(
         /// Handle an event
         fn event_ind(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_event_cb_t>)->()
@@ -114,7 +114,7 @@ pub trait Host: 'static + crate::imc::ChannelInit + crate::async_trickery::CbCon
         as Future_event_res
     );
     /// Return/release an event CB
-    fn event_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_scsi_event_cb_t>);
+    fn event_ret(&self, cb: crate::cb::CbHandle<ffi::udi_scsi_event_cb_t>);
 }
 
 

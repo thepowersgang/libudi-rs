@@ -89,7 +89,7 @@ pub trait Client: 'static + crate::imc::ChannelInit + crate::async_trickery::CbC
     );
 
     /// Release/return ownership of a now-unused transfer CB
-    fn xfer_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_gio_xfer_cb_t>);
+    fn xfer_ret(&self, cb: crate::cb::CbHandle<ffi::udi_gio_xfer_cb_t>);
 }
 struct MarkerClient;
 impl<T> crate::imc::ChannelHandler<MarkerClient> for T
@@ -173,7 +173,7 @@ pub trait Provider: 'static + crate::imc::ChannelInit + crate::async_trickery::C
         as Future_event_res
     );
     /// Return/relase an event CB
-    fn event_ret(&mut self, cb: crate::cb::CbHandle<ffi::udi_gio_event_cb_t>);
+    fn event_ret(&self, cb: crate::cb::CbHandle<ffi::udi_gio_event_cb_t>);
 }
 struct MarkerProvider;
 impl<T> crate::imc::ChannelHandler<MarkerProvider> for T
