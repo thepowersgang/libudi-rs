@@ -56,7 +56,7 @@ where
     fn signal_inner(gcb: *mut crate::ffi::udi_cb_t) {
         // SAFE: The GCB is valid (this function is private)
         unsafe {
-            crate::async_trickery::signal_waiter(&mut *gcb, crate::async_trickery::WaitRes::Data([0; 4]));
+            crate::async_trickery::signal_waiter(gcb, crate::async_trickery::WaitRes::Data([0; 4]));
         }
     }
 }
