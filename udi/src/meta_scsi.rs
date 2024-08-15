@@ -46,7 +46,7 @@ pub struct BindOpts
 pub trait Peripheral: 'static + crate::imc::ChannelInit + crate::async_trickery::CbContext
 {
     /// Obtain binding options to send to the host when binding
-    fn bind_opts(&mut self) -> BindOpts;
+    fn bind_opts(&self) -> BindOpts;
     async_method!(
         /// Acknowledgement of a successful binding
         fn bind_ack  (&'s self, cb: crate::cb::CbRef<'s, ffi::udi_scsi_bind_cb_t>, hd_timeout_increase: crate::Result<u32>)->()
@@ -123,7 +123,7 @@ impl<T> crate::imc::ChannelHandler<MarkerPeripheral> for T
 where
     T: Peripheral
 {
-    fn channel_bound(&mut self, params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
+    fn channel_bound(&self, params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
         unsafe {
             let cb = params.parent_bound.bind_cb as *mut ffi::udi_scsi_bind_cb_t;
             let opts = self.bind_opts();

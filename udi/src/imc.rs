@@ -113,10 +113,10 @@ pub trait ChannelHandler<Marker>: 'static + crate::async_trickery::CbContext + c
     }
     /// The channel has been bound to an endpoint, this must always call `udi_channel_event_complete` on `*self.channel_cb_slot()`
     /// eventually.
-    fn channel_bound(&mut self, params: &::udi_sys::imc::udi_channel_event_cb_t_params) {
+    fn channel_bound(&self, params: &::udi_sys::imc::udi_channel_event_cb_t_params) {
         let _ = params;
         let slot = self.channel_cb_slot();
-        let channel_cb = ::core::mem::replace(slot, ::core::ptr::null_mut());
+        let channel_cb = slot.replace(::core::ptr::null_mut());
         unsafe { crate::ffi::imc::udi_channel_event_complete(channel_cb, ::udi_sys::UDI_OK as _) }
     }
 }

@@ -13,7 +13,7 @@ pub struct ChildBind<Driver,ChildData>
 	pd: ::core::marker::PhantomData<Driver>,
 	/// Required inner for child channel context
 	inner: ::udi_sys::init::udi_child_chan_context_t,
-	channel_cb: *mut crate::ffi::imc::udi_channel_event_cb_t,
+	channel_cb: ::core::cell::Cell<*mut crate::ffi::imc::udi_channel_event_cb_t>,
 	// - Internal
 	is_init: bool,
 	child_data: ChildData,
@@ -67,8 +67,8 @@ where
 			self.is_init = true;
 		}
     }
-    fn channel_cb_slot(&mut self) -> &mut *mut ::udi_sys::imc::udi_channel_event_cb_t {
-        &mut self.channel_cb
+    fn channel_cb_slot(&self) -> &::core::cell::Cell<*mut ::udi_sys::imc::udi_channel_event_cb_t> {
+        &self.channel_cb
     }
     unsafe fn drop_in_place(&mut self) {
 		// A context can be bound to multiple channels

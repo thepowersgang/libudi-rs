@@ -157,7 +157,7 @@ where
     CbDef: CbDefinition,
 {
 	extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, new_cb: *mut crate::ffi::udi_cb_t) {
-		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(new_cb as *mut ())); }
+		unsafe { crate::async_trickery::signal_waiter(gcb, crate::WaitRes::Pointer(new_cb as *mut ())); }
 	}
     let (with_buf,buf_size,path_handle,) = match buffer {
         None => (::udi_sys::FALSE, 0, ::udi_sys::buf::UDI_NULL_PATH_BUF),

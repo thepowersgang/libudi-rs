@@ -247,7 +247,7 @@ pub enum MgmtOp
 #[fundamental]
 pub struct RData<T> {
     init_context: ::udi_sys::init::udi_init_context_t,
-	channel_cb: *mut ::udi_sys::imc::udi_channel_event_cb_t,
+	channel_cb: ::core::cell::Cell<*mut ::udi_sys::imc::udi_channel_event_cb_t>,
 	// NOTE: According to the docs on `udi_primary_init_info_t`, this structure is null-initialised.
 	// So, this field will be `false` on first use
 	// Needed because `usage_ind` can be called multiple times
@@ -275,8 +275,8 @@ where
 			self.is_init = true;
 		}
 	}
-    fn channel_cb_slot(&mut self) -> &mut *mut ::udi_sys::imc::udi_channel_event_cb_t {
-        &mut self.channel_cb
+    fn channel_cb_slot(&self) -> &::core::cell::Cell<*mut ::udi_sys::imc::udi_channel_event_cb_t> {
+        &self.channel_cb
     }
     unsafe fn drop_in_place(&mut self) {
 		// Do nothing, this is not a channel context

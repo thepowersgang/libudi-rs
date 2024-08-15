@@ -398,7 +398,7 @@ impl<T> crate::imc::ChannelHandler<MarkerNsrControl> for T
 where
     T: NsrControl
 {
-    fn channel_bound(&mut self, params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
+    fn channel_bound(&self, params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
         // SAFE: We're assuming that the channel is being correctly bound to a parent
         unsafe {
             // Start a UDI async using the bind CB

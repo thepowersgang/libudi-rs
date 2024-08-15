@@ -92,7 +92,7 @@ impl<T> crate::imc::ChannelHandler<MarkerBusDevice> for T
 where
     T: BusDevice,
 {
-    fn channel_bound(&mut self, params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
+    fn channel_bound(&self, params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
         // SAFE: Trusting that this trait is only being used through proper config.
         unsafe {
             crate::ffi::meta_bridge::udi_bus_bind_req(params.parent_bound.bind_cb as *mut udi_bus_bind_cb_t);

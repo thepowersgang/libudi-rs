@@ -96,7 +96,7 @@ impl<T> crate::imc::ChannelHandler<MarkerClient> for T
 where
     T: Client
 {
-    fn channel_bound(&mut self, params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
+    fn channel_bound(&self, params: &crate::ffi::imc::udi_channel_event_cb_t_params) {
         unsafe {
             let cb = params.parent_bound.bind_cb as *mut ffi::udi_gio_bind_cb_t;
             ffi::udi_gio_bind_req(cb)

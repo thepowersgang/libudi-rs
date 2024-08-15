@@ -38,11 +38,11 @@ pub trait MetalangCbHandler
     fn size(&self) -> usize;
 
     /// Gets a pointer to the contained buffer, if there is one
-    unsafe fn get_buffer<'a>(&self, cb: &'a mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::udi_buf_t> { let _ = cb; None }
+    unsafe fn get_buffer<'a>(&self, cb: &'a *mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::udi_buf_t> { let _ = cb; None }
     /// Obtain a pointer to the inline data pointer present in the CB, if there is one.
-    unsafe fn get_inline_data<'a>(&self, cb: &'a mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::c_void> { let _ = cb; None }
+    unsafe fn get_inline_data<'a>(&self, cb: &'a *mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::c_void> { let _ = cb; None }
     /// Gets a pointer to a CB pointer used to chain CBs together, otherwise `initiator_context` is used
-    unsafe fn get_chain<'a>(&self, cb: &'a mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::udi_cb_t> { let _ = cb; None }
+    unsafe fn get_chain<'a>(&self, cb: &'a *mut crate::ffi::udi_cb_t) -> Option<&'a mut *mut crate::ffi::udi_cb_t> { let _ = cb; None }
 }
 /// Trait for to hold a CB's metalanguage number
 /// 
@@ -93,20 +93,20 @@ macro_rules! impl_metalanguage
                             ::core::mem::size_of::<$cb_ty>()
                         }
                         $(
-                        unsafe fn get_buffer<'a>(&self, cb: &'a mut $crate::ffi::udi_cb_t) -> Option<&'a mut *mut $crate::ffi::udi_buf_t> {
-                            let cb = &mut *(cb as *mut $crate::ffi::udi_cb_t as *mut $cb_ty);
+                        unsafe fn get_buffer<'a>(&self, cb: &'a *mut $crate::ffi::udi_cb_t) -> Option<&'a mut *mut $crate::ffi::udi_buf_t> {
+                            let cb = &mut *(*cb as *mut $crate::ffi::udi_cb_t as *mut $cb_ty);
                             Some(&mut cb.$buf_fld)
                         }
                         )?
                         $(
-                        unsafe fn get_inline_data<'a>(&self, cb: &'a mut $crate::ffi::udi_cb_t) -> Option<&'a mut *mut $crate::ffi::c_void> {
-                            let cb = &mut *(cb as *mut $crate::ffi::udi_cb_t as *mut $cb_ty);
+                        unsafe fn get_inline_data<'a>(&self, cb: &'a *mut $crate::ffi::udi_cb_t) -> Option<&'a mut *mut $crate::ffi::c_void> {
+                            let cb = &mut *(*cb as *mut $crate::ffi::udi_cb_t as *mut $cb_ty);
                             Some(&mut cb.$inline_data_fld)
                         }
                         )?
                         $(
-                        unsafe fn get_chain<'a>(&self, cb: &'a mut $crate::ffi::udi_cb_t) -> Option<&'a mut *mut $crate::ffi::udi_cb_t> {
-                            let cb = &mut *(cb as *mut $crate::ffi::udi_cb_t as *mut $cb_ty);
+                        unsafe fn get_chain<'a>(&self, cb: &'a *mut $crate::ffi::udi_cb_t) -> Option<&'a mut *mut $crate::ffi::udi_cb_t> {
+                            let cb = &mut *(*cb as *mut $crate::ffi::udi_cb_t as *mut $cb_ty);
                             Some(&mut *( &mut cb.$chain_fld as *mut *mut $cb_ty as *mut *mut $crate::ffi::udi_cb_t))
                         }
                         )?

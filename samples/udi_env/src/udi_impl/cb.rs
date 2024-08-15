@@ -102,19 +102,19 @@ fn alloc_internal(
 
         // Buffer allocation
         if let Some((buf_size, buf_path)) = buf_info {
-            let dst = cb_spec.get_buffer(&mut *rv).expect("Buffer allocation requested, but no buffer available");
+            let dst = cb_spec.get_buffer(&rv).expect("Buffer allocation requested, but no buffer available");
             *dst = crate::udi_impl::buf::allocate(buf_size, buf_path);
         }
         
         // Inline data allocation
         if let Some((alloc_size, _alloc_layout)) = inline_info {
-            let dst = cb_spec.get_inline_data(&mut *rv).expect("No inline data present");
+            let dst = cb_spec.get_inline_data(&rv).expect("No inline data present");
             *dst = ::libc::calloc(1, alloc_size);
         }
 
         // Chained CBs, handles a null layout
         if let Some(chain_cb) = chain {
-            if let Some(dst) = cb_spec.get_chain(&mut *rv) {
+            if let Some(dst) = cb_spec.get_chain(&rv) {
                 *dst = chain_cb as _;
             }
             else {
