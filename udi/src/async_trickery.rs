@@ -82,7 +82,7 @@ pub(crate) unsafe fn get_rdata_t_mut<T: CbContext, Cb: GetCb>(cb: &Cb) -> &mut T
 /// 
 /// SAFETY: Caller must ensure that `cb` is a valid pointer, and that the context field points to a `T`
 pub(crate) unsafe fn set_channel_cb<T: CbContext>(cb: *mut crate::ffi::imc::udi_channel_event_cb_t) {
-	let slot = get_rdata_t_mut::<T,_>(&*cb).channel_cb_slot();
+	let slot = get_rdata_t::<T,_>(&*cb).channel_cb_slot();
 	if slot.get() != ::core::ptr::null_mut() {
 		// Uh-oh, 
 		panic!("Channel CB was already set");
@@ -93,7 +93,7 @@ pub(crate) unsafe fn set_channel_cb<T: CbContext>(cb: *mut crate::ffi::imc::udi_
 /// 
 /// SAFETY: Caller must ensure that `cb` is a valid pointer, and that the context field points to a `T`
 pub(crate) unsafe fn channel_event_complete<T: CbContext, Cb: GetCb>(cb: *mut Cb, status: crate::ffi::udi_status_t) {
-	let slot = get_rdata_t_mut::<T,_>(&*cb).channel_cb_slot();
+	let slot = get_rdata_t::<T,_>(&*cb).channel_cb_slot();
 	let channel_cb = slot.replace(::core::ptr::null_mut());
 	if channel_cb == ::core::ptr::null_mut() {
 		// Uh-oh, no channel CB set
