@@ -30,7 +30,8 @@ pub(crate) enum WaitRes {
 	//Unit,
 	Pointer(*mut ()),
 	PointerResult(crate::Result<*mut ()>),
-	Data([usize; 4]),
+	Data3PI([*mut (); 3], usize),
+	DataP3I(*mut (), [usize; 3]),
 }
 
 /// Initialise a task

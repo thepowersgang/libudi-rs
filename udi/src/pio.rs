@@ -84,7 +84,7 @@ pub fn trans<'a>(
 	mem_ptr: Option<MemPtr<'a>>
 	) -> impl ::core::future::Future<Output=Result<u16,crate::Error>> + 'a {
 	extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, new_buf: *mut crate::ffi::udi_buf_t, status: crate::ffi::udi_status_t, result: u16) {
-		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Data([new_buf as usize, status as usize, result as usize, 0])); }
+		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::DataP3I(new_buf as _, [status as usize, result as usize, 0])); }
 	}
 	let buf_ptr = match buf { Some(ref mut v) => v.to_raw(), None => ::core::ptr::null_mut() };
 	crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
@@ -99,12 +99,12 @@ pub fn trans<'a>(
 			)
 			},
 		|res| {
-			let crate::WaitRes::Data([new_buf, status, result, ..]) = res else { panic!(""); };
+			let crate::WaitRes::DataP3I(new_buf, [status, result, ..]) = res else { panic!(""); };
 			if let Some(buf) = buf {
 				// SAFE: Trusting the environment
 				unsafe { buf.update_from_raw(new_buf as *mut _); }
 			}
-			crate::Error::from_status(status as crate::ffi::udi_status_t).map(|()| result as u16)
+			crate::Error::from_status(status as crate::ffi::udi_status_t).map(|()| result as usize as u16)
 			}
 		)
 }

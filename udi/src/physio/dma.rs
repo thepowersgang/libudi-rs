@@ -261,9 +261,10 @@ impl DmaBuf {
         flags: u8
     ) -> impl Future<Output=crate::Result<(ScGth,bool)>> + 'a {
         unsafe extern "C" fn callback(gcb: *mut ::udi_sys::udi_cb_t, scgth: *mut ffi::udi_scgth_t, complete: ::udi_sys::udi_boolean_t, status: ::udi_sys::udi_status_t) {
-            let res = crate::async_trickery::WaitRes::Data([
-                status as _,
+            let res = crate::async_trickery::WaitRes::DataP3I(
                 scgth as _,
+                [
+                status as _,
                 complete.0 as _,
                 0,
             ]);
@@ -272,7 +273,7 @@ impl DmaBuf {
         crate::async_trickery::wait_task(gcb,
             move |gcb| unsafe { ::udi_sys::physio::udi_dma_buf_map(callback, gcb, self.handle.0, buf, offset, len, flags) },
             |res| {
-                let crate::async_trickery::WaitRes::Data([status, scgth, is_complete, ..]) = res else { panic!() };
+                let crate::async_trickery::WaitRes::DataP3I(scgth, [status, is_complete, ..]) = res else { panic!() };
                 crate::Error::from_status(status as _)
                     .map(|()| (ScGth::from_raw(scgth as _), is_complete != 0))
                 },
@@ -374,14 +375,15 @@ impl DmaAlloc {
                 let actual_gap = if single_element.to_bool() { 0 } else { actual_gap };
                 // Make sure that we can hackily fit two flag bits in here
                 assert!(actual_gap <= usize::MAX >> 2);
-                let res = crate::async_trickery::WaitRes::Data([
-                    new_ptr as usize,
-                    mem_ptr as usize,
-                    scgth as usize,
+                let res = crate::async_trickery::WaitRes::Data3PI([
+                    new_ptr as _,
+                    mem_ptr as _,
+                    scgth as _,
+                    ],
                     (actual_gap as usize) << 2
                     | if single_element.to_bool() { 1 << 0 } else { 0 }
                     | if must_swap.to_bool() { 1 << 1 } else { 0 }
-                ]);
+                );
                 crate::async_trickery::signal_waiter(&mut *gcb, res)
             }
             unsafe extern "C" fn callback_single(
@@ -393,13 +395,14 @@ impl DmaAlloc {
                 scgth: *mut ffi::udi_scgth_t,
                 must_swap: ::udi_sys::udi_boolean_t,
             ) {
-                let res = crate::async_trickery::WaitRes::Data([
-                    new_ptr as usize,
-                    mem_ptr as usize,
-                    scgth as usize,
+                let res = crate::async_trickery::WaitRes::Data3PI([
+                    new_ptr as _,
+                    mem_ptr as _,
+                    scgth as _,
+                    ],
                     0
                     | if must_swap.to_bool() { 1 << 1 } else { 0 }
-                ]);
+                );
                 crate::async_trickery::signal_waiter(&mut *gcb, res);
             }
             // Use a simpler callback when allocating a single element
@@ -409,7 +412,7 @@ impl DmaAlloc {
                     ::udi_sys::physio::udi_dma_mem_alloc(callback, gcb, constraints.0, flags, nelements, element_size, max_gap)
                 },
                 |res| {
-                    let crate::async_trickery::WaitRes::Data([new_ptr, mem_ptr, scgth, gap_flags]) = res else { panic!() };
+                    let crate::async_trickery::WaitRes::Data3PI([new_ptr, mem_ptr, scgth], gap_flags) = res else { panic!() };
                     let single_element = gap_flags & 1 != 0;
                     let must_swap = gap_flags & 2 != 0;
                     let gap_size = gap_flags >> 2;
