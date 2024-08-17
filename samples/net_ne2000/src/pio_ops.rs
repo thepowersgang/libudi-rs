@@ -216,7 +216,7 @@ LABEL 2;
     STORE.S R7, R6;  // Saved tuple of Status,Next
     SHIFT_RIGHT.S R7, 8;    // Get `Next` from that tuple
     LOAD_IMM.B R0, 0;
-    STORE.S [mem R0], R7; // Store in `rx_next_page`
+    STORE.B [mem R0], R7; // Store in `rx_next_page`
 
     END.S R4;   // End with packet length
 }
