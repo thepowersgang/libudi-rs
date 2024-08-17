@@ -38,8 +38,8 @@ pub fn map(
 	serialization_domain: crate::ffi::udi_index_t,
 ) -> impl ::core::future::Future<Output=Handle>
 {
-	extern "C" fn cb_pio_map(gcb: *mut crate::ffi::udi_cb_t, handle: crate::ffi::pio::udi_pio_handle_t) {
-		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }
+	unsafe extern "C" fn cb_pio_map(gcb: *mut crate::ffi::udi_cb_t, handle: crate::ffi::pio::udi_pio_handle_t) {
+		unsafe { crate::async_trickery::signal_waiter(gcb, crate::WaitRes::Pointer(handle as *mut ())); }
 	}
 	// TODO: Is there a way to call the FFI function outside of the future?
 	// - When this is run, we're already in execution - so should be able to get the gcb
@@ -83,8 +83,8 @@ pub fn trans<'a>(
 	mut buf: Option<&'a mut crate::buf::Handle>,
 	mem_ptr: Option<MemPtr<'a>>
 	) -> impl ::core::future::Future<Output=Result<u16,crate::Error>> + 'a {
-	extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, new_buf: *mut crate::ffi::udi_buf_t, status: crate::ffi::udi_status_t, result: u16) {
-		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::DataP3I(new_buf as _, [status as usize, result as usize, 0])); }
+	unsafe extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, new_buf: *mut crate::ffi::udi_buf_t, status: crate::ffi::udi_status_t, result: u16) {
+		unsafe { crate::async_trickery::signal_waiter(gcb, crate::WaitRes::DataP3I(new_buf as _, [status as usize, result as usize, 0])); }
 	}
 	let buf_ptr = match buf { Some(ref mut v) => v.to_raw(), None => ::core::ptr::null_mut() };
 	crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(

@@ -50,7 +50,7 @@ impl DmaConstraints
     {
         unsafe extern "C" fn callback(gcb: *mut ::udi_sys::udi_cb_t, new_ptr: udi_dma_constraints_t, status: ::udi_sys::udi_status_t) {
             let res = crate::Error::from_status(status).map(|()| new_ptr as _);
-            crate::async_trickery::signal_waiter(&mut *gcb, crate::async_trickery::WaitRes::PointerResult(res))
+            crate::async_trickery::signal_waiter(gcb, crate::async_trickery::WaitRes::PointerResult(res))
         }
         let src_constraints = self.0;
         crate::async_trickery::wait_task(
@@ -144,7 +144,7 @@ impl DmaHandle {
         dir: Direction,
     ) -> impl Future<Output=()> + 'a {
         unsafe extern "C" fn callback(gcb: *mut ::udi_sys::udi_cb_t) {
-            crate::async_trickery::signal_waiter(&mut *gcb, crate::async_trickery::WaitRes::Pointer(0 as _))
+            crate::async_trickery::signal_waiter(gcb, crate::async_trickery::WaitRes::Pointer(0 as _))
         }
         crate::async_trickery::wait_task(gcb,
             move |gcb| unsafe {
@@ -158,7 +158,7 @@ impl DmaHandle {
     /// Synchronise between driver and device views of the scatter-gather list
     pub fn scgth_sync<'a>(&'a self, gcb: crate::cb::CbRef<::udi_sys::udi_cb_t>) -> impl Future<Output=()> + 'a {
         unsafe extern "C" fn callback(gcb: *mut ::udi_sys::udi_cb_t) {
-            crate::async_trickery::signal_waiter(&mut *gcb, crate::async_trickery::WaitRes::Pointer(0 as _))
+            crate::async_trickery::signal_waiter(gcb, crate::async_trickery::WaitRes::Pointer(0 as _))
         }
         crate::async_trickery::wait_task(gcb,
             move |gcb| unsafe {
@@ -196,7 +196,7 @@ impl DmaBuf {
             Some(d) => d.to_flags(),
         };
         unsafe extern "C" fn callback(gcb: *mut ::udi_sys::udi_cb_t, new_ptr: udi_dma_handle_t) {
-            crate::async_trickery::signal_waiter(&mut *gcb, crate::async_trickery::WaitRes::Pointer(new_ptr as _))
+            crate::async_trickery::signal_waiter(gcb, crate::async_trickery::WaitRes::Pointer(new_ptr as _))
         }
         crate::async_trickery::wait_task(gcb,
             move |gcb| unsafe { ::udi_sys::physio::udi_dma_prepare(callback, gcb, constraints.0, flags) },
@@ -268,7 +268,7 @@ impl DmaBuf {
                 complete.0 as _,
                 0,
             ]);
-            crate::async_trickery::signal_waiter(&mut *gcb, res)
+            crate::async_trickery::signal_waiter(gcb, res)
         }
         crate::async_trickery::wait_task(gcb,
             move |gcb| unsafe { ::udi_sys::physio::udi_dma_buf_map(callback, gcb, self.handle.0, buf, offset, len, flags) },
@@ -384,7 +384,7 @@ impl DmaAlloc {
                     | if single_element.to_bool() { 1 << 0 } else { 0 }
                     | if must_swap.to_bool() { 1 << 1 } else { 0 }
                 );
-                crate::async_trickery::signal_waiter(&mut *gcb, res)
+                crate::async_trickery::signal_waiter(gcb, res)
             }
             unsafe extern "C" fn callback_single(
                 gcb: *mut ::udi_sys::udi_cb_t,
@@ -403,7 +403,7 @@ impl DmaAlloc {
                     0
                     | if must_swap.to_bool() { 1 << 1 } else { 0 }
                 );
-                crate::async_trickery::signal_waiter(&mut *gcb, res);
+                crate::async_trickery::signal_waiter(gcb, res);
             }
             // Use a simpler callback when allocating a single element
             let callback = if nelements == 1 { callback_single } else { callback };

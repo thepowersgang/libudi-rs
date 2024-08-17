@@ -56,7 +56,7 @@ unsafe extern "C" fn alloc_callback(gcb: *mut ::udi_sys::udi_cb_t, mut new_mem: 
     if new_mem.is_null() {
         new_mem = 0x1000 as *mut ::udi_sys::c_void;
     }
-    crate::async_trickery::signal_waiter(&mut *gcb, crate::async_trickery::WaitRes::Pointer(new_mem as _))
+    crate::async_trickery::signal_waiter(gcb, crate::async_trickery::WaitRes::Pointer(new_mem as _))
 }
 
 /// Allocate a single instance of a type

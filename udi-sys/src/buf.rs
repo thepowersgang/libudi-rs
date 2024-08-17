@@ -8,8 +8,8 @@ extern "C" {
 pub type udi_buf_path_t = *mut udi_buf_path_s;
 pub const UDI_NULL_PATH_BUF: udi_buf_path_t = ::core::ptr::null_mut();
 
-pub type udi_buf_copy_call_t = extern "C" fn(gcb: *mut udi_cb_t, new_dst_buf: *mut udi_buf_t);
-pub type udi_buf_write_call_t = extern "C" fn(gcb: *mut udi_cb_t, new_dst_buf: *mut udi_buf_t);
+pub type udi_buf_copy_call_t = unsafe extern "C" fn(gcb: *mut udi_cb_t, new_dst_buf: *mut udi_buf_t);
+pub type udi_buf_write_call_t = unsafe extern "C" fn(gcb: *mut udi_cb_t, new_dst_buf: *mut udi_buf_t);
 pub type udi_buf_path_alloc_call_t = unsafe extern "C" fn(gcb: *mut udi_cb_t, new_buf_path: udi_buf_path_t);
 pub type udi_buf_tag_set_call_t = unsafe extern "C" fn(gcb: *mut udi_cb_t, new_buf: *mut udi_buf_t);
 pub type udi_buf_tag_set_apply_t = unsafe extern "C" fn(gcb: *mut udi_cb_t, new_buf: *mut udi_buf_t);

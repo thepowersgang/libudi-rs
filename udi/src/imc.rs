@@ -81,8 +81,8 @@ pub unsafe fn channel_spawn_ex(
     ops_idx: ::udi_sys::udi_index_t,
     channel_context: *mut ::core::ffi::c_void
 ) -> impl ::core::future::Future<Output=::udi_sys::udi_channel_t> {
-	extern "C" fn callback(gcb: *mut ::udi_sys::udi_cb_t, handle: ::udi_sys::udi_channel_t) {
-		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }
+	unsafe extern "C" fn callback(gcb: *mut ::udi_sys::udi_cb_t, handle: ::udi_sys::udi_channel_t) {
+		unsafe { crate::async_trickery::signal_waiter(gcb, crate::WaitRes::Pointer(handle as *mut ())); }
 	}
 	crate::async_trickery::wait_task::<::udi_sys::udi_cb_t, _,_,_>(
         cb,

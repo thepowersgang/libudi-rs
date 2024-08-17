@@ -132,8 +132,8 @@ where
     CbDef: CbDefinition,
     CbDef::Cb: crate::async_trickery::GetCb
 {
-	extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, new_cb: *mut crate::ffi::udi_cb_t) {
-		unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(new_cb as *mut ())); }
+	unsafe extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, new_cb: *mut crate::ffi::udi_cb_t) {
+		unsafe { crate::async_trickery::signal_waiter(gcb, crate::WaitRes::Pointer(new_cb as *mut ())); }
 	}
 	crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(
         cb,

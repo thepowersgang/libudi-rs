@@ -227,8 +227,8 @@ impl Handle
         }
     }
 
-    extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, handle: *mut udi_buf_t) {
-        unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }
+    unsafe extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, handle: *mut udi_buf_t) {
+        unsafe { crate::async_trickery::signal_waiter(gcb, crate::WaitRes::Pointer(handle as *mut ())); }
     }
     fn cb_update(&mut self) -> impl FnOnce(crate::async_trickery::WaitRes) + '_ {
         move |res| {
@@ -315,7 +315,8 @@ impl Path
     /// Create a new path handle
     pub fn new(gcb: crate::CbRef<crate::ffi::udi_cb_t>) -> impl Future<Output=Path> {
         unsafe extern "C" fn callback(gcb: *mut crate::ffi::udi_cb_t, handle: udi_buf_path_t) {
-            unsafe { crate::async_trickery::signal_waiter(&mut *gcb, crate::WaitRes::Pointer(handle as *mut ())); }
+            // SAFE: Private function, gcb assumed valid
+            unsafe { crate::async_trickery::signal_waiter(gcb, crate::WaitRes::Pointer(handle as *mut ())); }
         }
 
         crate::async_trickery::wait_task::<crate::ffi::udi_cb_t, _,_,_>(

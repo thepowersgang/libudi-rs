@@ -2,8 +2,8 @@
 use super::*;
 
 pub type udi_pio_handle_t = *mut udi_pio_handle_s;
-pub type udi_pio_map_call_t = extern "C" fn(gcb: *mut udi_cb_t, new_pio_handle: udi_pio_handle_t);
-pub type udi_pio_trans_call_t = extern "C" fn(gcb: *mut udi_cb_t, new_buf: *mut udi_buf_t, status: udi_status_t, result: u16);
+pub type udi_pio_map_call_t = unsafe extern "C" fn(gcb: *mut udi_cb_t, new_pio_handle: udi_pio_handle_t);
+pub type udi_pio_trans_call_t = unsafe extern "C" fn(gcb: *mut udi_cb_t, new_buf: *mut udi_buf_t, status: udi_status_t, result: u16);
 
 
 extern "C" {
