@@ -154,6 +154,13 @@ impl crate::cb::CbHandle<ffi::udi_nic_tx_cb_t>
         unsafe { crate::buf::Handle::from_mut( &mut self.get_mut().tx_buf ) }
     }
 }
+impl crate::cb::CbRef<'_, ffi::udi_nic_tx_cb_t>
+{
+    /// Get a reference to the buffer
+    pub fn tx_buf_ref(&self) -> &crate::buf::Handle {
+        unsafe { crate::buf::Handle::from_ref( &self.tx_buf ) }
+    }
+}
 
 impl crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>
 {
@@ -192,6 +199,14 @@ impl crate::cb::CbHandle<ffi::udi_nic_rx_cb_t>
     }
 
     //pub fn set_rx_status(&mut self, 
+}
+
+impl CbRefNicRx<'_>
+{
+    /// Get a reference to the buffer
+    pub fn rx_buf_ref(&self) -> &crate::buf::Handle {
+        unsafe { crate::buf::Handle::from_ref( &self.rx_buf ) }
+    }
 }
 
 /// A FIFO queue of RX CBs
@@ -584,13 +599,15 @@ map_ops_structure!{
 pub unsafe trait NsrRx: 'static + crate::async_trickery::CbContext + crate::imc::ChannelInit {
     async_method!{
         /// Indication of a received packet
-        fn rx_ind(&'a self, cb: CbHandleNicRx)->() as Future_rx_ind
+        fn rx_ind(&'a self, cb: CbRefNicRx<'a>)->() as Future_rx_ind
     }
     async_method!(
         /// Indication of a newly recivied packet that should be processed in an expedited manner
-        fn exp_rx_ind(&'a self, cb: CbHandleNicRx)->()
+        fn exp_rx_ind(&'a self, cb: CbRefNicRx<'a>)->()
         as Future_exp_rx_ind
     );
+    /// Return the CB to either the ND or release it
+    fn rx_cb_ret(&self, cb: CbHandleNicRx);
 }
 struct MarkerNsrRx;
 impl<T> crate::imc::ChannelHandler<MarkerNsrRx> for T
@@ -599,12 +616,16 @@ where
 {
 }
 future_wrapper!(nsr_rx_ind_op => <T as NsrRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
-    // SAFE: Trait is unsafe
-    val.rx_ind( unsafe { cb.into_owned() } )
+    val.rx_ind(cb)
+} finally( () ) {
+    // SAFE: CB is valid
+    val.rx_cb_ret(unsafe { CbHandleNicRx::from_raw(cb) });
 });
 future_wrapper!(nsr_exp_rx_ind_op => <T as NsrRx>(cb: *mut ffi::udi_nic_rx_cb_t) val @ {
-    // SAFE: Trait is unsafe
-    val.exp_rx_ind( unsafe { cb.into_owned() } )
+    val.exp_rx_ind(cb)
+} finally( () ) {
+    // SAFE: CB is valid
+    val.rx_cb_ret(unsafe { CbHandleNicRx::from_raw(cb) });
 });
 map_ops_structure!{
     ffi::udi_nsr_rx_ops_t => NsrRx,MarkerNsrRx {

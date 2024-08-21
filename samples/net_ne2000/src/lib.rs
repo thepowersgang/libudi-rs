@@ -345,6 +345,7 @@ unsafe impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 				}
 			}
 			if let Some(cb) = rv {
+				// TODO: Is there a risk that `scratch` is resized here?
 				::udi::meta_nic::nsr_tx_rdy(cb);
 			}
 		}
