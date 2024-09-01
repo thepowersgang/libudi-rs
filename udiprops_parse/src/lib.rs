@@ -125,6 +125,7 @@ pub fn create_module_body(outfp: &mut dyn ::std::io::Write, props: &[String], em
         meta_bindings: HashMap<&'p udi_index_t,&'p str>,
         regions: HashMap<&'p udi_index_t,()>,
         messages: HashMap<&'p parsed::MsgNum,(&'p str, Vec<&'static str>)>,
+        unused_idx: usize,
     }
     impl<'a,'p> State<'a,'p> {
         pub fn check_metalang(&mut self, linename: &'static str, meta_idx: &udi_index_t) -> ::std::io::Result<()> {
@@ -137,6 +138,9 @@ pub fn create_module_body(outfp: &mut dyn ::std::io::Write, props: &[String], em
             if let None = self.messages.get(message) {
                 writeln!(self.outfp, r#"compile_error!("`{linename}` references undefined message {:?}");"#, message)?;
             }
+            // Emit a usage of this message, to remove the dead-code warning
+            writeln!(self.outfp, "#[allow(dead_code)] static _MSGREF_{unused_idx}: () = {{ let _ = Msg{message}; }};", unused_idx=self.unused_idx, message=message.0)?;
+            self.unused_idx += 1;
             Ok( () )
         }
     }
@@ -156,6 +160,7 @@ pub fn create_module_body(outfp: &mut dyn ::std::io::Write, props: &[String], em
         meta_bindings: Default::default(),
         regions: Default::default(),
         messages: Default::default(),
+        unused_idx: 0,
     };
 	for ent in parsed.iter()
 	{
