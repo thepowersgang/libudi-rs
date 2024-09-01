@@ -72,6 +72,7 @@ unsafe extern "C" fn udi_channel_event_complete(cb: *mut udi_channel_event_cb_t,
     ::udi::ffi::imc::UDI_CHANNEL_BOUND => {
         let instance = crate::channels::get_driver_instance(&(*cb).gcb.channel);
         instance.management_state.bind_complete(&instance, cb, ::udi::Error::from_status(status));
+        ::udi::ffi::cb::udi_cb_free(::core::ptr::addr_of_mut!( (*cb).gcb ));
         },
     _ => todo!("udi_channel_event_complete({})", (*cb).event),
     }
