@@ -99,7 +99,7 @@ fn main() {
     let mut task_idx = 0;
     let mut actions = ::udi_environment::emulated_devices::Actions::default();
     loop {
-        println!("--- LOOP ---");
+        println!("--- LOOP ({} actions) ---", actions.len());
         let mut action_happened = false;
         let mut new_instances = Vec::new();
 

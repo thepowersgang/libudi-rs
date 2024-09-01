@@ -9,6 +9,9 @@ impl Actions
     pub fn is_empty(&self) -> bool {
         self.actions.is_empty()
     }
+    pub fn len(&self) -> usize {
+        self.actions.len()
+    }
     pub fn push(&mut self, name: &str, data: &[u8]) {
         self.actions.push((name.to_owned(), data.to_owned()));
     }
