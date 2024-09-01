@@ -534,7 +534,7 @@ fn mod_inc(v: &::core::cell::Cell<u8>, max: u8) {
 }
 
 #[cfg(not(rust_analyzer))]
-#[cfg(false_)]
+#[cfg(any())]
 mod _panic {
 	#[panic_handler]
 	fn panic_handler(_h: &::core::panic::PanicInfo) -> !
