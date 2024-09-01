@@ -93,11 +93,7 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
             match cb.op
             {
             ::udi::ffi::meta_gio::UDI_GIO_OP_READ => {
-                // Signal the drivers
-                let buf = cb.data_buf();
-                let mut data = vec![0; buf.len()];
-                buf.read(0, &mut data);
-                println!("xfer_ack - RX {:02x?}", data);
+                self.handle_read(cb.data_buf(), false).await;
                 },
             ::udi::ffi::meta_gio::UDI_GIO_OP_WRITE => {},
             _ => todo!("xfer_ack - Unknown operation: {:#x}", cb.op),
@@ -106,11 +102,17 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
     }
 
     type Future_xfer_nak<'s> = impl ::core::future::Future<Output=()>;
-    fn xfer_nak<'s>(&'s self, _cb: ::udi::cb::CbRef<'s, ::udi::ffi::meta_gio::udi_gio_xfer_cb_t>, res: ::udi::Result<()>) -> Self::Future_xfer_nak<'s> {
+    fn xfer_nak<'s>(&'s self, cb: ::udi::cb::CbRef<'s, ::udi::ffi::meta_gio::udi_gio_xfer_cb_t>, res: ::udi::Result<()>) -> Self::Future_xfer_nak<'s> {
         async move {
             match res {
             Ok(_) => {},
-            Err(e) => println!("xfer_nak - Error {:?}", e),
+            Err(e) if e.into_inner() == ::udi::ffi::UDI_STAT_DATA_UNDERRUN as _ && cb.op == ::udi::ffi::meta_gio::UDI_GIO_OP_READ => {
+                // Signal the drivers
+                self.handle_read(cb.data_buf(), true).await;
+                },
+            Err(e) => {
+                println!("xfer_nak - Error {:?}", e)
+                },
             }
         }
     }
@@ -131,6 +133,14 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
 
             }
         }
+    }
+}
+
+impl Driver {
+    async fn handle_read(&self, buf: &::udi::buf::Handle, is_underrun: bool) {
+        let mut data = vec![0; buf.len()];
+        buf.read(0, &mut data);
+        println!("RX{} - {:02x?}", if is_underrun { " (underrun)" } else { "" }, data);
     }
 }
 
