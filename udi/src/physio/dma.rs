@@ -221,7 +221,7 @@ impl DmaBuf {
         buf: crate::buf::Handle,
         range: impl ::core::ops::RangeBounds<usize>,
         dir: Direction,
-    ) -> impl Future<Output=crate::Result<(ScGth,bool)>> + 'a {
+    ) -> impl Future<Output=crate::Result<(ScGth<'a>,bool)>> + 'a {
         let (offset, len) = range_to_ofs_len(buf.len(), range);
         let flags = 0
             | dir.to_flags()
@@ -243,7 +243,7 @@ impl DmaBuf {
         &'a mut self,
         gcb: crate::cb::CbRef<::udi_sys::udi_cb_t>,
         rewind: bool
-    ) -> impl Future<Output=crate::Result<(ScGth,bool)>> + 'a {
+    ) -> impl Future<Output=crate::Result<(ScGth<'a>,bool)>> + 'a {
         let Some( (buf, offset, len, flags) ) = self.cur_buf else {
             panic!("Incorrect call to `buf_map_continue` without a previous call to `buf_map`");
         };
@@ -259,7 +259,7 @@ impl DmaBuf {
         buf: *mut ::udi_sys::udi_buf_t,
         offset: usize, len: usize,
         flags: u8
-    ) -> impl Future<Output=crate::Result<(ScGth,bool)>> + 'a {
+    ) -> impl Future<Output=crate::Result<(ScGth<'a>,bool)>> + 'a {
         unsafe extern "C" fn callback(gcb: *mut ::udi_sys::udi_cb_t, scgth: *mut ffi::udi_scgth_t, complete: ::udi_sys::udi_boolean_t, status: ::udi_sys::udi_status_t) {
             let res = crate::async_trickery::WaitRes::DataP3I(
                 scgth as _,
@@ -440,7 +440,7 @@ impl DmaAlloc {
     }
 
     /// Get access to the scatter-gather list
-    pub fn scgth(&self) -> &ScGth {
+    pub fn scgth(&self) -> &'_ ScGth<'static> {
         &self.scgth
     }
 
@@ -485,7 +485,7 @@ impl<'a> ScGth<'a> {
         ScGth(&*p)
     }
     /// Get the raw scatter-gather table data
-    pub fn raw_entries(&self) -> ScgthRaw {
+    pub fn raw_entries(&self) -> ScgthRaw<'a> {
         let len = self.0.scgth_num_elements as _;
         unsafe {
             match self.0.scgth_format {

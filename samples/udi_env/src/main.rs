@@ -6,15 +6,6 @@ use ::udi_environment::DriverChild;
 
 extern crate udi_net_ne2000;
 
-mod driver {
-    extern "C" {
-        pub static udi_init_info: ::udi::ffi::init::udi_init_t;
-        // TODO: udiprops (formally they're in a section as nul terminated strings)
-        pub static libudi_rs_udiprops: [u8; 0];
-        pub static libudi_rs_udiprops_len: usize;
-    }
-}
-
 struct GlobalState {
     modules: Vec< Arc<DriverModule<'static>> >,
     instances: Vec< Arc<DriverInstance> >,

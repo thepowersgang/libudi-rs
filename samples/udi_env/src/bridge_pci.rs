@@ -221,7 +221,7 @@ impl InterruptHandler {
                     unsafe {
                         let cb = gcb as *mut ::udi::ffi::meta_bridge::udi_intr_event_cb_t;
                         let p: *const InterruptHandler = (*cb).gcb.initiator_context as *const _;
-                        (*p).cbs.queue.lock().unwrap().push_front(::udi::cb::CbHandle::from_raw(cb))
+                        (&*p).cbs.queue.lock().unwrap().push_front(::udi::cb::CbHandle::from_raw(cb))
                     }
                 }
             }

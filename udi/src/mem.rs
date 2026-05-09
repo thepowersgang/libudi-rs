@@ -18,7 +18,7 @@ impl<T> ProtoHandle<[T]> {
     /// Initialise
     pub fn init(self, mut v: impl FnMut(usize)->T) -> Handle<[T]> {
         unsafe {
-            for i in 0 .. (*self.0).len() {
+            for i in 0 .. (&*self.0).len() {
                 ::core::ptr::write((self.0 as *mut T).offset(i as isize), v(i))
             }
         }

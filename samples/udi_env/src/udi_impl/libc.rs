@@ -148,8 +148,8 @@ unsafe extern "C" fn udi_strtou32(mut s: *const c_char, endptr: *mut *mut c_char
 
 
 #[no_mangle]
-pub unsafe extern "C" fn udi_snprintf(s: *mut c_char, max_bytes: udi_size_t, format: *const c_char, mut args: ...) -> udi_size_t {
-    udi_vsnprintf(s, max_bytes, format, args.as_va_list())
+pub unsafe extern "C" fn udi_snprintf(s: *mut c_char, max_bytes: udi_size_t, format: *const c_char, args: ...) -> udi_size_t {
+    udi_vsnprintf(s, max_bytes, format, args)
 }
 #[no_mangle]
 unsafe extern "C" fn udi_vsnprintf(s: *mut c_char, max_bytes: udi_size_t, format: *const c_char, ap: ::core::ffi::VaList) -> udi_size_t {
@@ -222,7 +222,7 @@ pub unsafe fn snprintf_inner(rv: &mut dyn SnprintfSink, format: &[u8], mut ap: :
         udi_macro_helpers::printf::FormatArg::Char => {
             let pad = Pad::SpaceRight;
             let width = 0;
-            fmt_pad_rev(rv, pad, width, &[ap.arg::<udi_ubit8_t>()], None)
+            fmt_pad_rev(rv, pad, width, &[ap.arg::<usize>() as udi_ubit8_t], None)
         }
         udi_macro_helpers::printf::FormatArg::Integer(pad, width, size, fmt) => {
             let pad = match pad {

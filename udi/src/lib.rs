@@ -3,10 +3,6 @@
 //! An absolutely evil attempt at making bindings for the various UDI interfaces 
 #![no_std]
 #![warn(missing_docs)]
-#![feature(waker_getters)]	// For evil with contexts
-#![feature(const_trait_impl)]
-#![feature(const_mut_refs)]	// Used for getting size of tasks
-#![feature(extern_types)]	// Handle types
 #![feature(fundamental)]
 #![cfg_attr(not(feature="std"),allow(internal_features))]
 #![cfg_attr(not(feature="std"),feature(lang_items))]
@@ -210,7 +206,7 @@ macro_rules! define_driver
 		}
 	) => {
 		$crate::define_driver!{
-			$driver as #[no_mangle] udi_init_info;
+			$driver as #[no_mangle] #[allow(non_upper_case_globals)] udi_init_info;
 			ops: { $($op_name: Meta=::$($op_op_mod)::*::metalang_name!(udiprops::meta::), ::$($op_op_mod::)*$op_op_name $(: $wrapper<_$(,$wrapper_arg)*>)? ),* },
 			cbs: { $($cb_name: Meta=$(::$cb_ty_mod)*::metalang_name!(udiprops::meta::), $(::$cb_ty_mod)*::$cb_ty_name ),* }
 		}

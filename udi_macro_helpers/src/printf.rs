@@ -162,7 +162,7 @@ impl<'a> BitsetParser<'a> {
     // Comma-separated list of:
     // - [~]BitNum=Name String
     // - Start-End=Name String{:Value=Name}
-    pub fn next(&mut self) -> Result<Option<BitsetEnt>,Error> {
+    pub fn next(&mut self) -> Result<Option<BitsetEnt<'_>>,Error<'_>> {
         let mut c = match self.next_c()
             {
             Err(_) => return Ok(None),
@@ -261,7 +261,7 @@ impl<'a> RangeNamesParser<'a> {
             inner: ParserCommon::new(input)
         }
     }
-    pub fn next(&mut self) -> Result<Option<(u32, &'a [u8])>,Error> {
+    pub fn next(&mut self) -> Result<Option<(u32, &'a [u8])>,Error<'a>> {
         match self.inner.next_c() {
         Err(_) => return Ok(None),
         Ok(b':') => {},

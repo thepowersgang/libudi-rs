@@ -13,7 +13,7 @@ pub struct udi_mgmt_ops_t
 {
 	pub usage_ind_op: unsafe extern "C" fn(cb: *mut udi_usage_cb_t, resource_level: u8),
 	pub enumerate_req_op: unsafe extern "C" fn(cb: *mut udi_enumerate_cb_t, enumeration_level: u8),
-	pub devmgmt_req_op: unsafe extern "C" fn(cb: *mut udi_mgmt_cb_t, mgmt_op: udi_ubit8_t, parent_ID: udi_ubit8_t),
+	pub devmgmt_req_op: unsafe extern "C" fn(cb: *mut udi_mgmt_cb_t, mgmt_op: udi_ubit8_t, parent_id: udi_ubit8_t),
 	pub final_cleanup_req_op: unsafe extern "C" fn(cb: *mut udi_mgmt_cb_t),
 }
 #[repr(C)]

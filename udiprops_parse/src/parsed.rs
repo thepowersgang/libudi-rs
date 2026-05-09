@@ -194,7 +194,7 @@ impl PartialEq<[u8]> for HexStr<'_> {
 #[derive(Debug,PartialEq)]
 pub struct EscapedStr<'a>(&'a str);
 impl<'a> EscapedStr<'a> {
-    pub fn new(v: &str) -> EscapedStr {
+    pub fn new(v: &'a str) -> Self {
         EscapedStr(v)
     }
     pub fn chars(&self) -> impl Iterator<Item=char> + 'a {

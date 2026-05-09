@@ -170,8 +170,23 @@ pub struct BufPreserveFlag {
     test_val: u8
 }
 impl BufPreserveFlag {
-    //pub unsafe fn test(cb: *const udi_cb_t) -> bool {
-    //}
+    /// Test if the buffer attached to this CB should be preserved
+    pub unsafe fn test(&self, cb: *const crate::ffi::udi_cb_t, outer_layout: *const crate::ffi::udi_layout_t) -> bool {
+        let mut cb = cb as *const core::ffi::c_void as *mut _;
+        let field = iter_with_layout(&outer_layout, &mut cb).skip(self.index as usize).next();
+        let val = match field {
+            None => return false,
+            Some(LayoutItem::Boolean(v)) => v.0,
+            Some(LayoutItem::UBit8(v)) => *v,
+            Some(LayoutItem::SBit8(v)) => *v as u8,
+            Some(LayoutItem::UBit16(v)) => *v as u8,
+            Some(LayoutItem::SBit16(v)) => *v as u8,
+            Some(LayoutItem::UBit32(v)) => *v as u8,
+            Some(LayoutItem::SBit32(v)) => *v as u8,
+            Some(_) => return false,
+            };
+        val & self.mask == self.test_val
+    }
 }
 
 

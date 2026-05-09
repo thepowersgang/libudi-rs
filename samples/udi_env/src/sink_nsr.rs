@@ -145,7 +145,25 @@ unsafe impl ::udi::meta_nic::NsrRx for ::udi::init::RData<Driver>
             let buf = cb.rx_buf_ref();
             let mut local_buf = vec![0; buf.len()];
             buf.read(0, &mut local_buf);
-            println!("NSR: RX packet {:x?}", local_buf);
+            println!("NSR: RX packet {}", HexDump(&local_buf));
+
+            struct HexDump<'a>(&'a [u8]);
+            impl ::std::fmt::Display for HexDump<'_> {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    for (i,b) in self.0.iter().copied().enumerate() {
+                        if i > 0 {
+                            if i % 16 == 0 {
+                                f.write_str("|")?;
+                            }
+                            else { 
+                                f.write_str(" ")?;
+                            }
+                        }
+                        write!(f, "{:02x}", b)?;
+                    }
+                    Ok(())
+                }
+            }
         }
     }
 

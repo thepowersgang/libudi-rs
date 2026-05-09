@@ -24,7 +24,6 @@ LD_ARGS=$LD_ARGS" -T $(dirname $0)/link.ld"
 LD_ARGS=$LD_ARGS" --retain-symbols-file=$(dirname $0)/create_so_retain.txt"
 #LD_ARGS=$LD_ARGS" -Map $shortname.map"
 ld $LD_ARGS
-    
 
 OUTFILE=$(realpath $shortname.so)
 cd $(dirname $0)/../fix_elf

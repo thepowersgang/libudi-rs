@@ -8,11 +8,11 @@ use ::udi::ffi::udi_status_t;
 use ::std::io::Write;
 
 #[no_mangle]
-pub unsafe extern "C" fn udi_debug_printf(fmt: *const ::core::ffi::c_char, mut args: ...) {
+pub unsafe extern "C" fn udi_debug_printf(fmt: *const ::core::ffi::c_char, args: ...) {
     let format = ::core::ffi::CStr::from_ptr(fmt);
     let mut sink = Sink([0; 64], 0);
     print!("udi_debug_printf: ");
-    super::libc::snprintf_inner(&mut sink, format.to_bytes(), args.as_va_list());
+    super::libc::snprintf_inner(&mut sink, format.to_bytes(), args);
     ::std::io::stdout().write_all(&sink.0[..sink.1]).unwrap();
     println!("");
 }
@@ -40,7 +40,7 @@ pub unsafe extern "C" fn udi_assert(expr: ::udi::ffi::udi_boolean_t) {
 pub unsafe extern "C" fn udi_trace_write(
     init_context: *const udi_init_context_t,
     trace_event: udi_trevent_t, meta_idx: udi_index_t,
-    msgnum: u32, mut args: ...
+    msgnum: u32, args: ...
 )
 {
     let module = crate::DriverRegion::driver_module_from_context(&*init_context);
@@ -49,7 +49,7 @@ pub unsafe extern "C" fn udi_trace_write(
 
     let mut sink = Sink([0; 64], 0);
     print!("udi_trace_write[{} T {}]: ", trace_event, meta);
-    super::libc::snprintf_inner(&mut sink, format.as_bytes(), args.as_va_list());
+    super::libc::snprintf_inner(&mut sink, format.as_bytes(), args);
     ::std::io::stdout().write_all(&sink.0[..sink.1]).unwrap();
     println!("");
 }
@@ -57,7 +57,7 @@ pub unsafe extern "C" fn udi_trace_write(
 pub unsafe extern "C" fn udi_log_write(
     callback: udi_log_write_call_t, cb: *mut udi_cb_t,
     trace_event: udi_trevent_t, severity: u8, meta_idx: udi_index_t, original_status: udi_status_t,
-    msgnum: u32, mut args: ...
+    msgnum: u32, args: ...
 )
 {
     let i = crate::channels::get_driver_instance(&(*cb).channel);
@@ -66,7 +66,7 @@ pub unsafe extern "C" fn udi_log_write(
 
     let mut sink = Sink([0; 64], 0);
     print!("udi_log_write[{} {} {}]: ", trace_event, severity, meta);
-    super::libc::snprintf_inner(&mut sink, format.as_bytes(), args.as_va_list());
+    super::libc::snprintf_inner(&mut sink, format.as_bytes(), args);
     ::std::io::stdout().write_all(&sink.0[..sink.1]).unwrap();
     println!("");
 

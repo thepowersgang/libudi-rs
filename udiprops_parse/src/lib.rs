@@ -104,7 +104,7 @@ impl<'a> ::core::iter::Iterator for EncodedIter<'a>
     }
 }
 /// Load from a blob of memory (`.udiprops` section)
-pub fn load_from_raw_section(data: &[u8]) -> EncodedIter {
+pub fn load_from_raw_section(data: &[u8]) -> EncodedIter<'_> {
     EncodedIter(data)
 }
 

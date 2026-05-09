@@ -1,6 +1,5 @@
 #![feature(impl_trait_in_assoc_type)]
 #![feature(c_variadic)]
-#![feature(strict_provenance)]
 
 use ::std::sync::Arc;
 
@@ -272,7 +271,7 @@ impl DriverRegion
             }
         }
     }
-    unsafe fn driver_module_from_context(r: &udi::ffi::init::udi_init_context_t) -> &DriverModule {
+    unsafe fn driver_module_from_context<'a>(r: &'a udi::ffi::init::udi_init_context_t) -> &'a DriverModule<'a> {
         let ofs = ::core::mem::size_of::<RegionContextRaw>() - ::core::mem::size_of::<udi::ffi::init::udi_init_context_t>();
         let p = (r as *const _ as *const u8).offset(-(ofs as isize));
         let p = p as *const RegionContextRaw;

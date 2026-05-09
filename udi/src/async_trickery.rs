@@ -291,12 +291,11 @@ where
 
 /// Obtain the GCB (`udi_cb_t`) from a waker
 fn gcb_from_waker_raw(waker: &::core::task::Waker) -> *const udi_cb_t {
-	let raw_waker = waker.as_raw();
-	let have_vt = raw_waker.vtable();
+	let have_vt = waker.vtable();
 	if have_vt as *const _ != &VTABLE_CB_T as *const _ {
 		panic!("Unexpected context used!");
 	}
-	raw_waker.data() as *const udi_cb_t
+	waker.data() as *const udi_cb_t
 }
 /// Obtain any CB (checked) from the waker
 pub(crate) fn cb_from_waker<Cb: GetCb>(waker: &::core::task::Waker) -> &Cb {
