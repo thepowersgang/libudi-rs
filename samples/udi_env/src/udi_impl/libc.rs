@@ -204,7 +204,7 @@ pub unsafe fn snprintf_inner(rv: &mut dyn SnprintfSink, format: &[u8], mut ap: :
 
         udi_macro_helpers::printf::FormatArg::Pointer(is_upper/*, pad, width*/) => {
             rv.push_str(b"0x");
-            fmt_pad_rev(rv, Pad::SpaceLeft, 0, to_str_radix(&mut tmpbuf, 16, is_upper, ap.arg::<*const ()>() as usize as u64), None)
+            fmt_pad_rev(rv, Pad::SpaceLeft, 0, to_str_radix(&mut tmpbuf, 16, is_upper, ap.next_arg::<*const ()>() as usize as u64), None)
         },
         udi_macro_helpers::printf::FormatArg::String(pad, width) => {
             let pad = match pad {
@@ -212,7 +212,7 @@ pub unsafe fn snprintf_inner(rv: &mut dyn SnprintfSink, format: &[u8], mut ap: :
                 udi_macro_helpers::printf::PadKind::LeftPad => Pad::SpaceLeft,
                 udi_macro_helpers::printf::PadKind::Unspec => Pad::SpaceRight,
             };
-            let s = ::core::ffi::CStr::from_ptr(ap.arg::<*const ::core::ffi::c_char>());
+            let s = ::core::ffi::CStr::from_ptr(ap.next_arg::<*const ::core::ffi::c_char>());
             fmt_pad(rv, pad, width as _, s.to_bytes().iter().copied(), None)
         },
         udi_macro_helpers::printf::FormatArg::BusAddr(_is_upper) => {
@@ -222,7 +222,7 @@ pub unsafe fn snprintf_inner(rv: &mut dyn SnprintfSink, format: &[u8], mut ap: :
         udi_macro_helpers::printf::FormatArg::Char => {
             let pad = Pad::SpaceRight;
             let width = 0;
-            fmt_pad_rev(rv, pad, width, &[ap.arg::<usize>() as udi_ubit8_t], None)
+            fmt_pad_rev(rv, pad, width, &[ap.next_arg::<::std::ffi::c_uint>() as udi_ubit8_t], None)
         }
         udi_macro_helpers::printf::FormatArg::Integer(pad, width, size, fmt) => {
             let pad = match pad {
@@ -233,14 +233,14 @@ pub unsafe fn snprintf_inner(rv: &mut dyn SnprintfSink, format: &[u8], mut ap: :
             let width = width as _;
             use udi_macro_helpers::printf::IntFormat;
             match fmt {
-            IntFormat::LowerHex => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 16, false, ap.arg::<udi_ubit32_t>() as _), None),
-            IntFormat::UpperHex => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 16, true , ap.arg::<udi_ubit32_t>() as _), None),
-            IntFormat::Unsigned => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 10, false, ap.arg::<udi_ubit32_t>() as _), None),
+            IntFormat::LowerHex => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 16, false, ap.next_arg::<udi_ubit32_t>() as _), None),
+            IntFormat::UpperHex => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 16, true , ap.next_arg::<udi_ubit32_t>() as _), None),
+            IntFormat::Unsigned => fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 10, false, ap.next_arg::<udi_ubit32_t>() as _), None),
             IntFormat::Decimal => {
                 let v = match size {
-                    udi_macro_helpers::printf::Size::U32 => ap.arg::<udi_sbit32_t>(),
-                    udi_macro_helpers::printf::Size::U16 => ap.arg::<udi_ubit32_t>() as u16 as i16 as i32,
-                    udi_macro_helpers::printf::Size::U8 => ap.arg::<udi_ubit32_t>() as u8 as i8 as i32,
+                    udi_macro_helpers::printf::Size::U32 => ap.next_arg::<udi_sbit32_t>(),
+                    udi_macro_helpers::printf::Size::U16 => ap.next_arg::<udi_ubit32_t>() as u16 as i16 as i32,
+                    udi_macro_helpers::printf::Size::U8 => ap.next_arg::<udi_ubit32_t>() as u8 as i8 as i32,
                     };
                 let prefix = if v.is_negative() { Some(b'-') } else { None };
                 fmt_pad_rev(rv, pad, width, to_str_radix(&mut tmpbuf, 10, false, v.unsigned_abs() as _), prefix)
@@ -249,7 +249,7 @@ pub unsafe fn snprintf_inner(rv: &mut dyn SnprintfSink, format: &[u8], mut ap: :
         },
         udi_macro_helpers::printf::FormatArg::BitSet(mut p) => {
             rv.push(b'<');
-            let v = ap.arg::<udi_ubit32_t>();
+            let v = ap.next_arg::<udi_ubit32_t>();
             let mut comma_needed = false;
             loop {
                 let e = match p.next() {
