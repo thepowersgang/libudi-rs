@@ -3,6 +3,7 @@
 // From public domain header by "Marcel Sondaar"
 // See https://mysticos.combuster.nl/downloads/mos-nightly-source.tar.gz
 // - mos/include/common/udi_gfx.h
+#![allow(non_camel_case_types)]
 
 use crate::{udi_cb_t, udi_status_t, udi_buf_t};
 use crate::{udi_index_t, udi_ubit32_t};

@@ -3,6 +3,7 @@
 //! <https://www.usb.org/document-library/openusbdi-specification-10>
 //! 
 //! NOTE: This spec seems incomplete, there's at least one bug, and it was written for UDI 0x095, not 0x101
+#![allow(non_camel_case_types)]
 use super::*;
 use super::imc::udi_channel_event_ind_op_t;
 

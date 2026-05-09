@@ -37,6 +37,7 @@ enum DataTranslation {
 }
 #[derive(Copy,Clone)]
 enum DataOrdering {
+    #[allow(dead_code)]
     Paced(u32),
     StrictOrder,
     UnorderedOk,
