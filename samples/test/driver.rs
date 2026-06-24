@@ -8,7 +8,7 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 	const MAX_ATTRS: u8 = 4;
 
 	type Future_init<'s> = impl ::core::future::Future<Output=()> + 's;
-	fn usage_ind<'s>(&'s mut self, cb: ::udi::meta_mgmt::CbRefUsage<'s>, _resouce_level: u8) -> Self::Future_init<'s> {
+	fn usage_ind<'s>(&'s mut self, cb: ::udi::meta_mgmt::CbRefUsage<'s>, _resource_level: u8) -> Self::Future_init<'s> {
 		async move {
 			println!("Entry");
 			let h1 = ::udi::pio::map(cb.gcb(), 0,0x1000,4, &[], 0, 0, ::udi::ffi::udi_index_t(0)).await;

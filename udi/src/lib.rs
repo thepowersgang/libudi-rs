@@ -168,7 +168,7 @@ pub mod ops_markers {
 /// # impl ::udi::init::Driver for ::udi::init::RData<Driver> {
 /// #  const MAX_ATTRS: u8 = 0;
 /// #  type Future_init<'s> = ::core::future::Pending<()>;
-/// #  fn usage_ind<'s>(&'s self, _cb: ::udi::meta_mgmt::CbRefUsage<'s>, _resouce_level: u8) -> Self::Future_init<'s> {
+/// #  fn usage_ind<'s>(&'s self, _cb: ::udi::meta_mgmt::CbRefUsage<'s>, _resource_level: u8) -> Self::Future_init<'s> {
 /// #    ::core::future::pending()
 /// #  }
 /// #  type Future_enumerate<'s> = ::core::future::Pending<(::udi::init::EnumerateResult,::udi::init::AttrSink<'s>)>;

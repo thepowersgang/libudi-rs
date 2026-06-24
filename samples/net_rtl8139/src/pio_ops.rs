@@ -18,7 +18,7 @@ pub struct PioHandles {
     rx_update: ::udi::pio::Handle,
 }
 impl PioHandles {
-    pub fn new(gcb: ::udi::CbRef<::udi::ffi::udi_cb_t>) -> impl Future<Output=(Self,::udi::pio::Handle)> + '_ {
+    pub fn new(gcb: Gcb<'_>) -> impl Future<Output=(Self,::udi::pio::Handle)> + '_ {
         async move {
             let pio_map = |trans_list|
                 ::udi::pio::map(gcb, 0/*UDI_PCI_BAR_0*/, 0x00,0xFF, trans_list,
@@ -27,7 +27,7 @@ impl PioHandles {
             let handles = PioHandles {
                 reset   : pio_map(&RESET).await,
                 enable  : pio_map(&ENABLE).await,
-                disable : pio_map(&DISBALE).await,
+                disable : pio_map(&DISABLE).await,
                 tx      : pio_map(&TX).await,
                 get_tsd : pio_map(&GET_TSD).await,
 
@@ -170,7 +170,7 @@ impl MemReset {
             _pad: [0; 2],
         }
     }
-    pub fn get_ptr(&mut self) -> ::udi::pio::MemPtr {
+    pub fn get_ptr(&mut self) -> ::udi::pio::MemPtr<'_> {
         // SAFE: Correct size for the operation, and structure has no padding fields
         unsafe {
             ::udi::pio::MemPtr::new(
@@ -222,7 +222,7 @@ impl MemReset {
 ::udi::define_pio_ops!{pub ENABLE =
     END_IMM 0;
 }
-::udi::define_pio_ops!{pub DISBALE =
+::udi::define_pio_ops!{pub DISABLE =
     END_IMM 0;
 }
 
@@ -234,7 +234,7 @@ struct MemTx {
 }
 impl MemTx {
     /// SAFETY: DMA addresses are included, caller must ensure safe DMA
-    pub unsafe fn get_ptr(&mut self) -> ::udi::pio::MemPtr {
+    pub unsafe fn get_ptr(&mut self) -> ::udi::pio::MemPtr<'_> {
         ::udi::pio::MemPtr::new(
             ::core::slice::from_raw_parts_mut(self as *mut _ as *mut u8, ::core::mem::size_of::<Self>())
         )
@@ -290,7 +290,7 @@ struct MemRxUpdate {
     delta: u16,
 }
 impl MemRxUpdate {
-    fn get_ptr(&mut self) -> ::udi::pio::MemPtr {
+    fn get_ptr(&mut self) -> ::udi::pio::MemPtr<'_> {
         // SAFE: Valid
         unsafe {
             ::udi::pio::MemPtr::new(
@@ -333,7 +333,7 @@ impl MemRxUpdate {
     END.B R0;
     // 2: Overrun
     LABEL 2;
-    // 3: Hande overrun irqs
+    // 3: Handle overrun IRQs
     LABEL 3;
     END_IMM 0;
 }

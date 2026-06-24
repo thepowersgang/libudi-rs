@@ -24,7 +24,7 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 {
     const MAX_ATTRS: u8 = 6;
     type Future_init<'s> = impl ::core::future::Future<Output=()>;
-    fn usage_ind<'s>(&'s self, _cb: udi::init::CbRefUsage<'s>, _resouce_level: u8) -> Self::Future_init<'s> {
+    fn usage_ind<'s>(&'s self, _cb: udi::init::CbRefUsage<'s>, _resource_level: u8) -> Self::Future_init<'s> {
         async move { }
     }
 
@@ -53,21 +53,22 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
             }
         }
         async move {
+            use ::udi::init::EnumerateLevel;
 			match level
 			{
-			::udi::init::EnumerateLevel::Start
-			|::udi::init::EnumerateLevel::StartRescan => {
+			EnumerateLevel::Start
+			|EnumerateLevel::StartRescan => {
                 self.enum_dev_idx.set( 0 );
                 let rv = enumerate_dev(self, &mut attrs_out);
                 (rv, attrs_out)
 				},
-			udi::init::EnumerateLevel::Next => {
+			EnumerateLevel::Next => {
                 let rv = enumerate_dev(self, &mut attrs_out);
                 (rv, attrs_out)
                 },
-			udi::init::EnumerateLevel::New => todo!(),
-			udi::init::EnumerateLevel::Directed => todo!(),
-			udi::init::EnumerateLevel::Release => todo!(),
+			EnumerateLevel::New => todo!(),
+			EnumerateLevel::Directed => todo!(),
+			EnumerateLevel::Release => todo!(),
 			}
         }
     }

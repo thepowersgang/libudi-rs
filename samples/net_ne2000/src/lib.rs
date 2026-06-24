@@ -51,7 +51,7 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 	const MAX_ATTRS: u8 = 4;
 
     type Future_init<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn usage_ind<'s>(&'s self, _cb: ::udi::meta_mgmt::CbRefUsage<'s>, _resouce_level: u8) -> Self::Future_init<'s> {
+    fn usage_ind<'s>(&'s self, _cb: ::udi::meta_mgmt::CbRefUsage<'s>, _resource_level: u8) -> Self::Future_init<'s> {
         async move {
 		}
     }
@@ -220,7 +220,7 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 				// Remote DMA is complete
 			}
 			if cb.intr_result & 0x80 != 0 {
-				// Card reset complet
+				// Card reset complete
 				// - ignore
 			}
 		}
@@ -374,15 +374,15 @@ mod regs {
 	// -- Page 0
 	pub const PG0_CLDA0: u8 = 0x01;	// When read, PSTART when written
 	pub const PG0_CLDA1: u8 = 0x02;	// When read, PSTOP when written
-	/// Boundary Pointer (for ringbuffer)
+	/// Boundary Pointer (for ring buffer)
 	pub const PG0_BNRY : u8 = 0x03;
 	/// - READ: Transmit Status Register
 	pub const PG0R_TSR   : u8 = 0x04;	// When read, TPSR when written
 	/// - WRITE: Transmit Page Start address Register
 	pub const PG0W_TPSR  : u8 = PG0R_TSR;
-	pub const PG0R_NCR  : u8 = 0x05;	// TBCR0 when wrtiten
+	pub const PG0R_NCR  : u8 = 0x05;	// TBCR0 when written
 	pub const PG0W_TBCR0: u8 = PG0R_NCR;
-	pub const PG0R_FIFO : u8 = 0x06;	// TBCR1 when wrtiten
+	pub const PG0R_FIFO : u8 = 0x06;	// TBCR1 when written
 	pub const PG0W_TBCR1: u8 = PG0R_FIFO;
 	pub const PG0_ISR  : u8 = 0x07;
 	/// Remote Start AddRess (Lo)

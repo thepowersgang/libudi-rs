@@ -1,7 +1,10 @@
 #![no_std]
 #![allow(internal_features)]
-#![feature(lang_items)]
+//#![feature(lang_items)]
 #![feature(impl_trait_in_assoc_type)]
+
+use ::core::cell::{OnceCell,RefCell,Cell};
+use ::core::future::Future;
 
 mod pio_ops;
 
@@ -14,7 +17,7 @@ const RX_BUF_CAPACITY: usize = RX_BUF_LENGTH+MTU+8;	// Add a single MTU, plus a 
 struct Driver
 {
 	/// Driver state populated at the end of bus bind (see `Driver::bus_bind_ack`)
-	init: ::core::cell::OnceCell<InitState>,
+	init: OnceCell<InitState>,
 	/// Wait state for the interrupt handler registration/binding
 	intr_bound: ::udi::async_helpers::Wait< ::udi::Result<()> >,
 
@@ -22,20 +25,20 @@ struct Driver
 	rx_cb_queue: ::udi::meta_nic::ReadCbQueue,
 	
 	/// Handles to the RX/TX channels, just to keep the channels open
-	channels: ::core::cell::OnceCell<Channels>,
+	channels: OnceCell<Channels>,
 
 	/// Next TX slot (out of four) that will be used by the hardware
-	next_tx_slot: ::core::cell::Cell<u8>,
+	next_tx_slot: Cell<u8>,
 	/// Currently active TX slot, if equal to `next_tx_slot` then all entries are unused
-	cur_tx_slot: ::core::cell::Cell<u8>,
+	cur_tx_slot: Cell<u8>,
 	/// Information about each TX slot
-	tx_cbs: [::core::cell::Cell<Option<TxSlot>>; 4],
+	tx_cbs: [Cell<Option<TxSlot>>; 4],
 }
 struct InitState {
 	/// Programmed IO operation handles
 	pio_handles: pio_ops::PioHandles,
 	/// DMA memory access handles
-	dma_handles: ::core::cell::RefCell<DmaStructures>,
+	dma_handles: RefCell<DmaStructures>,
 
 	#[allow(dead_code)]
 	/// A handle to the interrupt channel, keeping it open as long as we need it
@@ -65,13 +68,13 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 {
 	const MAX_ATTRS: u8 = 4;
 
-    type Future_init<'s> = impl ::core::future::Future<Output=()> + 's;
-    fn usage_ind<'s>(&'s self, _cb: ::udi::meta_mgmt::CbRefUsage<'s>, _resouce_level: u8) -> Self::Future_init<'s> {
+    type Future_init<'s> = impl Future<Output=()> + 's;
+    fn usage_ind<'s>(&'s self, _cb: ::udi::meta_mgmt::CbRefUsage<'s>, _resource_level: u8) -> Self::Future_init<'s> {
         async move {
 		}
     }
 
-    type Future_enumerate<'s> = impl ::core::future::Future<Output=(::udi::init::EnumerateResult,::udi::init::AttrSink<'s>)> + 's;
+    type Future_enumerate<'s> = impl Future<Output=(::udi::init::EnumerateResult,::udi::init::AttrSink<'s>)> + 's;
     fn enumerate_req<'s>(
 		&'s self,
 		_cb: ::udi::init::CbRefEnumerate<'s>,
@@ -79,10 +82,11 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 		mut attrs_out: ::udi::init::AttrSink<'s>
 	) -> Self::Future_enumerate<'s> {
         async move {
+			use ::udi::init::EnumerateLevel;
 			match level
 			{
-			::udi::init::EnumerateLevel::Start
-			|::udi::init::EnumerateLevel::StartRescan => {
+			EnumerateLevel::Start
+			|EnumerateLevel::StartRescan => {
 				let mac_addr = &self.init.get().unwrap().mac_addr;
 				attrs_out.push_u32("if_num", 0);
 				attrs_out.push_string("if_media", "eth");
@@ -92,15 +96,15 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 					));
 				(::udi::init::EnumerateResultOk::new::<OpsList::Ctrl>(0).into(), attrs_out)
 				},
-			udi::init::EnumerateLevel::Next => (::udi::init::EnumerateResult::Done, attrs_out),
-			udi::init::EnumerateLevel::New => todo!(),
-			udi::init::EnumerateLevel::Directed => todo!(),
-			udi::init::EnumerateLevel::Release => todo!(),
+			EnumerateLevel::Next => (::udi::init::EnumerateResult::Done, attrs_out),
+			EnumerateLevel::New => todo!(),
+			EnumerateLevel::Directed => todo!(),
+			EnumerateLevel::Release => todo!(),
 			}
 		}
     }
 
-    type Future_devmgmt<'s> = impl ::core::future::Future<Output=::udi::Result<u8>> + 's;
+    type Future_devmgmt<'s> = impl Future<Output=::udi::Result<u8>> + 's;
     fn devmgmt_req<'s>(&'s self, _cb: ::udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, _parent_id: ::udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
         async move {
 			use ::udi::init::MgmtOp;
@@ -118,7 +122,7 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 }
 impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 {
-    type Future_bind_ack<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
+    type Future_bind_ack<'s> = impl Future<Output=::udi::Result<()>> + 's;
     fn bus_bind_ack<'a>(
 		&'a self,
 		cb: ::udi::meta_bridge::CbRefBind<'a>,
@@ -197,7 +201,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 				intr_channel,
 				mac_addr,
 				dma_constraints,
-				dma_handles: ::core::cell::RefCell::new(dma_handles),
+				dma_handles: RefCell::new(dma_handles),
 			}) {
 				panic!("bus_bind_ack called multiple times");
 			}
@@ -205,20 +209,20 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 		}
     }
 
-    type Future_unbind_ack<'s> = impl ::core::future::Future<Output=()> + 's;
+    type Future_unbind_ack<'s> = impl Future<Output=()> + 's;
     fn bus_unbind_ack<'a>(&'a self, _cb: ::udi::meta_bridge::CbRefBind<'a>) -> Self::Future_unbind_ack<'a> {
         async move {
 		}
     }
 
-    type Future_intr_attach_ack<'s> = impl ::core::future::Future<Output=()> + 's;
+    type Future_intr_attach_ack<'s> = impl Future<Output=()> + 's;
     fn intr_attach_ack<'a>(&'a self, _cb: ::udi::meta_bridge::CbRefIntrAttach<'a>, status: udi::ffi::udi_status_t) -> Self::Future_intr_attach_ack<'a> {
 		self.intr_bound.signal(::udi::Error::from_status(status));
         async move {
 		}
     }
 
-    type Future_intr_detach_ack<'s> = impl ::core::future::Future<Output=()> + 's;
+    type Future_intr_detach_ack<'s> = impl Future<Output=()> + 's;
     fn intr_detach_ack<'a>(&'a self, cb: ::udi::meta_bridge::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_ack<'a> {
         async move {
 			let _ = cb;
@@ -227,7 +231,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 }
 impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 {
-    type Future_intr_event_ind<'s> = impl ::core::future::Future<Output=()>+'s;
+    type Future_intr_event_ind<'s> = impl Future<Output=()>+'s;
     fn intr_event_ind<'a>(&'a self, cb: ::udi::meta_bridge::CbRefEvent<'a>, _flags: u8) -> Self::Future_intr_event_ind<'a> {
 		async move {
 			let isr = cb.intr_result;
@@ -333,7 +337,7 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 
 impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 {
-	type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::Result<::udi::meta_nic::NicInfo>> + 's;
+	type Future_bind_req<'s> = impl Future<Output=::udi::Result<::udi::meta_nic::NicInfo>> + 's;
     fn bind_req<'a>(&'a self, cb: ::udi::meta_nic::CbRefNicBind<'a>, tx_chan_index: udi::ffi::udi_index_t, rx_chan_index: udi::ffi::udi_index_t) -> Self::Future_bind_req<'a> {
         async move {
 			let channel_tx = ::udi::imc::channel_spawn::<OpsList::Tx>(cb.gcb(), self, tx_chan_index).await;
@@ -373,7 +377,7 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 		}
     }
 
-	type Future_unbind_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
+	type Future_unbind_req<'s> = impl Future<Output=::udi::Result<()>> + 's;
     fn unbind_req<'a>(&'a self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_unbind_req<'a> {
         async move {
 			let _ = cb;
@@ -381,22 +385,22 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 		}
     }
 
-	type Future_enable_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
+	type Future_enable_req<'s> = impl Future<Output=::udi::Result<()>> + 's;
     fn enable_req<'a>(&'a self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_enable_req<'a> {
 		self.dev().pio_handles().enable(cb.gcb())
     }
 
-	type Future_disable_req<'s> = impl ::core::future::Future<Output=()> + 's;
+	type Future_disable_req<'s> = impl Future<Output=()> + 's;
     fn disable_req<'a>(&'a self, cb: ::udi::meta_nic::CbRefNic<'a>) -> Self::Future_disable_req<'a> {
 		self.dev().pio_handles().disable(cb.gcb())
     }
 
-	type Future_ctrl_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
+	type Future_ctrl_req<'s> = impl Future<Output=::udi::Result<()>> + 's;
     fn ctrl_req<'a>(&'a self, _cb: ::udi::meta_nic::CbRefNicCtrl<'a>) -> Self::Future_ctrl_req<'a> {
         async move { todo!() }
     }
 
-	type Future_info_req<'s> = impl ::core::future::Future<Output=()> + 's;
+	type Future_info_req<'s> = impl Future<Output=()> + 's;
     fn info_req<'a>(&'a self, _cb: ::udi::meta_nic::CbRefNicInfo<'a>, _reset_statistics: bool) -> Self::Future_info_req<'a> {
         async move { todo!() }
     }
@@ -409,7 +413,7 @@ impl Driver
 	fn dma_handles(&self) -> ::core::cell::RefMut<'_, DmaStructures> {
 		self.init.get().unwrap().dma_handles.borrow_mut()
 	}
-	fn tx_inner<'s>(&'s self, mut cb: ::udi::meta_nic::CbHandleNicTx) -> impl ::core::future::Future<Output=::udi::Result<()>> + 's {
+	fn tx_inner<'s>(&'s self, mut cb: ::udi::meta_nic::CbHandleNicTx) -> impl Future<Output=::udi::Result<()>> + 's {
 		async move {
 			use ::udi::physio::dma::Direction;
 			// SAFE: Input contract that the buffer is valid
@@ -455,7 +459,7 @@ impl Driver
 // - Depends on if the serial-ness of a region is only between async calls
 unsafe impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 {
-	type Future_tx_req<'s> = impl ::core::future::Future<Output=()> + 's;
+	type Future_tx_req<'s> = impl Future<Output=()> + 's;
     fn tx_req<'a>(&'a self, mut cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_tx_req<'a> {
         async move {
 			loop {
@@ -477,7 +481,7 @@ unsafe impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 		}
     }
 
-	type Future_exp_tx_req<'s> = impl ::core::future::Future<Output=()> + 's;
+	type Future_exp_tx_req<'s> = impl Future<Output=()> + 's;
     fn exp_tx_req<'a>(&'a self, cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_exp_tx_req<'a> {
         self.tx_req(cb)
     }
@@ -485,7 +489,7 @@ unsafe impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 // SAFE: Just pushes to a list
 unsafe impl ::udi::meta_nic::NdRx for ::udi::init::RData<Driver>
 {
-	type Future_rx_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
+	type Future_rx_rdy<'s> = impl Future<Output=()> + 's;
     fn rx_rdy<'a>(&'a self, cb: ::udi::meta_nic::CbHandleNicRx) -> Self::Future_rx_rdy<'a> {
 		self.rx_cb_queue.push(cb);
         async move {
