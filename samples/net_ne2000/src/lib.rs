@@ -1,3 +1,4 @@
+// cspell:ignore mgmt
 #![feature(impl_trait_in_assoc_type)]
 use ::core::cell::Cell;
 use ::core::cell::OnceCell;
@@ -200,7 +201,7 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 					}
 				}
 				else {
-					// RX undeflow :(
+					// RX underflow :(
 					// - TODO: Flush from the device
 				}
 			}

@@ -1,9 +1,9 @@
+// cspell:ignore Regs
 use ::core::future::Future;
 use ::udi::FutureExt;
 
 type Gcb<'a> = ::udi::CbRef<'a, ::udi::ffi::udi_cb_t>;
 
-// TODO: Move this to within `pio_ops` and use privacy to handle safety
 #[derive(Default)]
 pub struct PioHandles {
 	reset: ::udi::pio::Handle,
@@ -23,7 +23,7 @@ impl PioHandles {
             let pio_map = |trans_list|
                 ::udi::pio::map(gcb, 0/*UDI_PCI_BAR_0*/, 0x00,0xFF, trans_list,
                     ::udi::ffi::pio::UDI_PIO_LITTLE_ENDIAN, 0, 0.into());
-            let irq_ack = pio_map(&IRQACK).await;
+            let irq_ack = pio_map(&IRQ_ACK).await;
             let handles = PioHandles {
                 reset   : pio_map(&RESET).await,
                 enable  : pio_map(&ENABLE).await,
@@ -39,10 +39,10 @@ impl PioHandles {
     }
     /// Reset the card and set RBStart
     /// 
-    /// SAFETY: rbstart is a DMA address, caller must ensure validity
-    pub unsafe fn reset<'a>(&'a self, gcb: Gcb<'a>, rbstart: u32) -> impl Future<Output=::udi::Result<[u8; 6]>> + 'a {
+    /// SAFETY: `rb_start`` is a DMA address, caller must ensure validity
+    pub unsafe fn reset<'a>(&'a self, gcb: Gcb<'a>, rb_start: u32) -> impl Future<Output=::udi::Result<[u8; 6]>> + 'a {
         async move {
-            let mut reset_data = MemReset::new(rbstart);
+            let mut reset_data = MemReset::new(rb_start);
             ::udi::pio::trans(gcb, &self.reset, Default::default(), None, Some(reset_data.get_ptr())).await?;
             Ok(reset_data.mac)
         }
@@ -157,15 +157,15 @@ pub const FLAG_ISR_ROK   : u16 = 0x0001;
 
 #[repr(C)]
 struct MemReset {
-    rbstart: u32,
+    rb_start: u32,
     mac: [u8; 6],
     _pad: [u8; 2],
 }
 impl MemReset {
     /// SAFETY: DMA addresses are included, caller must ensure safe DMA
-    pub unsafe fn new(rbstart: u32) -> Self {
+    pub unsafe fn new(rb_start: u32) -> Self {
         Self {
-            rbstart,
+            rb_start,
             mac: [0; 6],
             _pad: [0; 2],
         }
@@ -320,7 +320,7 @@ impl MemRxUpdate {
     END_IMM 0;
 }
 
-::udi::define_pio_ops!{pub IRQACK =
+::udi::define_pio_ops!{pub IRQ_ACK =
     // Entrypoint 0: Enable interrupts
     LOAD_IMM.S R0, 0xFF;    // Enable all interrupts
     OUT.S Regs::Imr as _, R0;

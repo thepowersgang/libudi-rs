@@ -1,3 +1,4 @@
+// cspell:ignore mgmt scgth
 #![no_std]
 #![allow(internal_features)]
 //#![feature(lang_items)]
@@ -5,6 +6,7 @@
 
 use ::core::cell::{OnceCell,RefCell,Cell};
 use ::core::future::Future;
+use ::udi::meta_nic::CbHandleNicTx;
 
 mod pio_ops;
 
@@ -61,7 +63,7 @@ struct DmaStructures {
 	tx_bounce: [::udi::physio::dma::DmaAlloc; 4],
 }
 struct TxSlot {
-	cb: ::udi::meta_nic::CbHandleNicTx,
+	cb: CbHandleNicTx,
 }
 
 impl ::udi::init::Driver for ::udi::init::RData<Driver>
@@ -178,12 +180,12 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 					],
 					}
 				};
-			let rbstart: u32 = dma_handles
+			let rb_start: u32 = dma_handles
 				.rx_buf.scgth().single_entry_32().expect("Environment broke the RX buffer into chunks, not allowed")
 				.block_busaddr;
 			// Reset the card and get the MAC address
 			// SAFE: Correct DMA address
-			let mac_addr = unsafe { pio_handles.reset(cb.gcb(), rbstart).await? };
+			let mac_addr = unsafe { pio_handles.reset(cb.gcb(), rb_start).await? };
 			::udi::debug_printf!("bus_bind_ack: mac_addr = %02X:%02X:%02X:%02X:%02X:%02X",
 				mac_addr[0] as _,
 				mac_addr[1] as _,
@@ -248,7 +250,7 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 						let flags = *ptr.offset(0) as u16 | (*ptr.offset(1) as u16) << 8;
 						let raw_len = *ptr.offset(2) as u16 | (*ptr.offset(3) as u16) << 8;
 						// NOTE: acess2/rust_os treat this as the packet length, while qemu seems to emit the full buffer length
-						assert!(raw_len >= 4, "Raw packet lenght shorter than header");
+						assert!(raw_len >= 4, "Raw packet length shorter than header");
 						(flags, ::core::slice::from_raw_parts(ptr.offset(4), raw_len as usize - 4))
 					};
 					::udi::debug_printf!("RX packet: @0x%hx %u bytes flags=0x%04hx", addr, data.len() as u32, flags);
@@ -286,7 +288,7 @@ impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 						Ok(tsd) => tsd,
 						Err(_e) => break,
 						};
-					// Defensive manouver?
+					// Defensive maneuver?
 					if tsd & 0x8000 == 0 {
 						break;
 					}
@@ -413,7 +415,7 @@ impl Driver
 	fn dma_handles(&self) -> ::core::cell::RefMut<'_, DmaStructures> {
 		self.init.get().unwrap().dma_handles.borrow_mut()
 	}
-	fn tx_inner<'s>(&'s self, mut cb: ::udi::meta_nic::CbHandleNicTx) -> impl Future<Output=::udi::Result<()>> + 's {
+	fn tx_inner<'s>(&'s self, mut cb: CbHandleNicTx) -> impl Future<Output=::udi::Result<()>> + 's {
 		async move {
 			use ::udi::physio::dma::Direction;
 			// SAFE: Input contract that the buffer is valid
@@ -460,7 +462,7 @@ impl Driver
 unsafe impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
 {
 	type Future_tx_req<'s> = impl Future<Output=()> + 's;
-    fn tx_req<'a>(&'a self, mut cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_tx_req<'a> {
+    fn tx_req<'a>(&'a self, mut cb: CbHandleNicTx) -> Self::Future_tx_req<'a> {
         async move {
 			loop {
 				let (cur_cb, next) = cb.unlink();
@@ -482,7 +484,7 @@ unsafe impl ::udi::meta_nic::NdTx for ::udi::init::RData<Driver>
     }
 
 	type Future_exp_tx_req<'s> = impl Future<Output=()> + 's;
-    fn exp_tx_req<'a>(&'a self, cb: ::udi::meta_nic::CbHandleNicTx) -> Self::Future_exp_tx_req<'a> {
+    fn exp_tx_req<'a>(&'a self, cb: CbHandleNicTx) -> Self::Future_exp_tx_req<'a> {
         self.tx_req(cb)
     }
 }

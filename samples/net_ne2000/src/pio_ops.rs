@@ -1,3 +1,4 @@
+// cspell:ignore regs
 use ::udi::future_ext::FutureExt;
 use super::regs;
 use super::mem;
@@ -20,7 +21,7 @@ impl PioHandles {
             PioHandles {
                 reset   : pio_map(&RESET).await,
                 enable  : pio_map(&ENABLE).await,
-                disable : pio_map(&DISBALE).await,
+                disable : pio_map(&DISABLE).await,
                 rx      : pio_map(&RX).await,
                 tx      : pio_map(&TX).await,
             },
@@ -135,7 +136,7 @@ impl PioHandles {
     OUT.B regs::PG0W_TPSR as _, R0;
     END_IMM 0;
 }
-::udi::define_pio_ops!{pub DISBALE =
+::udi::define_pio_ops!{pub DISABLE =
     // CMD = 0x22 [NoDMA, !Start, Stop]
     LOAD_IMM.B R0, 0x21;
     OUT.B regs::APG_CMD as _, R0;
@@ -283,8 +284,8 @@ LABEL 2;
         LOAD_IMM.B R0, 0xFF;
         OUT.B regs::PG0_ISR as _, R0;
         END_IMM 0;
-        // 1: Normal
-        LABEL 1;
+    // 1: Normal
+    LABEL 1;
         IN.B R0, regs::PG0_ISR as _;
         OUT.B regs::PG0_ISR as _, R0;
         CSKIP.B R0 Z;   // if R0!=0
@@ -294,9 +295,9 @@ LABEL 2;
         LOAD_IMM.B R1, 0;   // scratch offset
         STORE.B [scratch R1], R0;
         END_IMM 0;
-        // 2: Overrun
-        LABEL 2;
-        // 3: Overrun irqs
-        LABEL 3;
+    // 2: Overrun
+    LABEL 2;
+    // 3: Overrun irqs
+    LABEL 3;
         END_IMM 0;
 }
