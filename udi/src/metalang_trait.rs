@@ -34,7 +34,7 @@ pub unsafe trait MetalangOps: MetalangOpsHandler
 /// Trait used for dynamic dispatch on a CB definition
 pub trait MetalangCbHandler
 {
-    /// Statically knwon size of the CB
+    /// Statically known size of the CB
     fn size(&self) -> usize;
 
     /// Gets a pointer to the contained buffer, if there is one

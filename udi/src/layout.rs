@@ -1,4 +1,5 @@
 //! UDI structure/memory layout handling
+// cspell:ignore udi_ubit udi_sbit
 
 /// Iterate a buffer using a provided layout to provide the data structure
 pub unsafe fn iter_with_layout<'a,'b>(layout: &'a *const crate::ffi::udi_layout_t, buffer: &'b mut *mut crate::ffi::c_void) -> DataIter<'a, 'b> {

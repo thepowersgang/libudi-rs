@@ -1,4 +1,4 @@
-//! Helper typs for async operations
+//! Helper types for async operations
 
 /// Synchronise two different async tasks, useful to wait for metalang operation to complete
 /// 

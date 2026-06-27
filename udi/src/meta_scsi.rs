@@ -1,4 +1,5 @@
 //! SCSI metalanguage definition
+// cspell:ignore udi_ubit
 use ::udi_sys::meta_scsi as ffi;
 
 impl_metalanguage!{

@@ -1,4 +1,3 @@
-// cspell:ignore metalang
 
 use ::std::sync::Arc;
 use ::udi_environment::DriverInstance;

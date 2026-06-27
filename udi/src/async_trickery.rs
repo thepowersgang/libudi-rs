@@ -1,6 +1,7 @@
 //! Trickery to convert between completion-based async and polling async
 //!
 //!
+// cspell:ignore vtable rdata ctxt
 //
 //
 // According to udi `core_spec_vol1.pdf` 5.2.2.1, `scratch` is preserved over async calls
@@ -63,7 +64,7 @@ pub(crate) unsafe fn abort_task(cb: *mut udi_cb_t)
 
 /// Obtain a pointer to the driver instance from a cb
 /// 
-/// SAFETY: Caller must ensure that `T` is valid for the context paraneter of the Cb
+/// SAFETY: Caller must ensure that `T` is valid for the context parameter of the Cb
 pub(crate) unsafe fn get_rdata_t<T: CbContext, Cb: GetCb>(cb: &Cb) -> &T {
 	let rv_raw = cb.get_gcb().context as *mut T;
 	if !(*rv_raw).is_init() {
@@ -73,7 +74,7 @@ pub(crate) unsafe fn get_rdata_t<T: CbContext, Cb: GetCb>(cb: &Cb) -> &T {
 }
 /// Obtain a pointer to the driver instance from a cb
 /// 
-/// SAFETY: Caller must ensure that `T` is valid for the context paraneter of the Cb
+/// SAFETY: Caller must ensure that `T` is valid for the context parameter of the Cb
 pub(crate) unsafe fn get_rdata_t_mut<T: CbContext, Cb: GetCb>(cb: &Cb) -> &mut T {
 	let rv = &mut *(cb.get_gcb().context as *mut T);
 	rv.maybe_init();
@@ -242,7 +243,7 @@ where
 		Poll::Ready(res) => {
 			// Request the CB, to assert that the CB type is valid
 			{ let _cb = cb_from_waker::<Cb>(cx.waker()); }
-			// Read `finally` out of the ManuallDrop before dropping all of `this`
+			// Read `finally` out of the ManuallyDrop before dropping all of `this`
 			let finally = ::core::ptr::read(&mut *(*this).finally);
 			// Drop the future in `self.inner` (and everything else)
 			::core::ptr::drop_in_place(this);
@@ -275,7 +276,7 @@ where
 		// get cb out of `cx`
 		let cb: &udi_cb_t = cb_from_waker(cx.waker());
 		/*if let Some(fcn) = self.f1.take() {
-			// Register "wakeup"
+			// Register a "wake up" callback
 			(fcn)(cb as *const _ as *mut _);
 		}
 		*/

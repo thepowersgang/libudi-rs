@@ -127,11 +127,11 @@ pub const fn task_size<T: ChannelHandler<Marker>,Marker: 'static>() -> usize {
 }
 /// Generic handler for `channel_event_ind` to be stored in metalanguage ops structures
 pub unsafe extern "C" fn channel_event_ind_op<T: ChannelHandler<Marker>, Marker: 'static>(cb: *mut udi_channel_event_cb_t) {
-    // NOTE: There's no scratch availble to this function, so cannot use async
+    // NOTE: There's no scratch available to this function, so cannot use async
 
     match (*cb).event
     {
-    // Called when the remote end of the channel is closed, this function is expected to close the channel afer `udi_channel_event_complete`
+    // Called when the remote end of the channel is closed, this function is expected to close the channel after `udi_channel_event_complete`
     ::udi_sys::imc::UDI_CHANNEL_CLOSED => {
         // SAFE: Caller has ensured that the context is valid for this type
         let state: &mut T = crate::async_trickery::get_rdata_t_mut(&*cb);

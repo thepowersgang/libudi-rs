@@ -1,6 +1,5 @@
 //! Inner glue for UDI channels
 //! 
-// cspell:ignore metalang
 
 /// The common innards of a channel
 /// 

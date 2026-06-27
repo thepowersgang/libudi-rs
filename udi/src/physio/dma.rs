@@ -34,7 +34,7 @@ impl DmaConstraints
         DmaConstraints(v)
     }
 
-    /// Reset the specifided attribute to its default (usually the least restrictive)
+    /// Reset the specified attribute to its default (usually the least restrictive)
     pub fn reset(&mut self, attr_type: ::udi_sys::physio::udi_dma_constraints_attr_t)
     {
         unsafe {
@@ -98,7 +98,7 @@ pub enum Endianness {
     Big,
     /// Hardware expects Little Endian (least significant byte first)
     Little,
-    /// No endian swapping shall be peformed (?byte accesses only)
+    /// No endian swapping shall be performed (?byte accesses only)
     NeverSwap,
 }
 impl Endianness {
@@ -239,7 +239,7 @@ impl DmaBuf {
     }
     /// Continue iterating a previous call to [Self::buf_map]
     /// 
-    /// `rewind` requrests that the iteration restart from the start of the buffer range
+    /// `rewind` requests that the iteration restart from the start of the buffer range
     pub fn buf_map_continue<'a>(
         &'a mut self,
         gcb: crate::cb::CbRef<::udi_sys::udi_cb_t>,
@@ -336,7 +336,7 @@ pub struct DmaAlloc {
     /// If `gap_size` is None, then only a single element was allocated (not an error if doing a single element alloc)
     pub gap_size: Option<usize>,
     /// Indicates that the environment has determined that the device/system/driver endian don't match, and the driver must swap the
-    /// endianess of the values in this allocation
+    /// endianness of the values in this allocation
     pub must_swap: bool,
 }
 impl Drop for DmaAlloc {

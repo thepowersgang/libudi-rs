@@ -42,7 +42,7 @@ pub fn nsr_status_ind(cb: crate::cb::CbHandle<ffi::udi_nic_status_cb_t>) {
     unsafe { ffi::udi_nsr_status_ind(cb.into_raw()) }
 }
 
-/// Inform the NSR that a packet has been recived
+/// Inform the NSR that a packet has been received
 pub fn nsr_rx_ind(rx_cb: CbHandleNicRx) {
     unsafe { ffi::udi_nsr_rx_ind(rx_cb.into_raw()) }
 }
@@ -354,7 +354,7 @@ map_ops_structure!{
 pub struct BindChannels {
     /// Transmit channel index
     pub tx: udi_index_t,
-    /// Recieve channel index
+    /// Receive channel index
     pub rx: udi_index_t,
 }
 
@@ -366,7 +366,7 @@ pub trait NsrControl: 'static + crate::async_trickery::CbContext + crate::imc::C
         as Future_gbc
     );
     async_method!(
-        /// Acknowlegement of binding to the ND, with result
+        /// Acknowledgement of binding to the ND, with result
         fn bind_ack(&'a self, cb: CbRefNicBind<'a>, res: crate::Result<()>)->()
         as Future_bind_ack
     );
@@ -376,7 +376,7 @@ pub trait NsrControl: 'static + crate::async_trickery::CbContext + crate::imc::C
         as Future_unbind_ack
     );
     async_method!(
-        /// Acknowledgemnet of the device being enabled, with result
+        /// Acknowledgement of the device being enabled, with result
         fn enable_ack(&'a self, cb: CbRefNic<'a>, res: crate::Result<()>)->()
         as Future_enable_ack
     );
@@ -404,9 +404,9 @@ pub trait NsrControl: 'static + crate::async_trickery::CbContext + crate::imc::C
 }
 future_wrapper!(nsr_channel_bound => <T as NsrControl>(cb: *mut ffi::udi_nic_bind_cb_t) val @ {
     val.get_bind_channels(cb)
-} finally(chans) {
+} finally(channels) {
     // SAFE: Correct FFI
-    unsafe { ffi::udi_nd_bind_req(cb, chans.tx, chans.rx) }
+    unsafe { ffi::udi_nd_bind_req(cb, channels.tx, channels.rx) }
 });
 struct MarkerNsrControl;
 impl<T> crate::imc::ChannelHandler<MarkerNsrControl> for T
@@ -602,7 +602,7 @@ pub unsafe trait NsrRx: 'static + crate::async_trickery::CbContext + crate::imc:
         fn rx_ind(&'a self, cb: CbRefNicRx<'a>)->() as Future_rx_ind
     }
     async_method!(
-        /// Indication of a newly recivied packet that should be processed in an expedited manner
+        /// Indication of a newly received packet that should be processed in an expedited manner
         fn exp_rx_ind(&'a self, cb: CbRefNicRx<'a>)->()
         as Future_exp_rx_ind
     );

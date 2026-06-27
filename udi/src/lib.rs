@@ -1,6 +1,7 @@
 //! UDI - Uniform Driver Interface
 //!
 //! An absolutely evil attempt at making bindings for the various UDI interfaces 
+// cspell:ignore mgmt devmgmt
 #![no_std]
 #![warn(missing_docs)]
 #![feature(fundamental)]
@@ -74,7 +75,7 @@ pub trait HasCb<T: metalang_trait::MetalangCb> {
 pub unsafe trait Wrapper<Inner> {
 }
 
-/// Define a set of wrapper types for another type, to separate trait impls
+/// Define a set of wrapper types for another type, to separate trait implementations
 /// 
 /// ```rust
 /// struct MyType;
@@ -142,7 +143,7 @@ pub mod ops_markers {
 	pub trait Ops {
 		/// Actual metalanguage FFI operations structure
 		type OpsTy;
-		/// Type to be stored in the `context` feld of the CB
+		/// Type to be stored in the `context` field of the CB
 		type Context;
 		/// Operations index for channel spawn
 		const INDEX: ::udi_sys::udi_index_t;
@@ -212,7 +213,7 @@ macro_rules! define_driver
 		}
 	};
 	(
-		$driver:path as $(#[$a:meta])* $symname:ident;
+		$driver:path as $(#[$a:meta])* $sym_name:ident;
 		ops: {
 			$($op_name:ident: Meta=$op_meta:expr, $op_op:path $(: $wrapper:ident<_$(,$wrapper_arg:ty)*>)?),*$(,)?
 		},
@@ -261,17 +262,17 @@ macro_rules! define_driver
 			$(impl $crate::HasCb<$cb_ty> for List {})*
 		}
 		const _STATE_SIZE: usize = {
-			let v = $crate::define_driver!(@ops_structrure_call $crate::ffi::meta_mgmt::udi_mgmt_ops_t, $driver, scratch_requirement)();
+			let v = $crate::define_driver!(@ops_structure_call $crate::ffi::meta_mgmt::udi_mgmt_ops_t, $driver, scratch_requirement)();
 			$(
-				let a = $crate::define_driver!(@ops_structrure_call $op_op, $driver $(: $wrapper<_$(,$wrapper_arg)*>)?, scratch_requirement)();
+				let a = $crate::define_driver!(@ops_structure_call $op_op, $driver $(: $wrapper<_$(,$wrapper_arg)*>)?, scratch_requirement)();
 				let v = if v > a { v } else { a };
 			)*
 			v
 			};
 		$(#[$a])*
-		pub static $symname: $crate::ffi::init::udi_init_t = $crate::ffi::init::udi_init_t {
+		pub static $sym_name: $crate::ffi::init::udi_init_t = $crate::ffi::init::udi_init_t {
 			primary_init_info: Some(&$crate::ffi::init::udi_primary_init_t {
-					mgmt_ops: unsafe { &$crate::define_driver!(@ops_structrure_call $crate::ffi::meta_mgmt::udi_mgmt_ops_t, $driver, for_driver)() },
+					mgmt_ops: unsafe { &$crate::define_driver!(@ops_structure_call $crate::ffi::meta_mgmt::udi_mgmt_ops_t, $driver, for_driver)() },
 					mgmt_op_flags: [0,0,0,0].as_ptr(),
 					mgmt_scratch_requirement: _STATE_SIZE,
 					rdata_size: ::core::mem::size_of::<$crate::init::RData<Driver>>(),
@@ -287,7 +288,7 @@ macro_rules! define_driver
 						OpsList::$op_name as _,
 						$op_meta,
 						0 $(+ ::core::mem::size_of::< $crate::$wrapper<$driver$(,$wrapper_arg)*> >())?,
-						unsafe { &$crate::define_driver!(@ops_structrure_call $op_op, $driver $(: $wrapper<_$(,$wrapper_arg)*>)?, for_driver)() }
+						unsafe { &$crate::define_driver!(@ops_structure_call $op_op, $driver $(: $wrapper<_$(,$wrapper_arg)*>)?, for_driver)() }
 						)
 				},
 				)*
@@ -302,7 +303,7 @@ macro_rules! define_driver
 			};
 	};
 
-	(@ops_structrure_call $op_ty:ty, $driver:ty $(: $wrapper:ident<_$(,$wrapper_arg:ty)*>)?, $call:ident) => {
+	(@ops_structure_call $op_ty:ty, $driver:ty $(: $wrapper:ident<_$(,$wrapper_arg:ty)*>)?, $call:ident) => {
 		<$crate::OpsStructure<$op_ty,$crate::define_driver!(@get_wrapper $driver $(: $wrapper<_$(,$wrapper_arg)*>)?),CbList::List>>::$call
 	};
 	(@get_wrapper $driver:ty: $wrapper:ident<_$(,$wrapper_arg:ty)*> ) => { $crate::$wrapper<$driver$(,$wrapper_arg)*> };

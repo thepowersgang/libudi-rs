@@ -1,4 +1,5 @@
 //! Helpers for handling libc-ish portions of the UDI bindings
+// cspell:ignore udi_ubit udi_sbit
 
 /// A trait for all types that can be passed to `snprintf`
 pub trait SnprintfArg {

@@ -4,6 +4,9 @@
         "./samples/net_rtl8139/Cargo.toml"
     ],
     "cSpell.words": [
-        "udiprops"
+        "metalang",
+        "rdata",
+        "udiprops",
+        "udi_ubit"
     ]
 }

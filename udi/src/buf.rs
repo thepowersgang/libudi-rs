@@ -1,6 +1,7 @@
 //! Buffers (`udi_buf_t`)
 //! 
 //! 
+// cspell:ignore udi_tagtype_t UDI_BUFTAG
 use ::core::future::Future;
 use crate::ffi::udi_buf_t;
 use crate::ffi::buf::udi_buf_path_t;
@@ -108,14 +109,14 @@ impl Handle
                 },
             |res| {
                 let crate::WaitRes::Pointer(p) = res else { panic!(""); };
-                // SAFE: Trusting the environemnt to have given us a valid pointer
+                // SAFE: Trusting the environment to have given us a valid pointer
                 unsafe { Self::from_raw(p as *mut _) }
                 }
             )
     }
     /// Ensure that this buffer has at least `size` bytes allocated within it
     /// 
-    /// If the current size is smaller than `size`, then extra uninitialied bytes are added to the end
+    /// If the current size is smaller than `size`, then extra uninitialised bytes are added to the end
     pub fn ensure_size(&mut self, cb: crate::CbRef<crate::ffi::udi_cb_t>, size: usize) -> impl Future<Output=()> + '_
     {
         let self_buf = self.0;
@@ -233,7 +234,7 @@ impl Handle
     fn cb_update(&mut self) -> impl FnOnce(crate::async_trickery::WaitRes) + '_ {
         move |res| {
             let crate::WaitRes::Pointer(p) = res else { panic!(""); };
-            // SAFE: Trusting the environemnt to have given us a valid pointer
+            // SAFE: Trusting the environment to have given us a valid pointer
             unsafe { self.update_from_raw(p as *mut _); }
             }
     }

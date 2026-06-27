@@ -2,6 +2,7 @@
 //! 
 //! This is a very generic metalanguage for drivers for whom a specialised
 //! metalanguage isn't (yet) possible.
+// cspell:ignore xfer udi_ubit
 use ::udi_sys::meta_gio::*;
 use ::udi_sys::meta_gio as ffi;
 
@@ -158,7 +159,7 @@ pub trait Provider: 'static + crate::imc::ChannelInit + crate::async_trickery::C
         as Future_bind_req
     );
     async_method!(
-        /// Unbinding as been requested by the bounc client
+        /// Unbinding as been requested by the bound client
         fn unbind_req(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_bind_cb_t>)->()
         as Future_unbind_req
     );
@@ -172,7 +173,7 @@ pub trait Provider: 'static + crate::imc::ChannelInit + crate::async_trickery::C
         fn event_res(&'s self, cb: crate::cb::CbRef<'s, ffi::udi_gio_event_cb_t>)->()
         as Future_event_res
     );
-    /// Return/relase an event CB
+    /// Return/release an event CB
     fn event_ret(&self, cb: crate::cb::CbHandle<ffi::udi_gio_event_cb_t>);
 }
 struct MarkerProvider;

@@ -1,4 +1,4 @@
-//! Bus Bridge metalanguage (Phsical I/O Specification)
+//! Bus Bridge metalanguage (Physical I/O Specification)
 //! 
 use ::udi_sys::meta_bridge::{udi_intr_event_cb_t, udi_intr_attach_cb_t};
 use ::udi_sys::meta_bridge::udi_bus_device_ops_t;
@@ -77,7 +77,7 @@ pub trait BusDevice: 'static + crate::async_trickery::CbContext + crate::imc::Ch
         as Future_intr_attach_ack
     );
     async_method!(
-        /// Acknowledge successful detatchment of an interrupt
+        /// Acknowledge successful detachment of an interrupt
         fn intr_detach_ack(&'a self, cb: CbRefIntrDetach<'a>) -> ()
         as Future_intr_detach_ack
     );
