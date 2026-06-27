@@ -1,3 +1,6 @@
+//! XT (aka standard PC) serial port
+// cspell:ignore regs regset_idx
+
 #[derive(Default)]
 pub struct XTSerial {
     regs: ::std::sync::Mutex<Regs>,
@@ -136,9 +139,9 @@ mod vals {
     pub const IER_ERBI: u8 = 0x01;
     /// Enable Transmitter Holding Register Empty Interrupt
     pub const IER_ETBEI: u8 = 0x02;
-    /// Emable Line Status Interrupt
+    /// Enable Line Status Interrupt
     pub const IER_ELSI: u8 = 0x04;
-    /// Emable Modem Status Interrupt
+    /// Enable Modem Status Interrupt
     pub const IER_EDSSI: u8 = 0x08;
 
     pub const LCR_DLAB: u8 = 0x80;
@@ -147,7 +150,7 @@ mod vals {
     pub const LSR_DR: u8 = 0x01;
     /// Line Status Register: Overflow Error
     pub const LSR_OE: u8 = 0x02;
-    /// Line Status Register: Pairity Error
+    /// Line Status Register: Parity Error
     pub const LSR_PE: u8 = 0x04;
     /// Line Status Register: Framing Error
     pub const LSR_FE: u8 = 0x08;
@@ -163,6 +166,7 @@ mod vals {
 
 fn check_reserved(slot: &mut u8, src: &[u8], name: &'static str, mask_rsvd: u8, mask_ro: u8) -> u8
 {
+    // cspell:ignore mask_rsvd
     let new = src[0];
     let prev = *slot;
     assert!(new & mask_rsvd == prev & mask_rsvd,

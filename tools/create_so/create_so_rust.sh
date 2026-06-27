@@ -1,4 +1,5 @@
 #!/bin/sh
+# Complete linking of a pre-compiled _Rust_ UDI binary for use with the example environment
 set -eu
 
 if [ $# -ne 1 ]; then

@@ -1,4 +1,5 @@
 //! Driver initialisation (related to [crate::meta_mgmt])
+// cspell:ignore ubit mgmt devmgmt Rescan
 use ::core::future::Future;
 
 use crate::async_trickery;
@@ -34,8 +35,8 @@ pub trait Driver: 'static + crate::async_trickery::CbContext {
 
 	/// Future type of `usage_ind`
 	type Future_init<'s>: Future<Output=()> + 's;
-	/// Handle a change in availble resources
-	fn usage_ind<'s>(&'s self, cb: CbRefUsage<'s>, resouce_level: u8) -> Self::Future_init<'s>;
+	/// Handle a change in available resources
+	fn usage_ind<'s>(&'s self, cb: CbRefUsage<'s>, resource_level: u8) -> Self::Future_init<'s>;
 
 	/// Future type for `enumerate_req`
 	type Future_enumerate<'s>: Future<Output=(EnumerateResult,AttrSink<'s>)> + 's;
@@ -213,7 +214,7 @@ pub enum MgmtOp
 	/// device state and communications connections should not be
 	/// completely shut down.
 	Suspend,
-	/// Treated as `UDI_DMGMT_SUSPEND, with the
+	/// Treated as `UDI_DMGMT_SUSPEND` ([MgmtOp::Suspend]), with the
 	/// addition that the device must be completely shut down (in particular,
 	/// all communications connections should be terminated).
 	Shutdown,
@@ -231,14 +232,14 @@ pub enum MgmtOp
 	/// indicated parent. The driver must first complete a metalanguage-
 	/// specific unbind sequence with its parent and free resources related to
 	/// that parent (it may choose to defer freeing some resources until it
-	/// receives a udi_final_cleanup_req). As much as possible, the
+	/// receives a `udi_final_cleanup_req`). As much as possible, the
 	/// device should be shut down, as if it might be removed or powered off
 	/// after this operation completes if this is the last parent.
 	/// Communications connections should be terminated. Storage device
 	/// write-back caches should be flushed to permanent storage, for
 	/// example. When the unbinding is complete (and not before), the driver
-	/// must respond to the `UDI_DMGMT_UNBIND`` request with a
-	/// corresponding `udi_devmgmt_ack``.
+	/// must respond to the `UDI_DMGMT_UNBIND` request with a
+	/// corresponding `udi_devmgmt_ack`.
 	Unbind,
 }
 

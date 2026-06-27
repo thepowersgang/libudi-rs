@@ -1,4 +1,5 @@
 // cspell:ignore mgmt scgth
+// cspell:ignore ubit
 #![no_std]
 #![allow(internal_features)]
 //#![feature(lang_items)]
@@ -73,6 +74,7 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
     type Future_init<'s> = impl Future<Output=()> + 's;
     fn usage_ind<'s>(&'s self, _cb: ::udi::meta_mgmt::CbRefUsage<'s>, _resource_level: u8) -> Self::Future_init<'s> {
         async move {
+			// No usage levels. Could reduce the number of TX slots (or RX buffer size), but with 3+2 pages, that's not much
 		}
     }
 
@@ -87,6 +89,7 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 			use ::udi::init::EnumerateLevel;
 			match level
 			{
+			// Only one detected device
 			EnumerateLevel::Start
 			|EnumerateLevel::StartRescan => {
 				let mac_addr = &self.init.get().unwrap().mac_addr;
@@ -99,13 +102,14 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 				(::udi::init::EnumerateResultOk::new::<OpsList::Ctrl>(0).into(), attrs_out)
 				},
 			EnumerateLevel::Next => (::udi::init::EnumerateResult::Done, attrs_out),
-			EnumerateLevel::New => todo!(),
+			EnumerateLevel::New => (::udi::init::EnumerateResult::Done, attrs_out),
 			EnumerateLevel::Directed => todo!(),
 			EnumerateLevel::Release => todo!(),
 			}
 		}
     }
 
+	// cspell:ignore devmgmt
     type Future_devmgmt<'s> = impl Future<Output=::udi::Result<u8>> + 's;
     fn devmgmt_req<'s>(&'s self, _cb: ::udi::init::CbRefMgmt<'s>, mgmt_op: udi::init::MgmtOp, _parent_id: ::udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
         async move {
@@ -231,6 +235,7 @@ impl ::udi::meta_bridge::BusDevice for ::udi::init::RData<Driver>
 		}
     }
 }
+/// Interrupt handler, called/invoked after the registered interrupt preprocessing PIO hook has run
 impl ::udi::meta_bridge::IntrHandler for ::udi::init::RData<Driver>
 {
     type Future_intr_event_ind<'s> = impl Future<Output=()>+'s;
@@ -345,16 +350,13 @@ impl ::udi::meta_nic::Control for ::udi::ChildBind<Driver,()>
 			let channel_tx = ::udi::imc::channel_spawn::<OpsList::Tx>(cb.gcb(), self, tx_chan_index).await;
 			let channel_rx = ::udi::imc::channel_spawn::<OpsList::Rx>(cb.gcb(), self, rx_chan_index).await;
 
-			// Create and send 4 TX CBs
+			// Create and send 4 TX CBs to the user of this instance (one per TX slot)
 			let mut tx_cbs = ::udi::cb::alloc_batch::<CbList::NicTx>(cb.gcb(), 4, Some((1520, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
 			while let Some(mut tx_cb) = tx_cbs.pop_front() {
-				// SAFE: Channel is correct for this CB
-				/*unsafe*/ {
-					tx_cb.set_channel(&channel_tx);
-				}
-				//tx_cb.gcb.channel = channel_tx.raw();
+				tx_cb.set_channel(&channel_tx);
 				::udi::meta_nic::nsr_tx_rdy(tx_cb );
 			}
+			// Save the Tx/Rx channel handles, so the channel stays open
 			if let Err(_) = self.dev().channels.set(Channels { tx: channel_tx, rx: channel_rx } ) {
 				panic!("Already bound?");
 			}

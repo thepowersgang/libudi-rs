@@ -61,6 +61,7 @@ fn main() {
         let path = ::std::ffi::CString::new(a.as_encoded_bytes()).unwrap();
         println!("LOADING {:?}", path);
         let driver_module = unsafe {
+            // cspell:ignore dlopen dlsym dlerror RTLD_NOW
             let h = ::libc::dlopen(path.as_ptr() as _, ::libc::RTLD_NOW);
             if h.is_null() {
                 panic!("Load failed: {:?}", ::std::ffi::CStr::from_ptr(::libc::dlerror()));

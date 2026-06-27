@@ -1,4 +1,5 @@
 //! DMA structures and helpers
+// cspell:ignore scgth
 
 use ::core::future::Future;
 use ::udi_sys::physio as ffi;
@@ -329,7 +330,7 @@ pub struct DmaAlloc {
     /// DMA allocation handle
     handle: DmaHandle,
     /// Scatter-gather entries
-    scgth: ScGth<'static>,  // Thie `'static` is a lie, it's actually `'self`
+    scgth: ScGth<'static>,  // The `'static` is a lie, it's actually `'self`
     /// Driver-mapped pointer to the allocated DMA-able memory.
     pub mem_ptr: *mut ::udi_sys::c_void,
     /// If `gap_size` is None, then only a single element was allocated (not an error if doing a single element alloc)
@@ -352,8 +353,8 @@ impl DmaAlloc {
         constraints: &'a DmaConstraints,
         dir: Direction,
         endian: Endianness,
-        nozero: bool,
-        nelements: u16,
+        no_zero: bool,
+        n_elements: u16,
         element_size: usize,
         max_gap: usize
     ) -> impl Future<Output=Self> + 'a
@@ -361,7 +362,7 @@ impl DmaAlloc {
         let flags = 0
             | dir.to_flags()
             | endian.to_flags()
-            | if nozero { ::udi_sys::mem::UDI_MEM_NOZERO } else { 0 }
+            | if no_zero { ::udi_sys::mem::UDI_MEM_NOZERO } else { 0 }
             ;
             unsafe extern "C" fn callback(
                 gcb: *mut ::udi_sys::udi_cb_t,
@@ -406,10 +407,10 @@ impl DmaAlloc {
                 crate::async_trickery::signal_waiter(gcb, res);
             }
             // Use a simpler callback when allocating a single element
-            let callback = if nelements == 1 { callback_single } else { callback };
+            let callback = if n_elements == 1 { callback_single } else { callback };
             crate::async_trickery::wait_task(gcb,
                 move |gcb| unsafe {
-                    ::udi_sys::physio::udi_dma_mem_alloc(callback, gcb, constraints.0, flags, nelements, element_size, max_gap)
+                    ::udi_sys::physio::udi_dma_mem_alloc(callback, gcb, constraints.0, flags, n_elements, element_size, max_gap)
                 },
                 |res| {
                     let crate::async_trickery::WaitRes::Data3PI([new_ptr, mem_ptr, scgth], gap_flags) = res else { panic!() };
@@ -426,17 +427,17 @@ impl DmaAlloc {
             )
     }
 
-    /// Simpler version of [DmaAlloc::alloc] that sets `nelements=1`
+    /// Simpler version of [DmaAlloc::alloc] that only allocates a single element (so has no need for gaps)
     pub fn alloc_single<'a>(
         gcb: crate::cb::CbRef<::udi_sys::udi_cb_t>,
         constraints: &'a DmaConstraints,
         dir: Direction,
         endian: Endianness,
-        nozero: bool,
+        no_zero: bool,
         element_size: usize,
     ) -> impl Future<Output=Self> + 'a
     {
-        Self::alloc(gcb, constraints, dir, endian, nozero, 1, element_size, 0)
+        Self::alloc(gcb, constraints, dir, endian, no_zero, 1, element_size, 0)
     }
 
     /// Get access to the scatter-gather list

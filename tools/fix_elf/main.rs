@@ -1,32 +1,33 @@
 //
 // Rewrite an ELF file to convert DT_NEEDED to DT_SYMBOLIC
 //
+// cspell:ignore phent phents phdr filesize
 
 const DT_NEEDED: u64 = 1;
 const DT_SYMBOLIC: u8 = 16;
 const PT_DYNAMIC: [u8; 4] = [2,0,0,0];
 
 fn main() {
-    let infile = {
+    let input_path = {
         let mut a = ::std::env::args_os();
+        // Skip the executable name
         a.next();
         a.next().unwrap()
         };
     let mut file_contents = Vec::new();
-    {
-        ::std::io::Read::read_to_end(&mut ::std::fs::File::open(&infile).unwrap(), &mut file_contents).unwrap();
-    }
+    ::std::io::Read::read_to_end(&mut ::std::fs::File::open(&input_path).unwrap(), &mut file_contents).unwrap();
 
-    // 1. Check type
-    if !file_contents.starts_with(b"\x7FELF\x02\x01") {
+    // 1. Check type (magic bytes, including the variant (Elf32) and endian (little) flags)
+    if !file_contents.starts_with(b"\x7FELF\x02\x01") { // cspell:disable-line
         panic!("Bad magic")
     }
     let phdr_off = u64::from_bytes( &file_contents[32..] );
-    let nphent   = u16::from_bytes( &file_contents[58..] );
+    let n_phent   = u16::from_bytes( &file_contents[58..] );
     // 2. Find the dynamic section
-    let Some((p_offset, p_filesize)) = find_pt_dynamic(&file_contents[phdr_off as usize..], nphent) else {
+    let Some((p_offset, p_filesize)) = find_pt_dynamic(&file_contents[phdr_off as usize..], n_phent) else {
         panic!("No PT_DYNAMIC");
     };
+    // Rewrite contents to convert DT_NEEDED to DT_SYMBOLIC
     for chunk in file_contents[p_offset as usize..][..p_filesize as usize].chunks_mut(16) {
         let d_tag = u64::from_bytes(&chunk[0..]);
         //let d_value = u64::from_bytes(&chunk[8..]);
@@ -39,16 +40,12 @@ fn main() {
         }
     }
 
-    use ::std::io::Write;
-    ::std::fs::File::create(infile).unwrap()
-        .write_all(&file_contents)
-        .unwrap();
+    ::std::io::Write::write_all(&mut ::std::fs::File::create(input_path).unwrap(), &file_contents).unwrap();
 }
 
-fn find_pt_dynamic(b_dynamic: &[u8], nphent: u16) -> Option<(u64,u64)> {
-    let phents = b_dynamic.chunks(56).take(nphent as usize);
+fn find_pt_dynamic(b_dynamic: &[u8], n_phent: u16) -> Option<(u64,u64)> {
+    let phents = b_dynamic.chunks(56).take(n_phent as usize);
     for phent in phents {
-        // PT_DYNAMIC
         if phent[..4] == PT_DYNAMIC {
             let p_offset = u64::from_bytes(&phent[8..]);
             let p_filesize = u64::from_bytes(&phent[32..]);

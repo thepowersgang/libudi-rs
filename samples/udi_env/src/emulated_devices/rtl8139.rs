@@ -1,6 +1,7 @@
-
+// cspell:ignore regs regset
 
 pub struct Device {
+    mac: [u8; 6],
     regs: ::std::sync::Mutex<Regs>,
     dma: super::DmaPool,
     irq: super::Interrupt,
@@ -8,6 +9,7 @@ pub struct Device {
 impl Device {
     pub fn new_boxed() -> Box<Self> {
         Box::new(Self {
+            mac: [0xAB,0xCD,0xEF,0x01,0x23,0x45],
             regs: Default::default(),
             dma: Default::default(),
             irq: Default::default(),
@@ -102,7 +104,7 @@ impl super::PioDevice for Device {
         let regs = self.regs.lock().unwrap();
         match reg {
         // MAC address
-        0..=5 => dst[0] = [0xAB,0xCD,0xEF,0x00,0x01,0x23][reg as usize],
+        0..=5 => dst[0] = self.mac[reg as usize],
         regs::TSD0 ..=regs::TSD3  => u32::encode(dst, "TSDn" , regs.tsd [ (reg >> 2) as usize & 3 ]),
         regs::TSAD0..=regs::TSAD3 => u32::encode(dst, "TSADn", regs.tsad[ (reg >> 2) as usize & 3 ]),
         regs::RBSTART => u32::encode(dst, "RBSTART", regs.rbstart),
