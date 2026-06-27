@@ -190,7 +190,7 @@ message 101 Network Device
 region 0
 ");
 ::udi::define_driver! {
-    Driver as INIT_INFO_NSR;
+    Driver as INIT_INFO;
     ops: {
         Ctrl: Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nsr_ctrl_ops_t,
         Tx  : Meta=udiprops::meta::udi_nic, ::udi::ffi::meta_nic::udi_nsr_tx_ops_t,

@@ -1,3 +1,4 @@
+// cspell:ignore metalang
 
 use ::std::sync::Arc;
 use ::udi_environment::DriverInstance;
@@ -24,14 +25,14 @@ fn main() {
         ::std::sync::Arc::new( DriverModule::new(&INIT_INFO_PCI, udiprops) )
     });
     register_driver_module(&mut state, unsafe {
-        use ::udi_environment::sink_nsr::{INIT_INFO_NSR,udiprops::udiprops as raw_udiprops};
+        use ::udi_environment::sink_nsr::{INIT_INFO,udiprops::udiprops as raw_udiprops};
         let udiprops = ::udiprops_parse::load_from_raw_section(&raw_udiprops);
-        ::std::sync::Arc::new( DriverModule::new(&INIT_INFO_NSR, udiprops) )
+        ::std::sync::Arc::new( DriverModule::new(&INIT_INFO, udiprops) )
     });
     register_driver_module(&mut state, unsafe {
-        use ::udi_environment::sink_gio_serial::{INIT_INFO_GIOSERIAL,udiprops::udiprops as raw_udiprops};
+        use ::udi_environment::sink_gio_serial::{INIT_INFO,udiprops::udiprops as raw_udiprops};
         let udiprops = ::udiprops_parse::load_from_raw_section(&raw_udiprops);
-        ::std::sync::Arc::new( DriverModule::new(&INIT_INFO_GIOSERIAL, udiprops) )
+        ::std::sync::Arc::new( DriverModule::new(&INIT_INFO, udiprops) )
     });
 
     // ----
@@ -59,7 +60,7 @@ fn main() {
         }
         let path = ::std::ffi::CString::new(a.as_encoded_bytes()).unwrap();
         println!("LOADING {:?}", path);
-        let driver_module_uart = unsafe {
+        let driver_module = unsafe {
             let h = ::libc::dlopen(path.as_ptr() as _, ::libc::RTLD_NOW);
             if h.is_null() {
                 panic!("Load failed: {:?}", ::std::ffi::CStr::from_ptr(::libc::dlerror()));
@@ -79,11 +80,11 @@ fn main() {
             ::std::sync::Arc::new(DriverModule::new(udi_init_info, udiprops))
         };
 
-        register_driver_module(&mut state, driver_module_uart);
+        register_driver_module(&mut state, driver_module);
     }
 
     // Start running async
-    // Infinite loop checking on pollable tasks
+    // Infinite loop checking on poll-able tasks
     // - Per-region operations queue
     // - Per-instance management agent
     // - Emulated devices

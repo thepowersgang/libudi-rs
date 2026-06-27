@@ -1,3 +1,4 @@
+// cspell:ignore regs regset
 pub struct Rtl8029 {
     regs: ::std::sync::Mutex<Regs>,
     irq: super::Interrupt,

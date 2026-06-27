@@ -158,7 +158,7 @@ region 0
 ");
 const META_GIO: ::udi::ffi::udi_index_t = udiprops::meta::udi_gio;
 ::udi::define_driver! {
-    Driver as INIT_INFO_GIOSERIAL;
+    Driver as INIT_INFO;
     ops: {
         Client: Meta=META_GIO, ::udi::ffi::meta_gio::udi_gio_client_ops_t,
     },
