@@ -1,4 +1,4 @@
-//use ::udi::ffi::udi_index_t;
+//cspell:ignore regset
 
 pub trait PioDevice
 {

@@ -1,3 +1,5 @@
+// cspell:ignore mgmt devmgmt
+
 #[derive(Default)]
 struct Driver {
     channels: ::core::cell::OnceCell<Channels>,

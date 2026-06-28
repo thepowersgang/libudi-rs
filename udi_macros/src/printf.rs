@@ -119,20 +119,21 @@ fn parse_format_args(input: &::syn::LitStr) -> ::syn::Result< Vec<::syn::Type> >
             Ok(Some(v)) => v,
             Err(e) => return Err(err(input, e)),
             };
+        use udi_macro_helpers::printf::FormatArg;
         rv.push(match v {
-        udi_macro_helpers::printf::FormatArg::StringData(_) => continue,
+        FormatArg::StringData(_) => continue,
 
-        udi_macro_helpers::printf::FormatArg::Pointer(_) => ::syn::parse_str("*const impl Sized").unwrap(),
-        udi_macro_helpers::printf::FormatArg::String(_, _) => ::syn::parse_str("&::core::ffi::CStr").unwrap(),
-        udi_macro_helpers::printf::FormatArg::BusAddr(_) => ::syn::parse_str("::udi::ffi::udi_busaddr64_t").unwrap(),
-        udi_macro_helpers::printf::FormatArg::Char => ::syn::parse_str("u8").unwrap(),
-        udi_macro_helpers::printf::FormatArg::Integer(_, _, ty, _) => match ty
+        FormatArg::Pointer(_) => ::syn::parse_str("*const impl Sized").unwrap(),
+        FormatArg::String(_, _) => ::syn::parse_str("&::core::ffi::CStr").unwrap(),
+        FormatArg::BusAddr(_) => ::syn::parse_str("::udi::ffi::udi_busaddr64_t").unwrap(),
+        FormatArg::Char => ::syn::parse_str("u8").unwrap(),
+        FormatArg::Integer(_, _, ty, _) => match ty
             {
             udi_macro_helpers::printf::Size::U32 => ::syn::parse_str("::udi::ffi::udi_ubit32_t").unwrap(),
             udi_macro_helpers::printf::Size::U16 => ::syn::parse_str("::udi::ffi::udi_ubit16_t").unwrap(),
             udi_macro_helpers::printf::Size::U8 => ::syn::parse_str("::udi::ffi::udi_ubit8_t").unwrap(),
             },
-        udi_macro_helpers::printf::FormatArg::BitSet(mut bs) => {
+        FormatArg::BitSet(mut bs) => {
             loop {
                 match bs.next() {
                 Err(e) => return Err(err(input, e)),

@@ -1,3 +1,14 @@
+//! PCI bridge driver, connecting drivers with the emulated devices
+// cspell:ignore devmgmt mgmt
+// cspell:ignore preproc
+
+use ::core::future::Future;
+
+const IRQ_PREPROC_LABEL_ENABLE: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t(0);
+const IRQ_PREPROC_LABEL_NORMAL: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t(1);
+const IRQ_PREPROC_LABEL_FINAL: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t(2);
+const IRQ_PREPROC_LABEL_DISABLE: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t(3);
+
 #[derive(Default)]
 struct Driver {
     enum_dev_idx: ::std::cell::Cell<usize>,
@@ -23,12 +34,12 @@ fn get_driver_instance(gcb: ::udi::CbRef<::udi::ffi::udi_cb_t>) -> ::std::sync::
 impl ::udi::init::Driver for ::udi::init::RData<Driver>
 {
     const MAX_ATTRS: u8 = 6;
-    type Future_init<'s> = impl ::core::future::Future<Output=()>;
+    type Future_init<'s> = impl Future<Output=()>;
     fn usage_ind<'s>(&'s self, _cb: udi::init::CbRefUsage<'s>, _resource_level: u8) -> Self::Future_init<'s> {
         async move { }
     }
 
-    type Future_enumerate<'s> = impl ::core::future::Future<Output=(udi::init::EnumerateResult,udi::init::AttrSink<'s>)> + 's;
+    type Future_enumerate<'s> = impl Future<Output=(udi::init::EnumerateResult,udi::init::AttrSink<'s>)> + 's;
     fn enumerate_req<'s>(
         &'s self,
         _cb: udi::init::CbRefEnumerate<'s>,
@@ -73,7 +84,7 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
         }
     }
 
-    type Future_devmgmt<'s> = impl ::core::future::Future<Output=::udi::Result<u8>> + 's;
+    type Future_devmgmt<'s> = impl Future<Output=::udi::Result<u8>> + 's;
     fn devmgmt_req<'s>(&'s self, _cb: udi::init::CbRefMgmt<'s>, _mgmt_op: udi::init::MgmtOp, _parent_id: udi::ffi::udi_ubit8_t) -> Self::Future_devmgmt<'s> {
         async move {
             todo!("devmgmt_req");
@@ -83,14 +94,19 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
 
 #[derive(Default)]
 struct ChildState {
+    /// List of IRQ CBs that are owned by the bridge
     irq_cbs: ::std::sync::Arc<CbQueue>,
     handler: ::core::cell::Cell<Option< ::std::sync::Arc<InterruptHandler> >>,
+    /// Minimum number of pending CBs to enable the interrupt
     min_event_pend: ::core::cell::Cell<u8>,
+    /// Are interrupts enabled (set after interrupt enable label of `preproc` has been called)
     intr_enabled: ::core::cell::Cell<bool>,
 }
 struct InterruptHandler {
+    /// List of IRQ CBs that are owned by the bridge (same as [ChildState::irq_cbs])
     cbs: ::std::sync::Arc<CbQueue>,
     channel: ::udi::imc::ChannelHandle,
+    /// Interrupt pre-processing PIO function
     preproc: ::udi::pio::Handle,
 }
 #[derive(Default)]
@@ -99,7 +115,7 @@ struct CbQueue {
 }
 impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,ChildState>
 {
-    type Future_bind_req<'s> = impl ::core::future::Future<Output=::udi::Result<(::udi::meta_bridge::PreferredEndianness,)>> + 's;
+    type Future_bind_req<'s> = impl Future<Output=::udi::Result<(::udi::meta_bridge::PreferredEndianness,)>> + 's;
     fn bus_bind_req<'a>(&'a self, cb: ::udi::meta_bridge::CbRefBind<'a>) -> Self::Future_bind_req<'a> {
         async move {
             println!("PCI Bind Request: #{:#x}", self.child_id());
@@ -115,7 +131,7 @@ impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,ChildState>
         }
     }
 
-    type Future_unbind_req<'s> = impl ::core::future::Future<Output=()> + 's;
+    type Future_unbind_req<'s> = impl Future<Output=()> + 's;
     fn bus_unbind_req<'a>(&'a self, cb: ::udi::meta_bridge::CbRefBind<'a>) -> Self::Future_unbind_req<'a> {
         async move {
             let di = get_driver_instance(cb.gcb());
@@ -123,7 +139,7 @@ impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,ChildState>
         }
     }
 
-    type Future_intr_attach_req<'s> = impl ::core::future::Future<Output=::udi::Result<()>> + 's;
+    type Future_intr_attach_req<'s> = impl Future<Output=::udi::Result<()>> + 's;
     fn intr_attach_req<'a>(&'a self, cb: ::udi::meta_bridge::CbRefIntrAttach<'a>) -> Self::Future_intr_attach_req<'a> {
         async move {
             let channel = ::udi::imc::channel_spawn::<OpsList::Interrupt>(
@@ -148,7 +164,7 @@ impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,ChildState>
         }
     }
 
-    type Future_intr_detach_req<'s> = impl ::core::future::Future<Output=()> + 's;
+    type Future_intr_detach_req<'s> = impl Future<Output=()> + 's;
     fn intr_detach_req<'a>(&'a self, cb: ::udi::meta_bridge::CbRefIntrDetach<'a>) -> Self::Future_intr_detach_req<'a> {
         let di = get_driver_instance(cb.gcb());
         di.device.get().expect("Driver instance not bound to a device")
@@ -159,7 +175,7 @@ impl ::udi::meta_bridge::BusBridge for ::udi::ChildBind<Driver,ChildState>
 }
 impl ::udi::meta_bridge::IntrDispatcher for ::udi::ChildBind<Driver,ChildState>
 {
-    type Future_intr_event_rdy<'s> = impl ::core::future::Future<Output=()> + 's;
+    type Future_intr_event_rdy<'s> = impl Future<Output=()> + 's;
     fn intr_event_rdy<'a>(&'a self, _cb: ::udi::meta_bridge::CbRefEvent) -> Self::Future_intr_event_rdy<'a> {
         async move {
         }
@@ -180,7 +196,9 @@ impl ::udi::meta_bridge::IntrDispatcher for ::udi::ChildBind<Driver,ChildState>
                 }
             }
             else {
-                panic!("");
+                panic!("Interrupt CB was for a different channel? {:p} != exp {:p}",
+                    cb.gcb.channel, handler.channel.raw()
+                    );
             }
             self.handler.set(Some(handler));
         }
@@ -190,6 +208,7 @@ impl ::udi::meta_bridge::IntrDispatcher for ::udi::ChildBind<Driver,ChildState>
     }
 }
 impl InterruptHandler {
+    // Inform the device that it can now enable interrupts (as the handler will run)
     fn enable(&self) {
         if !self.preproc.as_raw().is_null() {
             let mut cb = {
@@ -208,7 +227,7 @@ impl InterruptHandler {
                 ::core::ptr::write(cb.gcb.scratch as *mut u8, 0);
                 ::udi::ffi::pio::udi_pio_trans(
                     callback, cb.into_raw() as *mut _,
-                    self.preproc.as_raw(), 0.into(),    // Normal interrupt
+                    self.preproc.as_raw(), IRQ_PREPROC_LABEL_ENABLE,
                     ::core::ptr::null_mut(), ::core::ptr::null_mut()
                 );
                 extern "C" fn callback(
@@ -218,7 +237,7 @@ impl InterruptHandler {
                     _res: ::udi::ffi::udi_ubit16_t
                 ) {
                     println!("Enable complete");
-                    assert!(status == ::udi::ffi::UDI_OK as _);
+                    assert!(status == ::udi::ffi::UDI_OK as _, "PIO trans for enabling interrupts failed");
                     unsafe {
                         let cb = gcb as *mut ::udi::ffi::meta_bridge::udi_intr_event_cb_t;
                         let p: *const InterruptHandler = (*cb).gcb.initiator_context as *const _;
@@ -228,19 +247,19 @@ impl InterruptHandler {
             }
         }
     }
+    fn disable(&self) {
+    }
 }
 impl crate::emulated_devices::InterruptHandler for InterruptHandler {
     fn raise(&self) {
-        let mut cb = {
+        let (mut cb, now_empty) = {
             let mut cb_queue = self.cbs.queue.lock().unwrap();
             let Some(cb) = cb_queue.pop_front() else {
-                println!("No interrupt CBs!");
+                println!("No interrupt CBs! Disabling");
+                self.disable();
                 return ;
             };
-            if cb_queue.is_empty() {
-                // Overrun! - set a flag so the overrun happenss
-            }
-            cb
+            (cb, cb_queue.is_empty())
         };
 
         cb.set_channel(&self.channel);
@@ -258,7 +277,8 @@ impl crate::emulated_devices::InterruptHandler for InterruptHandler {
                 let buf = cb.event_buf;
                 ::udi::ffi::pio::udi_pio_trans(
                     callback, cb.into_raw() as *mut _,
-                    self.preproc.as_raw(), 1.into(),    // Normal interrupt
+                    self.preproc.as_raw(),
+                    if now_empty { IRQ_PREPROC_LABEL_FINAL } else { IRQ_PREPROC_LABEL_NORMAL },
                     buf, ::core::ptr::null_mut()
                 );
             }

@@ -1,3 +1,5 @@
+// cspell:ignore mgmt
+// cspell:ignore next_op_usageind next_op_childbind next_op_parentbind devmgmt_ack
 
 // See UDI Spec:
 // 10.1.2 - Per-Instance Initialization

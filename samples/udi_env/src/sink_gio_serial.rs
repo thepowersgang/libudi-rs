@@ -1,3 +1,4 @@
+// cspell:ignore xfer mgmt devmgmt UART
 
 #[derive(Default)]
 struct Driver {

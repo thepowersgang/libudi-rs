@@ -66,10 +66,10 @@ impl<'a> DriverModule<'a> {
     pub fn name(&self) -> &str {
         for p in self.udiprops.clone() {
             if let ::udiprops_parse::Entry::Name(n) = p {
-                return self.get_message(n).unwrap_or("BADMSG");
+                return self.get_message(n).unwrap_or("BAD-MSG");
             }
         }
-        return "-noname-";
+        return "-no-name-";
     }
 
     fn get_region_index(&self, region_idx: ::udi::ffi::udi_index_t) -> Option<usize> {
@@ -176,8 +176,11 @@ unsafe fn terminated_list<'a, T: 'a>(input: *const T, cb: impl Fn(&T)->bool) -> 
 
 pub struct DriverInstance
 {
+    /// Handle to the loaded module (code) for this driver
     pub module: Arc<DriverModule<'static>>,
+    /// Regions (threads?) for this driver instance
     pub regions: Vec<DriverRegion>,
+    /// Children drivers
     pub children: ::std::sync::Mutex< Vec<DriverChild> >,
     //management_channel: ::udi::ffi::udi_channel_t,
     //cur_state: DriverState,
