@@ -67,13 +67,7 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
                 }
 
                 // TEST: Send some data
-                let mut tx_cb = self.cb_pool.pop_front().unwrap();
-                {
-                    tx_cb.set_op(::udi::ffi::meta_gio::UDI_GIO_DIR_WRITE);
-                    let buf = tx_cb.data_buf_mut();
-                    buf.write(cb.gcb(), 0..buf.len(), b"hello").await;
-                }
-                ::udi::meta_gio::xfer_req(tx_cb);
+                self.do_write(cb.gcb(), b"hello").await;
                 },
             Ok(_) => {
                 println!("Unexpected non-zero size for a UART");
@@ -96,7 +90,9 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
             ::udi::ffi::meta_gio::UDI_GIO_OP_READ => {
                 self.handle_read(cb.data_buf(), false).await;
                 },
-            ::udi::ffi::meta_gio::UDI_GIO_OP_WRITE => {},
+            ::udi::ffi::meta_gio::UDI_GIO_OP_WRITE => {
+                // No actions on ACK of a write
+                },
             _ => todo!("xfer_ack - Unknown operation: {:#x}", cb.op),
             }
         }
@@ -106,9 +102,11 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
     fn xfer_nak<'s>(&'s self, cb: ::udi::cb::CbRef<'s, ::udi::ffi::meta_gio::udi_gio_xfer_cb_t>, res: ::udi::Result<()>) -> Self::Future_xfer_nak<'s> {
         async move {
             match res {
-            Ok(_) => {},
+            Ok(()) => {
+                println!("xfer_nak - Ok? Why NAK with Ok")
+                },
+            // An underrun error on a read just means that fewer bytes than expected were read, treat this as a successful read
             Err(e) if e.into_inner() == ::udi::ffi::UDI_STAT_DATA_UNDERRUN as _ && cb.op == ::udi::ffi::meta_gio::UDI_GIO_OP_READ => {
-                // Signal the drivers
                 self.handle_read(cb.data_buf(), true).await;
                 },
             Err(e) => {
@@ -141,7 +139,16 @@ impl Driver {
     async fn handle_read(&self, buf: &::udi::buf::Handle, is_underrun: bool) {
         let mut data = vec![0; buf.len()];
         buf.read(0, &mut data);
-        println!("RX{} - {:02x?}", if is_underrun { " (underrun)" } else { "" }, data);
+        println!("RX{} - {:02x?}", if is_underrun { " (complete)" } else { " (...)" }, data);
+    }
+    async fn do_write(&self, cb: ::udi::CbRef<'_, ::udi::ffi::udi_cb_t>, data: &[u8]) {
+        let mut tx_cb = self.cb_pool.pop_front().unwrap();
+        {
+            tx_cb.set_op(::udi::ffi::meta_gio::UDI_GIO_DIR_WRITE);
+            let buf = tx_cb.data_buf_mut();
+            buf.write(cb, 0..buf.len(), data).await;
+        }
+        ::udi::meta_gio::xfer_req(tx_cb);
     }
 }
 

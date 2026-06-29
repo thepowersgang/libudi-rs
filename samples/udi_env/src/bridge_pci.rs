@@ -4,10 +4,14 @@
 
 use ::core::future::Future;
 
+/// IRQ preprocessing label invoked when sufficient CBs are available for interrupt handling
 const IRQ_PREPROC_LABEL_ENABLE: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t(0);
+/// IRQ preprocessing label invoked on a normal interrupt
 const IRQ_PREPROC_LABEL_NORMAL: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t(1);
-const IRQ_PREPROC_LABEL_FINAL: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t(2);
-const IRQ_PREPROC_LABEL_DISABLE: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t(3);
+/// IRQ preprocessing label invoked when there is only one CB remaining
+const IRQ_PREPROC_LABEL_LOW: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t(2);
+/// IRQ preprocessing label invoked on the final interrupt CB, should disable device interrupt generation.
+const IRQ_PREPROC_LABEL_FINAL: ::udi::ffi::udi_index_t = ::udi::ffi::udi_index_t(3);
 
 #[derive(Default)]
 struct Driver {
@@ -223,7 +227,7 @@ impl InterruptHandler {
             unsafe {
                 cb.get_mut().gcb.initiator_context = self as *const _ as *mut _;
 
-                // NOTE: `scratch` has at least one byte available, as it was used for async above
+                // NOTE: `scratch` has at least one byte available, as it was used for `intr_event_ret` (to end up in the list)
                 ::core::ptr::write(cb.gcb.scratch as *mut u8, 0);
                 ::udi::ffi::pio::udi_pio_trans(
                     callback, cb.into_raw() as *mut _,
@@ -252,14 +256,14 @@ impl InterruptHandler {
 }
 impl crate::emulated_devices::InterruptHandler for InterruptHandler {
     fn raise(&self) {
-        let (mut cb, now_empty) = {
+        let (mut cb, remaining) = {
             let mut cb_queue = self.cbs.queue.lock().unwrap();
             let Some(cb) = cb_queue.pop_front() else {
                 println!("No interrupt CBs! Disabling");
                 self.disable();
                 return ;
             };
-            (cb, cb_queue.is_empty())
+            (cb, cb_queue.count())
         };
 
         cb.set_channel(&self.channel);
@@ -272,13 +276,17 @@ impl crate::emulated_devices::InterruptHandler for InterruptHandler {
         }
         else {
             unsafe {
-                // NOTE: `scratch` has at least one byte available, as it was used for async above
+                // NOTE: `scratch` has at least one byte available, as it was used for `intr_event_ret` (to end up in the list)
                 ::core::ptr::write(cb.gcb.scratch as *mut u8, 0);
                 let buf = cb.event_buf;
                 ::udi::ffi::pio::udi_pio_trans(
                     callback, cb.into_raw() as *mut _,
                     self.preproc.as_raw(),
-                    if now_empty { IRQ_PREPROC_LABEL_FINAL } else { IRQ_PREPROC_LABEL_NORMAL },
+                    match remaining {
+                        0 => IRQ_PREPROC_LABEL_FINAL,
+                        1 => IRQ_PREPROC_LABEL_LOW,
+                        _ => IRQ_PREPROC_LABEL_NORMAL,
+                        },
                     buf, ::core::ptr::null_mut()
                 );
             }

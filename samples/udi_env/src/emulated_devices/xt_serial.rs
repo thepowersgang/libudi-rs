@@ -1,5 +1,9 @@
 //! XT (aka standard PC) serial port
+// cspell:ignore UART
 // cspell:ignore regs regset_idx
+// cspell:ignore LSR_TEMT LSR_THRE
+// cspell:ignore LCR_DLAB
+// cspell:ignore IER_ERBI IER_ETBEI IER_ELSI IER_EDSSI
 
 #[derive(Default)]
 pub struct XTSerial {
@@ -160,7 +164,7 @@ mod vals {
     pub const LSR_THRE: u8 = 0x20;
     /// Line Status Register: Transmitter Empty
     pub const LSR_TEMT: u8 = 0x40;
-    /// Line Status Register: Error in RCVR FIFO
+    /// Line Status Register: Error in Receiver FIFO
     pub const LSR_ERR: u8 = 0x80;
 }
 
