@@ -9,6 +9,7 @@
 pub struct XTSerial {
     regs: ::std::sync::Mutex<Regs>,
     irq: super::Interrupt,
+    tx_queue: ::std::sync::Mutex<::std::collections::VecDeque<u8>>,
 }
 impl XTSerial {
     pub fn new_boxed() -> Box<Self> {
@@ -28,6 +29,12 @@ impl super::PioDevice for XTSerial {
                     regs.isr |= vals::IER_ERBI;
                     // Set DataReady
                     regs.lsr |= vals::LSR_DR;
+                }
+            }
+            while let Some(bytes) = actions.pull("uart_check_tx") {
+                let mut lh = self.tx_queue.lock().unwrap();
+                for b in bytes {
+                    assert!(lh.pop_front() == Some(b));
                 }
             }
             regs.isr & regs.ier != 0
@@ -91,6 +98,7 @@ impl super::PioDevice for XTSerial {
         0 => {  // TX holding register
             regs.isr &= !vals::IER_ETBEI;
             println!("> TX {:#x} {:?}", src[0], src[0] as char);
+            self.tx_queue.lock().unwrap().push_back(src[0]);
             },
         1 => { check_reserved(&mut regs.ier, src, "IER", 0xF0, 0x00); },
         2 => { check_reserved(&mut regs.fcr, src, "FCR", 0x30, 0x00); },

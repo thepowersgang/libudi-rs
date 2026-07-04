@@ -88,65 +88,22 @@ fn main() {
     // - Per-region operations queue
     // - Per-instance management agent
     // - Emulated devices
-    let mut task_idx = 0;
     let mut actions = ::udi_environment::emulated_devices::Actions::default();
-    loop {
-        println!("--- LOOP ({} actions) ---", actions.len());
-        let mut action_happened = false;
-        let mut new_instances = Vec::new();
+    {
+        run_until_idle(&mut state, &mut actions);
 
-        // Check all instances
-        // - Management agent
-        // - Device
-        // - Region actions
-        for inst in &state.instances {
-            use ::udi_environment::management_agent::NextOp;
-            match inst.management_state.poll(&inst)
-            {
-            NextOp::Idle => {},
-            NextOp::Op(t) => inst.regions[0].task_queue.lock().unwrap().push_back(t),
-            NextOp::InitComplete => {
-                assert!(inst.management_state.is_ready());
-                bind_children(&mut new_instances, &state.modules, inst);
-                },
-            }
-
-            if let Some(dev) = inst.device.get() {
-                dev.poll(&mut actions);
-            }
+        if is_nic {
+            // Push a couple of network packets
+            actions.push("nic_rx", b"ABCDEF0123456\x00\x01Hello World");
+            run_until_idle(&mut state, &mut actions);
+            actions.push("nic_rx", b"ABCDEF0123456\x00\x01The world replies, that was unexpected");
+            run_until_idle(&mut state, &mut actions);
         }
-
-        for inst in &state.instances {
-            for rgn in &inst.regions {
-                let op = rgn.task_queue.lock().unwrap().pop_front();
-                if let Some(t) = op {
-                    action_happened = true;
-                    t.invoke();
-                }
-            }
-        }
-        assert!( actions.is_empty(), "Devices did not pull the actions" );
-        if !new_instances.is_empty() {
-            action_happened = true;
-        }
-        state.instances.extend(new_instances.into_iter());
-
-        if !action_happened {
-            // Push a network packet
-            if is_nic {
-                match { let v = task_idx; task_idx += 1; v } {
-                0 => actions.push("nic_rx", b"ABCDEF0123456\x00\x01Hello World"),
-                1 => actions.push("nic_rx", b"ABCDEF0123456\x00\x01The world replies, that was unexpected"),
-                _ => break,
-                }
-
-            }
-            else {
-                match { let v = task_idx; task_idx += 1; v } {
-                0 => actions.push("uart_rx", b"12345"),
-                _ => break,
-                }
-            }
+        else {
+            // cspell:ignore UART
+            actions.push("uart_check_tx", b"hello");   // GIO serial sends this
+            actions.push("uart_rx", b"12345");
+            run_until_idle(&mut state, &mut actions);
         }
     }
 
@@ -154,6 +111,54 @@ fn main() {
     ::std::process::exit(0);
 }
 
+fn run_until_idle(state: &mut GlobalState, actions: &mut ::udi_environment::emulated_devices::Actions) {
+    println!("--- LOOP ({} actions) ---", actions.len());
+    while run_one(state, actions) {
+        println!("--- LOOP (cont, {} actions) ---", actions.len());
+    }
+}
+fn run_one(state: &mut GlobalState, actions: &mut ::udi_environment::emulated_devices::Actions) -> bool
+{
+    let mut action_happened = false;
+    let mut new_instances = Vec::new();
+
+    // Check all instances
+    // - Management agent
+    // - Device
+    // - Region operations
+    for inst in &state.instances {
+        use ::udi_environment::management_agent::NextOp;
+        match inst.management_state.poll(&inst)
+        {
+        NextOp::Idle => {},
+        NextOp::Op(t) => inst.regions[0].task_queue.lock().unwrap().push_back(t),
+        NextOp::InitComplete => {
+            assert!(inst.management_state.is_ready());
+            bind_children(&mut new_instances, &state.modules, inst);
+            },
+        }
+
+        if let Some(dev) = inst.device.get() {
+            dev.poll(actions);
+        }
+    }
+
+    for inst in &state.instances {
+        for rgn in &inst.regions {
+            let op = rgn.task_queue.lock().unwrap().pop_front();
+            if let Some(t) = op {
+                action_happened = true;
+                t.invoke();
+            }
+        }
+    }
+    assert!( actions.is_empty(), "Devices did not pull the actions" );
+    if !new_instances.is_empty() {
+        action_happened = true;
+    }
+    state.instances.extend(new_instances.into_iter());
+    action_happened
+}
 
 
 /// Create an instance for all matching parent instances
