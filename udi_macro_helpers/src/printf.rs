@@ -183,24 +183,24 @@ impl<'a> BitsetParser<'a> {
         let ty = if c == b'~' {
             // Single inverted bit
             c = self.next_c()?;
-            let bitnum = self.parse_num(&mut c)?;
-            Ty::Single(bitnum, true)
+            let bit_num = self.parse_num(&mut c)?;
+            Ty::Single(bit_num, true)
         }
         else {
             let start_pos = self.inner.pos - 1;
-            let bitnum = self.parse_num(&mut c)?;
+            let bit_num = self.parse_num(&mut c)?;
             if c != b'-' {
                 // Single positive bit
-                Ty::Single(bitnum, false)
+                Ty::Single(bit_num, false)
             }
             else {
                 // Bit range
                 c = self.next_c()?;
                 let end = self.parse_num(&mut c)?;
-                if !(bitnum <= end) {
+                if !(bit_num <= end) {
                     return Err(self.inner.error(self.inner.pos - start_pos, |i| ErrorKind::InvalidFragment(i)));
                 }
-                Ty::Range(bitnum, end)
+                Ty::Range(bit_num, end)
             }
         };
 
