@@ -4,6 +4,7 @@
         "./samples/net_rtl8139/Cargo.toml"
     ],
     "cSpell.words": [
+        "VecDeque",
         "metalang",
         "rdata",
         "Rescan",

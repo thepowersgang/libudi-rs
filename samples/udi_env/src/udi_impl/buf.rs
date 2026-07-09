@@ -241,7 +241,7 @@ unsafe extern "C" fn udi_buf_copy(
             }
         }
         // Lazy option: re-sort the tag list
-        // - There should be no duplicates, becuase the destination range has been invalidated
+        // - There should be no duplicates, because the destination range has been invalidated
         dst.tags.sort_unstable_by(Tag::sort_ord);
     }
     

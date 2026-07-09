@@ -97,6 +97,8 @@ impl Handle
     }
 
     /// Construct a new buffer using provided data
+    /// 
+    /// Equivalent to `UDI_BUF_ALLOC`
     pub fn new<'d>(
     	cb: crate::CbRef<crate::ffi::udi_cb_t>,
         init_data: &'d [u8],

@@ -1,4 +1,5 @@
 // cspell:ignore mgmt devmgmt
+use ::udi::init::EnumerateLevel;
 
 #[derive(Default)]
 struct Driver {
@@ -25,21 +26,21 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
     fn enumerate_req<'s>(
         &'s self,
         _cb: udi::init::CbRefEnumerate<'s>,
-        level: udi::init::EnumerateLevel,
+        level: EnumerateLevel,
         attrs_out: udi::init::AttrSink<'s>
     ) -> Self::Future_enumerate<'s>
     {
         async move {
 			match level
 			{
-			::udi::init::EnumerateLevel::Start
-			|::udi::init::EnumerateLevel::StartRescan
-			|::udi::init::EnumerateLevel::Next => {
+			EnumerateLevel::Start
+			|EnumerateLevel::StartRescan
+			|EnumerateLevel::Next => {
                 (::udi::init::EnumerateResult::Done, attrs_out)
                 },
-			udi::init::EnumerateLevel::New => todo!(),
-			udi::init::EnumerateLevel::Directed => todo!(),
-			udi::init::EnumerateLevel::Release => todo!(),
+			EnumerateLevel::New => todo!(),
+			EnumerateLevel::Directed => todo!(),
+			EnumerateLevel::Release => todo!(),
 			}
         }
     }
