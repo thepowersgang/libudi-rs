@@ -14,6 +14,9 @@ pub mod sink_gio_serial;
 pub mod management_agent;
 
 pub mod emulated_devices;
+pub mod shared_state;
+
+pub static SHARED_STATE: shared_state::SinkSharedState = shared_state::SinkSharedState::new();
 
 pub struct DriverModule<'a> {
     pri_init: &'a ::udi::ffi::init::udi_primary_init_t,

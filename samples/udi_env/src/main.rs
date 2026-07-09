@@ -101,8 +101,12 @@ fn main() {
         }
         else {
             // cspell:ignore UART
+            ::udi_environment::SHARED_STATE.with("uart", |u| u.send(b"hello"));
+            run_until_idle(&mut state, &mut actions);
             actions.push("uart_check_tx", b"hello");   // GIO serial sends this
             actions.push("uart_rx", b"12345");
+            run_until_idle(&mut state, &mut actions);
+            ::udi_environment::SHARED_STATE.with("uart", |u| u.assert_rx(b"12345"));
             run_until_idle(&mut state, &mut actions);
         }
     }

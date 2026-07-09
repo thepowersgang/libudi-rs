@@ -1,9 +1,12 @@
 // cspell:ignore xfer mgmt devmgmt UART
+use ::udi::init::EnumerateLevel;
 
 #[derive(Default)]
 struct Driver {
     parent_channel: ::core::cell::OnceCell< ::udi::ffi::udi_channel_t >,
     cb_pool: ::udi::cb::SharedQueue<::udi::ffi::meta_gio::udi_gio_xfer_cb_t>,
+    rx_buffer: crate::shared_state::SharedByteQueue,
+    tx_cb_pool: ::std::sync::Arc<::std::sync::Mutex<::udi::cb::SharedQueue<::udi::ffi::meta_gio::udi_gio_xfer_cb_t>>>,
 }
 impl ::udi::init::Driver for ::udi::init::RData<Driver>
 {
@@ -17,21 +20,21 @@ impl ::udi::init::Driver for ::udi::init::RData<Driver>
     fn enumerate_req<'s>(
         &'s self,
         _cb: udi::init::CbRefEnumerate<'s>,
-        level: udi::init::EnumerateLevel,
+        level: EnumerateLevel,
         attrs_out: udi::init::AttrSink<'s>
     ) -> Self::Future_enumerate<'s>
     {
         async move {
 			match level
 			{
-			::udi::init::EnumerateLevel::Start
-			|::udi::init::EnumerateLevel::StartRescan
-			|::udi::init::EnumerateLevel::Next => {
+			EnumerateLevel::Start
+			|EnumerateLevel::StartRescan
+			|EnumerateLevel::Next => {
                 (::udi::init::EnumerateResult::Done, attrs_out)
                 },
-			udi::init::EnumerateLevel::New => todo!(),
-			udi::init::EnumerateLevel::Directed => todo!(),
-			udi::init::EnumerateLevel::Release => todo!(),
+			EnumerateLevel::New => todo!(),
+			EnumerateLevel::Directed => todo!(),
+			EnumerateLevel::Release => todo!(),
 			}
         }
     }
@@ -66,8 +69,45 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
                     self.cb_pool.push_back(xfer_cb);
                 }
 
-                // TEST: Send some data
-                self.do_write(cb.gcb(), b"hello").await;
+                unsafe impl Send for TxInstance {}
+                struct TxInstance {
+                    tx_cb_pool: ::std::sync::Arc<::std::sync::Mutex<::udi::cb::SharedQueue<::udi::ffi::meta_gio::udi_gio_xfer_cb_t>>>,
+                    rx_buffer: crate::shared_state::SharedByteQueue,
+                }
+                impl crate::shared_state::SinkHandler for TxInstance {
+                    fn send(&mut self, bytes: &[u8]) {
+                        let mut tx_cb = self.tx_cb_pool.lock().unwrap().pop_front().unwrap();
+                        tx_cb.set_op(::udi::ffi::meta_gio::UDI_GIO_DIR_WRITE);
+                        let buf = tx_cb.data_buf_mut();
+                        // NOTE: Use implementation directly to avoid needing async
+                        // SAFE: Trusting pointer from `to_raw`
+                        unsafe {
+                            crate::udi_impl::buf::write(&mut buf.to_raw(), 0..buf.len(), bytes);
+                        }
+                        ::udi::meta_gio::xfer_req(tx_cb);
+                    }
+                
+                    fn assert_rx(&mut self, bytes: &[u8]) {
+                        self.rx_buffer.assert_rx(bytes);
+                    }
+                }
+                let tx = TxInstance {
+                    tx_cb_pool: self.tx_cb_pool.clone(),
+                    rx_buffer: self.rx_buffer.clone(),
+                };
+                {
+                    let cb_pool = tx.tx_cb_pool.lock().unwrap();
+                    let mut cbs = ::udi::cb::alloc_batch::<CbList::Xfer>(cb.gcb(), 3, Some((1024, ::udi::ffi::buf::UDI_NULL_PATH_BUF))).await;
+                    while let Some(mut xfer_cb) = cbs.pop_front() {
+                        // Channel should already be the same one?
+                        // - Except that it isn't.
+                        unsafe {
+                            xfer_cb.get_mut().gcb.channel = cb.gcb.channel;
+                        }
+                        cb_pool.push_back(xfer_cb);
+                    }
+                }
+                crate::SHARED_STATE.add("uart", tx).expect("TODO: HAndle multiple registered UARTs");
                 },
             Ok(_) => {
                 println!("Unexpected non-zero size for a UART");
@@ -117,7 +157,13 @@ impl ::udi::meta_gio::Client for ::udi::init::RData<Driver>
     }
 
     fn xfer_ret(&self, cb: ::udi::cb::CbHandle<udi::ffi::meta_gio::udi_gio_xfer_cb_t>) {
-        self.cb_pool.push_back(cb);
+        if cb.op == ::udi::ffi::meta_gio::UDI_GIO_OP_READ {
+            self.cb_pool.push_back(cb);
+        }
+        else {
+            // TODO: Return to the writer's queue somehow, mutex around shared CB queue?
+            self.tx_cb_pool.lock().unwrap().push_back(cb);
+        }
     }
 
     type Future_event_ind<'s> = impl ::core::future::Future<Output=()>;
@@ -140,15 +186,7 @@ impl Driver {
         let mut data = vec![0; buf.len()];
         buf.read(0, &mut data);
         println!("RX{} - {:02x?}", if is_underrun { " (complete)" } else { " (...)" }, data);
-    }
-    async fn do_write(&self, cb: ::udi::CbRef<'_, ::udi::ffi::udi_cb_t>, data: &[u8]) {
-        let mut tx_cb = self.cb_pool.pop_front().unwrap();
-        {
-            tx_cb.set_op(::udi::ffi::meta_gio::UDI_GIO_DIR_WRITE);
-            let buf = tx_cb.data_buf_mut();
-            buf.write(cb, 0..buf.len(), data).await;
-        }
-        ::udi::meta_gio::xfer_req(tx_cb);
+        self.rx_buffer.push(&data);
     }
 }
 
